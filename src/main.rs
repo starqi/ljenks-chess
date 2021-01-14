@@ -1,34 +1,7 @@
-use rand::Rng;
-use std::cmp::Ordering;
+mod board;
+
+use board::{Player, Board, Square, Piece};
 use std::{thread, time, io};
-
-fn old_main() {
-    let n = rand::thread_rng().gen_range(1, 105);
-
-    loop {
-
-        let mut x = String::new();
-        io::stdin().read_line(&mut x).expect("?");
-        //println!("x: {}", x);
-
-        let x2: i32 = match x.trim().parse() {
-            Ok(num) => num,
-            Err(_) => {
-                println!("NaN");
-                continue;
-            }
-        };
-
-        match x2.cmp(&n) {
-            Ordering::Less => println!("<"),
-            Ordering::Greater => println!(">"),
-            Ordering::Equal => {
-                println!("=");
-                break;
-            }
-        };
-    }
-}
 
 fn main() {
     /*
@@ -44,61 +17,35 @@ fn main() {
     */
 
     let mut board = Board::new();
+    board.set('d', 3, Square::Occupied(Piece::Knight, Player::Black));
+    board.set('c', 5, Square::Occupied(Piece::Knight, Player::Black));
     println!("{}", format!("{:?}", board));
-}
 
-#[derive(Copy, Clone, Debug)]
-enum Piece {
-    Pawn, Rook, Knight, Bishop, Queen, King, Blank
-}
+    loop {
+        let mut x = String::new();
+        io::stdin().read_line(&mut x).expect("?");
 
-#[derive(Debug)]
-struct Board {
-    arr: [Piece; 64]
-}
+        if let Some(_file) = x.chars().nth(0) {
+            if let Some(_rank) = x.chars().nth(1) {
+                if let Some(__rank) = _rank.to_digit(10) {
 
-impl Board {
-    fn new() -> Board {
-        let mut board = Board {
-            arr: [Piece::Blank; 64]
-        };
-        board.set_pawn_row(1);
-        board.set_pawn_row(8);
+                    let rank = __rank as u8;
+                    println!("Parsed input: {}-{}", _file, rank);
 
-        board.set_main_row(1);
-        board.set_main_row(8);
+                    println!("{:?}", board.get(_file, rank));
 
-        board
-    }
-
-    fn set_pawn_row(&mut self, rank: u8) {
-        for i in 0..8 {
-            self.set_by_xy(i, 8 - rank as usize, Piece::Pawn);
+                    let mut r: Vec<(char, u8)> = Vec::new();
+                    board.get_local_legal_moves(_file, rank, &mut r);
+                    print_vec(&r);
+                }
+            }
         }
     }
+}
 
-    fn set_main_row(&mut self, rank: u8) {
-        self.set('a', rank, Piece::Rook);
-        self.set('b', rank, Piece::Knight);
-        self.set('c', rank, Piece::Bishop);
-        self.set('d', rank, Piece::Queen);
-        self.set('e', rank, Piece::King);
-        self.set('f', rank, Piece::Bishop);
-        self.set('g', rank, Piece::Knight);
-        self.set('h', rank, Piece::Rook);
+fn print_vec<T : std::fmt::Debug>(v: &Vec<T>) {
+    for item in v {
+        print!("{:?} ", item);
     }
-
-    fn get_by_xy(&self, x: usize, y: usize) -> Piece {
-        return self.arr[y * 8 + x];
-    }
-
-    fn set_by_xy(&mut self, x: usize, y: usize, p: Piece) {
-        self.arr[y * 8 + x] = p;
-    }
-
-    fn set(&mut self, file: char, rank: u8, p: Piece) {
-        let x = file as u32 - 'a' as u32;
-        let y = 8 - rank;
-        self.set_by_xy(x as usize, y as usize, p);
-    }
+    println!();
 }
