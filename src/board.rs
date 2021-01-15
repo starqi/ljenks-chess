@@ -1,3 +1,5 @@
+// TODO King, en passante, promotion
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Piece {
     Pawn, Rook, Knight, Bishop, Queen, King
@@ -35,7 +37,7 @@ impl MoveList {
     pub fn new() -> MoveList {
         MoveList { 
             v: Vec::new(),
-            source: Option::None,
+            source: None,
             revision: 0 
         }
     }
@@ -54,117 +56,154 @@ impl Board {
         };
 
         board.set_main_row(1, Player::White);
-        //board.set_pawn_row(2, Player::White);
+        board.set_pawn_row(2, Player::White);
 
         board.set_main_row(8, Player::Black);
-        //board.set_pawn_row(7, Player::Black);
+        board.set_pawn_row(7, Player::Black);
 
         board
     }
 
     pub fn set(&mut self, file: char, rank: u8, s: Square) -> Option<Error> {
         match Board::file_rank_to_xy_safe(file, rank) {
-            Result::Ok((x, y)) => {
+            Ok((x, y)) => {
                 self.set_by_xy(x, y, s);
-                Option::None
+                None
             },
-            Result::Err(e) => Option::Some(e)
+            Err(e) => Some(e)
         }
     }
 
     pub fn get(&self, file: char, rank: u8) -> Result<Square, Error> {
         match Board::file_rank_to_xy_safe(file, rank) {
-            Result::Ok((x, y)) => Result::Ok(self.get_by_xy(x, y)),
-            Result::Err(e) => Result::Err(e)
+            Ok((x, y)) => Ok(self.get_by_xy(x, y)),
+            Err(e) => Err(e)
         }
     }
 
     pub fn make_move(&mut self, moves: &mut MoveList, index: usize) -> Option<Error> {
-        match moves.source {
-            Option::None => {
+        // TODO Extract
+        let (source_file, source_rank) = match moves.source {
+            None => {
                 eprintln!("Move list is no longer valid");
-                Option::Some(Error::Unknown)
+                return Some(Error::Unknown);
             },
-            Option::Some((source_file, source_rank)) => {
-                if let Option::Some((file, rank)) = moves.v.get(index) {
-                    match self.get(source_file, source_rank) {
-                        Result::Ok(source_square) => {
-                            self.set(*file, *rank, source_square);
-                            self.set(source_file, source_rank, Square::Blank);
-                            moves.source = Option::None;
-                            self.player_with_turn = match self.player_with_turn {
-                                Player::Black => Player::White,
-                                Player::White => Player::Black,
-                            };
-                            Option::None
-                        },
-                        Result::Err(e) => {
-                            Option::Some(e)
-                        }
-                    }
-                } else {
-                    eprintln!("Move list index out of bounds {} / {}", index, moves.v.len());
-                    Option::Some(Error::Unknown)
-                }
-            }
-        }
+            Some(x) => x 
+        };
+
+        let source_square = match self.get(source_file, source_rank) {
+            Err(e) => {
+                eprintln!("Unexpected source square fetch failed - {} {}", source_file, source_rank);
+                return Some(e);
+            },
+            Ok(x) => x
+        };
+
+        let (target_file, target_rank) = match moves.v.get(index) {
+            None => {
+                eprintln!("Move list index out of bounds {} / {}", index, moves.v.len());
+                return Some(Error::Unknown);
+            },
+            Some(x) => x
+        };
+
+        self.set(*target_file, *target_rank, source_square);
+        self.set(source_file, source_rank, Square::Blank);
+        // TODO Extract
+        moves.source = None;
+
+        self.player_with_turn = match self.player_with_turn {
+            Player::Black => Player::White,
+            Player::White => Player::Black,
+        };
+        None
     }
 
     pub fn get_legal_moves(&self, file: char, rank: u8, result: &mut MoveList) -> Option<Error> {
         result.v.clear();
         result.revision = self.revision;
-        result.source = Option::Some((file, rank));
+        result.source = Some((file, rank));
 
         let (x_us, y_us) = match Board::file_rank_to_xy_safe(file, rank) {
-            Result::Ok((x_us, y_us)) => (x_us, y_us),
-            Result::Err(e) => {
-                return Option::Some(e);
+            Ok((x_us, y_us)) => (x_us, y_us),
+            Err(e) => {
+                return Some(e);
             }
         };
         let (x, y) = (x_us as i8, y_us as i8);
 
-        if let Square::Occupied(piece, player) = self.get_by_xy(x_us, y_us) {
-            match piece {
-                Piece::Pawn => {
-                },
-                Piece::Rook => {
-                    self.push_rook_candidates(x, y, player, &mut result.v);
-                },
-                Piece::Knight => {
+        let (piece, player) = match self.get_by_xy(x_us, y_us) {
+            Square::Blank => {
+                return None;
+            },
+            Square::Occupied(piece, player) => (piece, player)
+        };
 
-                    self.push_candidate(x - 1, y + 2, player, &mut result.v);
-                    self.push_candidate(x - 1, y - 2, player, &mut result.v);
+        match piece {
+            Piece::Pawn => {
+                let (y_delta, jump_row) = match player {
+                    Player::Black => (1, 1),
+                    Player::White => (-1, 6)
+                };
 
-                    self.push_candidate(x - 2, y + 1, player, &mut result.v);
-                    self.push_candidate(x - 2, y - 1, player, &mut result.v);
+                self.push_candidate(x, y + y_delta, player, &mut result.v);
+                if y == jump_row {
+                    self.push_candidate(x, y + y_delta * 2, player, &mut result.v);
+                }
 
-                    self.push_candidate(x + 2, y + 1, player, &mut result.v);
-                    self.push_candidate(x + 2, y - 1, player, &mut result.v);
+                for x_delta in -1..=1 {
+                    if x_delta == 0 { continue; }
 
-                    self.push_candidate(x + 1, y + 2, player, &mut result.v);
-                    self.push_candidate(x + 1, y - 2, player, &mut result.v);
-                },
-                Piece::Bishop => {
-                    self.push_bishop_candidates(x, y, player, &mut result.v);
-                },
-                Piece::Queen => {
-                    self.push_rook_candidates(x, y, player, &mut result.v);
-                    self.push_bishop_candidates(x, y, player, &mut result.v);
-                },
-                Piece::King => {
-                    for i in -1..=1 {
-                        for j in -1..=1 {
-                            if i == 0 && j == 0 {
-                                continue;
-                            }
-                            self.push_candidate(x + i, y + j, player, &mut result.v);
+                    let x_p_delta: i8 = x + x_delta;
+                    let y_p_delta: i8 = y + y_delta;
+
+                    if x_p_delta < 0 || x_p_delta > 7 { continue; }
+                    if y_p_delta < 0 || y_p_delta > 7 { continue; }
+
+                    if let Square::Occupied(_, angled_player) = self.get_by_xy(x_p_delta as usize, y_p_delta as usize) {
+                        if angled_player != player {
+                            self.push_candidate(x + x_delta, y + y_delta, player, &mut result.v);
                         }
+                    }
+                }
+            },
+            Piece::Rook => {
+                self.push_rook_candidates(x, y, player, &mut result.v);
+            },
+            Piece::Knight => {
+
+                self.push_candidate(x - 1, y + 2, player, &mut result.v);
+                self.push_candidate(x - 1, y - 2, player, &mut result.v);
+
+                self.push_candidate(x - 2, y + 1, player, &mut result.v);
+                self.push_candidate(x - 2, y - 1, player, &mut result.v);
+
+                self.push_candidate(x + 2, y + 1, player, &mut result.v);
+                self.push_candidate(x + 2, y - 1, player, &mut result.v);
+
+                self.push_candidate(x + 1, y + 2, player, &mut result.v);
+                self.push_candidate(x + 1, y - 2, player, &mut result.v);
+            },
+            Piece::Bishop => {
+                self.push_bishop_candidates(x, y, player, &mut result.v);
+            },
+            Piece::Queen => {
+                self.push_rook_candidates(x, y, player, &mut result.v);
+                self.push_bishop_candidates(x, y, player, &mut result.v);
+            },
+            Piece::King => {
+                for i in -1..=1 {
+                    for j in -1..=1 {
+                        if i == 0 && j == 0 {
+                            continue;
+                        }
+                        self.push_candidate(x + i, y + j, player, &mut result.v);
                     }
                 }
             }
         }
 
-        Option::None
+        None
     }
 
     fn push_rook_candidates(&self, x: i8, y: i8, player: Player, result: &mut Vec<(char, u8)>) {
@@ -262,13 +301,13 @@ impl Board {
     fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<(usize, usize), Error> {
         if rank < 1 || rank > 8 {
             eprintln!("Rank out of bounds - {}", rank);
-            return Result::Err(Error::Unknown);
+            return Err(Error::Unknown);
         }
         let file_u32 = file as u32;
         if file_u32 < 'a' as u32 || file_u32 > 'h' as u32 {
             eprintln!("File out of bounds - {}", file);
-            return Result::Err(Error::Unknown);
+            return Err(Error::Unknown);
         }
-        return Result::Ok(Board::file_rank_to_xy(file, rank));
+        return Ok(Board::file_rank_to_xy(file, rank));
     }
 }

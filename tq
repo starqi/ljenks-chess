@@ -1,0 +1,262 @@
+warning: CRLF will be replaced by LF in src/board.rs.
+The file will have its original line endings in your working directory
+[1mdiff --git a/src/board.rs b/src/board.rs[m
+[1mindex fc653b1..02610f7 100644[m
+[1m--- a/src/board.rs[m
+[1m+++ b/src/board.rs[m
+[36m@@ -1,3 +1,5 @@[m
+[32m+[m[32m// TODO King, en passante, promotion[m
+[32m+[m
+ #[derive(Copy, Clone, Debug, PartialEq)][m
+ pub enum Piece {[m
+     Pawn, Rook, Knight, Bishop, Queen, King[m
+[36m@@ -35,7 +37,7 @@[m [mimpl MoveList {[m
+     pub fn new() -> MoveList {[m
+         MoveList { [m
+             v: Vec::new(),[m
+[31m-            source: Option::None,[m
+[32m+[m[32m            source: None,[m
+             revision: 0 [m
+         }[m
+     }[m
+[36m@@ -54,117 +56,154 @@[m [mimpl Board {[m
+         };[m
+ [m
+         board.set_main_row(1, Player::White);[m
+[31m-        //board.set_pawn_row(2, Player::White);[m
+[32m+[m[32m        board.set_pawn_row(2, Player::White);[m
+ [m
+         board.set_main_row(8, Player::Black);[m
+[31m-        //board.set_pawn_row(7, Player::Black);[m
+[32m+[m[32m        board.set_pawn_row(7, Player::Black);[m
+ [m
+         board[m
+     }[m
+ [m
+     pub fn set(&mut self, file: char, rank: u8, s: Square) -> Option<Error> {[m
+         match Board::file_rank_to_xy_safe(file, rank) {[m
+[31m-            Result::Ok((x, y)) => {[m
+[32m+[m[32m            Ok((x, y)) => {[m
+                 self.set_by_xy(x, y, s);[m
+[31m-                Option::None[m
+[32m+[m[32m                None[m
+             },[m
+[31m-            Result::Err(e) => Option::Some(e)[m
+[32m+[m[32m            Err(e) => Some(e)[m
+         }[m
+     }[m
+ [m
+     pub fn get(&self, file: char, rank: u8) -> Result<Square, Error> {[m
+         match Board::file_rank_to_xy_safe(file, rank) {[m
+[31m-            Result::Ok((x, y)) => Result::Ok(self.get_by_xy(x, y)),[m
+[31m-            Result::Err(e) => Result::Err(e)[m
+[32m+[m[32m            Ok((x, y)) => Ok(self.get_by_xy(x, y)),[m
+[32m+[m[32m            Err(e) => Err(e)[m
+         }[m
+     }[m
+ [m
+     pub fn make_move(&mut self, moves: &mut MoveList, index: usize) -> Option<Error> {[m
+[31m-        match moves.source {[m
+[31m-            Option::None => {[m
+[32m+[m[32m        // TODO Extract[m
+[32m+[m[32m        let (source_file, source_rank) = match moves.source {[m
+[32m+[m[32m            None => {[m
+                 eprintln!("Move list is no longer valid");[m
+[31m-                Option::Some(Error::Unknown)[m
+[32m+[m[32m                return Some(Error::Unknown);[m
+             },[m
+[31m-            Option::Some((source_file, source_rank)) => {[m
+[31m-                if let Option::Some((file, rank)) = moves.v.get(index) {[m
+[31m-                    match self.get(source_file, source_rank) {[m
+[31m-                        Result::Ok(source_square) => {[m
+[31m-                            self.set(*file, *rank, source_square);[m
+[31m-                            self.set(source_file, source_rank, Square::Blank);[m
+[31m-                            moves.source = Option::None;[m
+[31m-                            self.player_with_turn = match self.player_with_turn {[m
+[31m-                                Player::Black => Player::White,[m
+[31m-                                Player::White => Player::Black,[m
+[31m-                            };[m
+[31m-                            Option::None[m
+[31m-                        },[m
+[31m-                        Result::Err(e) => {[m
+[31m-                            Option::Some(e)[m
+[31m-                        }[m
+[31m-                    }[m
+[31m-                } else {[m
+[31m-                    eprintln!("Move list index out of bounds {} / {}", index, moves.v.len());[m
+[31m-                    Option::Some(Error::Unknown)[m
+[31m-                }[m
+[31m-            }[m
+[31m-        }[m
+[32m+[m[32m            Some(x) => x[m[41m [m
+[32m+[m[32m        };[m
+[32m+[m
+[32m+[m[32m        let source_square = match self.get(source_file, source_rank) {[m
+[32m+[m[32m            Err(e) => {[m
+[32m+[m[32m                eprintln!("Unexpected source square fetch failed - {} {}", source_file, source_rank);[m
+[32m+[m[32m                return Some(e);[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Ok(x) => x[m
+[32m+[m[32m        };[m
+[32m+[m
+[32m+[m[32m        let (target_file, target_rank) = match moves.v.get(index) {[m
+[32m+[m[32m            None => {[m
+[32m+[m[32m                eprintln!("Move list index out of bounds {} / {}", index, moves.v.len());[m
+[32m+[m[32m                return Some(Error::Unknown);[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Some(x) => x[m
+[32m+[m[32m        };[m
+[32m+[m
+[32m+[m[32m        self.set(*target_file, *target_rank, source_square);[m
+[32m+[m[32m        self.set(source_file, source_rank, Square::Blank);[m
+[32m+[m[32m        // TODO Extract[m
+[32m+[m[32m        moves.source = None;[m
+[32m+[m
+[32m+[m[32m        self.player_with_turn = match self.player_with_turn {[m
+[32m+[m[32m            Player::Black => Player::White,[m
+[32m+[m[32m            Player::White => Player::Black,[m
+[32m+[m[32m        };[m
+[32m+[m[32m        None[m
+     }[m
+ [m
+     pub fn get_legal_moves(&self, file: char, rank: u8, result: &mut MoveList) -> Option<Error> {[m
+         result.v.clear();[m
+         result.revision = self.revision;[m
+[31m-        result.source = Option::Some((file, rank));[m
+[32m+[m[32m        result.source = Some((file, rank));[m
+ [m
+         let (x_us, y_us) = match Board::file_rank_to_xy_safe(file, rank) {[m
+[31m-            Result::Ok((x_us, y_us)) => (x_us, y_us),[m
+[31m-            Result::Err(e) => {[m
+[31m-                return Option::Some(e);[m
+[32m+[m[32m            Ok((x_us, y_us)) => (x_us, y_us),[m
+[32m+[m[32m            Err(e) => {[m
+[32m+[m[32m                return Some(e);[m
+             }[m
+         };[m
+         let (x, y) = (x_us as i8, y_us as i8);[m
+ [m
+[31m-        if let Square::Occupied(piece, player) = self.get_by_xy(x_us, y_us) {[m
+[31m-            match piece {[m
+[31m-                Piece::Pawn => {[m
+[31m-                },[m
+[31m-                Piece::Rook => {[m
+[31m-                    self.push_rook_candidates(x, y, player, &mut result.v);[m
+[31m-                },[m
+[31m-                Piece::Knight => {[m
+[32m+[m[32m        let (piece, player) = match self.get_by_xy(x_us, y_us) {[m
+[32m+[m[32m            Square::Blank => {[m
+[32m+[m[32m                return None;[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Square::Occupied(piece, player) => (piece, player)[m
+[32m+[m[32m        };[m
+ [m
+[31m-                    self.push_candidate(x - 1, y + 2, player, &mut result.v);[m
+[31m-                    self.push_candidate(x - 1, y - 2, player, &mut result.v);[m
+[32m+[m[32m        match piece {[m
+[32m+[m[32m            Piece::Pawn => {[m
+[32m+[m[32m                let (y_delta, jump_row) = match player {[m
+[32m+[m[32m                    Player::Black => (1, 1),[m
+[32m+[m[32m                    Player::White => (-1, 6)[m
+[32m+[m[32m                };[m
+ [m
+[31m-                    self.push_candidate(x - 2, y + 1, player, &mut result.v);[m
+[31m-                    self.push_candidate(x - 2, y - 1, player, &mut result.v);[m
+[32m+[m[32m                self.push_candidate(x, y + y_delta, player, &mut result.v);[m
+[32m+[m[32m                if y == jump_row {[m
+[32m+[m[32m                    self.push_candidate(x, y + y_delta * 2, player, &mut result.v);[m
+[32m+[m[32m                }[m
+ [m
+[31m-                    self.push_candidate(x + 2, y + 1, player, &mut result.v);[m
+[31m-                    self.push_candidate(x + 2, y - 1, player, &mut result.v);[m
+[32m+[m[32m                for x_delta in -1..=1 {[m
+[32m+[m[32m                    if x_delta == 0 { continue; }[m
+ [m
+[31m-                    self.push_candidate(x + 1, y + 2, player, &mut result.v);[m
+[31m-                    self.push_candidate(x + 1, y - 2, player, &mut result.v);[m
+[31m-                },[m
+[31m-                Piece::Bishop => {[m
+[31m-                    self.push_bishop_candidates(x, y, player, &mut result.v);[m
+[31m-                },[m
+[31m-                Piece::Queen => {[m
+[31m-                    self.push_rook_candidates(x, y, player, &mut result.v);[m
+[31m-                    self.push_bishop_candidates(x, y, player, &mut result.v);[m
+[31m-                },[m
+[31m-                Piece::King => {[m
+[31m-                    for i in -1..=1 {[m
+[31m-                        for j in -1..=1 {[m
+[31m-                            if i == 0 && j == 0 {[m
+[31m-                                continue;[m
+[31m-                            }[m
+[31m-                            self.push_candidate(x + i, y + j, player, &mut result.v);[m
+[32m+[m[32m                    let x_p_delta: i8 = x + x_delta;[m
+[32m+[m[32m                    let y_p_delta: i8 = y + y_delta;[m
+[32m+[m
+[32m+[m[32m                    if x_p_delta < 0 || x_p_delta > 7 { continue; }[m
+[32m+[m[32m                    if y_p_delta < 0 || y_p_delta > 7 { continue; }[m
+[32m+[m
+[32m+[m[32m                    if let Square::Occupied(_, angled_player) = self.get_by_xy(x_p_delta as usize, y_p_delta as usize) {[m
+[32m+[m[32m                        if angled_player != player {[m
+[32m+[m[32m                            self.push_candidate(x + x_delta, y + y_delta, player, &mut result.v);[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Piece::Rook => {[m
+[32m+[m[32m                self.push_rook_candidates(x, y, player, &mut result.v);[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Piece::Knight => {[m
+[32m+[m
+[32m+[m[32m                self.push_candidate(x - 1, y + 2, player, &mut result.v);[m
+[32m+[m[32m                self.push_candidate(x - 1, y - 2, player, &mut result.v);[m
+[32m+[m
+[32m+[m[32m                self.push_candidate(x - 2, y + 1, player, &mut result.v);[m
+[32m+[m[32m                self.push_candidate(x - 2, y - 1, player, &mut result.v);[m
+[32m+[m
+[32m+[m[32m                self.push_candidate(x + 2, y + 1, player, &mut result.v);[m
+[32m+[m[32m                self.push_candidate(x + 2, y - 1, player, &mut result.v);[m
+[32m+[m
+[32m+[m[32m                self.push_candidate(x + 1, y + 2, player, &mut result.v);[m
+[32m+[m[32m                self.push_candidate(x + 1, y - 2, player, &mut result.v);[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Piece::Bishop => {[m
+[32m+[m[32m                self.push_bishop_candidates(x, y, player, &mut result.v);[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Piece::Queen => {[m
+[32m+[m[32m                self.push_rook_candidates(x, y, player, &mut result.v);[m
+[32m+[m[32m                self.push_bishop_candidates(x, y, player, &mut result.v);[m
+[32m+[m[32m            },[m
+[32m+[m[32m            Piece::King => {[m
+[32m+[m[32m                for i in -1..=1 {[m
+[32m+[m[32m                    for j in -1..=1 {[m
+[32m+[m[32m                        if i == 0 && j == 0 {[m
+[32m+[m[32m                            continue;[m
+                         }[m
+[32m+[m[32m                        self.push_candidate(x + i, y + j, player, &mut result.v);[m
+                     }[m
+                 }[m
+             }[m
+         }[m
+ [m
+[31m-        Option::None[m
+[32m+[m[32m        None[m
+     }[m
+ [m
+     fn push_rook_candidates(&self, x: i8, y: i8, player: Player, result: &mut Vec<(char, u8)>) {[m
+[36m@@ -262,13 +301,13 @@[m [mimpl Board {[m
+     fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<(usize, usize), Error> {[m
+         if rank < 1 || rank > 8 {[m
+             eprintln!("Rank out of bounds - {}", rank);[m
+[31m-            return Result::Err(Error::Unknown);[m
+[32m+[m[32m            return Err(Error::Unknown);[m
+         }[m
+         let file_u32 = file as u32;[m
+         if file_u32 < 'a' as u32 || file_u32 > 'h' as u32 {[m
+             eprintln!("File out of bounds - {}", file);[m
+[31m-            return Result::Err(Error::Unknown);[m
+[32m+[m[32m            return Err(Error::Unknown);[m
+         }[m
+[31m-        return Result::Ok(Board::file_rank_to_xy(file, rank));[m
+[32m+[m[32m        return Ok(Board::file_rank_to_xy(file, rank));[m
+     }[m
+ }[m
