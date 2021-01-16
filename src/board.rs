@@ -1,8 +1,30 @@
 // TODO King, en passante, promotion
 
+use std::collections::HashSet;
+use std::fmt::{Display, Formatter, self};
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Piece {
     Pawn, Rook, Knight, Bishop, Queen, King
+}
+
+impl Piece {
+    fn custom_fmt(&self, f: &mut Formatter<'_>, is_lower: bool) -> Result<(), fmt::Error> {
+        let s = match self {
+            Piece::Pawn => "P",
+            Piece::Rook => "R",
+            Piece::Knight => "N",
+            Piece::Bishop => "B",
+            Piece::Queen => "Q",
+            Piece::King => "K"
+        };
+
+        if is_lower {
+            write!(f, "{}", s.chars().nth(0).unwrap().to_lowercase())
+        } else {
+            write!(f, "{}", s)
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -15,11 +37,17 @@ pub enum Square {
     Occupied(Piece, Player), Blank
 }
 
-#[derive(Debug)]
-pub struct Board {
-    arr: [Square; 64],
-    player_with_turn: Player,
-    revision: u32
+impl Display for Square {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            Square::Blank => {
+                write!(f, " ")
+            },
+            Square::Occupied(piece, player) => {
+                piece.custom_fmt(f, *player == Player::Black)
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -47,12 +75,39 @@ impl MoveList {
     }
 }
 
+#[derive(Debug)]
+pub struct Board {
+    pub player_with_turn: Player,
+    arr: [Square; 64],
+    revision: u32,
+    black_piece_list: HashSet<(u8, u8)>,
+    white_piece_list: HashSet<(u8, u8)>
+}
+
+impl Display for Board {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        for i in 0..self.arr.len() {
+            if i % 8 == 0 && i != 0 {
+                if let Err(fmt::Error) = write!(f, "\n") {
+                    return Err(fmt::Error);
+                }
+            }
+            if let Err(fmt::Error) = write!(f, "{}", self.arr[i]) {
+                return Err(fmt::Error);
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Board {
     pub fn new() -> Board {
         let mut board = Board {
             arr: [Square::Blank; 64],
             player_with_turn: Player::White,
-            revision: 0
+            revision: 0,
+            black_piece_list: HashSet::new(),
+            white_piece_list: HashSet::new()
         };
 
         board.set_main_row(1, Player::White);
@@ -64,12 +119,40 @@ impl Board {
         board
     }
 
+    pub fn get_piece_locations(&self, player: Player) -> &HashSet<(u8, u8)> {
+        match player {
+            Player::White => &self.white_piece_list,
+            Player::Black => &self.black_piece_list
+        }
+    }
+
+    fn _get_piece_locations(&mut self, player: Player) -> &mut HashSet<(u8, u8)> {
+        match player {
+            Player::White => &mut self.white_piece_list,
+            Player::Black => &mut self.black_piece_list
+        }
+    }
+
+    pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) -> Option<Error> {
+        if let Square::Occupied(_, occupied_player) = self.get_by_xy(x, y) {
+            let piece_list: &mut HashSet<(u8, u8)> = self._get_piece_locations(occupied_player);
+            piece_list.remove(&(x as u8, y as u8));
+        }
+
+        if let Square::Occupied(_, new_player) = s {
+            let piece_list: &mut HashSet<(u8, u8)> = self._get_piece_locations(new_player);
+            piece_list.insert((x as u8, y as u8));
+        }
+
+        self.arr[y as usize * 8 + x as usize] = s;
+        self.revision += 1;
+
+        None
+    }
+
     pub fn set(&mut self, file: char, rank: u8, s: Square) -> Option<Error> {
         match Board::file_rank_to_xy_safe(file, rank) {
-            Ok((x, y)) => {
-                self.set_by_xy(x, y, s);
-                None
-            },
+            Ok((x, y)) => self.set_by_xy(x, y, s),
             Err(e) => Some(e)
         }
     }
@@ -124,15 +207,15 @@ impl Board {
         result.revision = self.revision;
         result.source = Some((file, rank));
 
-        let (x_us, y_us) = match Board::file_rank_to_xy_safe(file, rank) {
-            Ok((x_us, y_us)) => (x_us, y_us),
+        let (x_u8, y_u8) = match Board::file_rank_to_xy_safe(file, rank) {
+            Ok(r) => r,
             Err(e) => {
                 return Some(e);
             }
         };
-        let (x, y) = (x_us as i8, y_us as i8);
+        let (x, y) = (x_u8 as i8, y_u8 as i8);
 
-        let (piece, player) = match self.get_by_xy(x_us, y_us) {
+        let (piece, player) = match self.get_by_xy(x_u8, y_u8) {
             Square::Blank => {
                 return None;
             },
@@ -160,7 +243,7 @@ impl Board {
                     if x_p_delta < 0 || x_p_delta > 7 { continue; }
                     if y_p_delta < 0 || y_p_delta > 7 { continue; }
 
-                    if let Square::Occupied(_, angled_player) = self.get_by_xy(x_p_delta as usize, y_p_delta as usize) {
+                    if let Square::Occupied(_, angled_player) = self.get_by_xy(x_p_delta as u8, y_p_delta as u8) {
                         if angled_player != player {
                             self.push_candidate(x + x_delta, y + y_delta, player, &mut result.v);
                         }
@@ -240,7 +323,7 @@ impl Board {
 
     fn set_pawn_row(&mut self, rank: u8, player: Player) {
         for i in 0..8 {
-            self.set_by_xy(i, 8 - rank as usize, Square::Occupied(Piece::Pawn, player));
+            self.set_by_xy(i, 8 - rank, Square::Occupied(Piece::Pawn, player));
         }
     }
 
@@ -253,22 +336,13 @@ impl Board {
         self.set('f', rank, Square::Occupied(Piece::Bishop, player));
         self.set('g', rank, Square::Occupied(Piece::Knight, player));
         self.set('h', rank, Square::Occupied(Piece::Rook, player));
-    }
 
-    fn get_by_xy(&self, x: usize, y: usize) -> Square {
-        return self.arr[y * 8 + x];
     }
-
-    fn set_by_xy(&mut self, x: usize, y: usize, s: Square) {
-        self.arr[y * 8 + x] = s;
-        self.revision += 1;
-    }
-
     // Checks are for blind arithmetic
     // Returns whether to terminate the direction (if applicable)
     fn push_candidate(&self, x: i8, y: i8, player_owner: Player, result: &mut Vec<(char, u8)>) -> bool {
         if player_owner == self.player_with_turn && x >= 0 && x <= 7 && y >= 0 && y <= 7 {
-            let (moveable, terminate) = match self.get_by_xy(x as usize, y as usize) {
+            let (moveable, terminate) = match self.get_by_xy(x as u8, y as u8) {
                 Square::Occupied(piece, player) => {
                     (player != player_owner && piece != Piece::King, true)
                 },
@@ -277,7 +351,7 @@ impl Board {
                 }
             };
             if moveable {
-                result.push(Board::xy_to_file_rank(x as usize, y as usize));
+                result.push(Board::xy_to_file_rank(x as u8, y as u8));
             }
             return terminate;
         } else {
@@ -285,20 +359,25 @@ impl Board {
         }
     }
 
+    fn get_by_xy(&self, x: u8, y: u8) -> Square {
+        return self.arr[y as usize * 8 + x as usize];
+    }
+
     //////////////////////////////////////////////////
 
-    fn xy_to_file_rank(x: usize, y: usize) -> (char, u8) {
+    // FIXME
+    pub fn xy_to_file_rank(x: u8, y: u8) -> (char, u8) {
         (std::char::from_u32(x as u32 + ('a' as u32)).unwrap(), 8 - (y as u8))
     }
 
-    fn file_rank_to_xy(file: char, rank: u8) -> (usize, usize) {
+    fn file_rank_to_xy(file: char, rank: u8) -> (u8, u8) {
         let x = file as u32 - 'a' as u32;
         let y = 8 - rank;
-        (x as usize, y as usize)
+        (x as u8, y)
     }
 
     // Checks are for public interface
-    fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<(usize, usize), Error> {
+    fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<(u8, u8), Error> {
         if rank < 1 || rank > 8 {
             eprintln!("Rank out of bounds - {}", rank);
             return Err(Error::Unknown);
@@ -309,5 +388,12 @@ impl Board {
             return Err(Error::Unknown);
         }
         return Ok(Board::file_rank_to_xy(file, rank));
+    }
+
+    fn get_other_player(player: Player) -> Player {
+        match player {
+            Player::Black => Player::White,
+            Player::White => Player::Black
+        }
     }
 }

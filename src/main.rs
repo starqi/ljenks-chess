@@ -1,5 +1,6 @@
 mod board;
 
+use rand::{thread_rng, Rng};
 use board::{Player, Board, Square, Piece, MoveList};
 use std::{thread, io};
 
@@ -13,56 +14,46 @@ fn main() {
         }
     });
 
+    let mut rng = thread_rng();
+
     let mut board = Board::new();
-    //board.set('d', 3, Square::Occupied(Piece::Knight, Player::Black));
-    //board.set('c', 5, Square::Occupied(Piece::Knight, Player::Black));
-    //board.set('a', 2, Square::Blank);
-    //board.set('b', 1, Square::Blank);
-    //board.set('h', 7, Square::Blank);
-    println!("{}", format!("{:?}", board));
+    println!("{}", board);
+    debug_locations(&board);
 
     let mut move_list = MoveList::new();
+    let mut p_locs_v: Vec<(u8, u8)> = Vec::new();
+    let mut y = String::new();
 
     loop {
-        let mut x = String::new();
-        io::stdin().read_line(&mut x).expect("?");
+        io::stdin().read_line(&mut y).expect("?");
 
-
-        if let Some(_file) = x.chars().nth(0) {
-            if let Some(_rank) = x.chars().nth(1) {
-                if let Some(__rank) = _rank.to_digit(10) {
-
-                    // TODO Extract parsing as helper
-
-                    let rank = __rank as u8;
-                    println!("Parsed input: {}-{}", _file, rank);
-                    println!("{:?}", board.get(_file, rank));
-
-                    board.get_legal_moves(_file, rank, &mut move_list);
-                    println!("Moves:");
-                    print_vec(move_list.get_moves());
-
-                    let mut y = String::new();
-                    io::stdin().read_line(&mut y).expect("?");
-                    match y.trim().parse::<usize>() {
-                        Ok(i) => {
-                            println!("Moving");
-                            board.make_move(&mut move_list, i);
-                        },
-                        Err(e) => {
-                            println!("No move, {}", e);
-                            continue;
-                        }
-                    };
-                }
-            }
+        let p_locs = board.get_piece_locations(board.player_with_turn);
+        p_locs_v.splice(0.., p_locs.into_iter().map(|x| *x));
+        let p_locs_i = rng.gen_range(0, p_locs_v.len());
+        let (x, y) = p_locs_v[p_locs_i];
+        let (file, rank) = Board::xy_to_file_rank(x, y);
+        board.get_legal_moves(file, rank, &mut move_list);
+        if move_list.get_moves().len() > 0 {
+            let move_i = rng.gen_range(0, move_list.get_moves().len());
+            board.make_move(&mut move_list, move_i);
+            println!("{}", board);
+            debug_locations(&board);
+        } else {
+            continue;
         }
     }
 }
 
-fn print_vec<T : std::fmt::Debug>(v: &Vec<T>) {
-    for item in v {
-        print!("{:?} ", item);
-    }
-    println!();
+fn debug_locations(board: &Board) {
+    board
+        .get_piece_locations(board.player_with_turn)
+        .into_iter()
+        .map(|(x, y)| Board::xy_to_file_rank(*x, *y))
+        .for_each(|x| print!("{:?}", x));
+    println!("");
+}
+
+fn debug_iterator<T>(it: impl IntoIterator<Item = T>) where T : std::fmt::Debug {
+    it.into_iter().for_each(|x| print!("{:?} ", x));
+    println!("");
 }
