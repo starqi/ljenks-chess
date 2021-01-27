@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 rand = "0.5.5"
+log = "0.4.14"
+env_logger = "0.8.2"
 
 [profile.dev]
 debug = true
