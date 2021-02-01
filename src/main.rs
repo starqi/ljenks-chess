@@ -1,10 +1,22 @@
 mod board;
+mod ai;
 
+use ai::{Ai};
 use rand::{thread_rng, Rng};
 use board::{CheckThreatTempBuffers, xy_to_file_rank_safe, Player, Board, Square, Piece, MoveList};
 use std::{thread, io};
 
 fn main() {
+    let mut board = Board::new();
+    let mut ai = Ai::new(&mut board);
+    let mut y = String::new();
+    loop {
+        io::stdin().read_line(&mut y).expect("?");
+        ai.boom();
+    }
+}
+
+fn main2() {
 
     env_logger::init();
 
@@ -55,7 +67,7 @@ fn main() {
             break;
         }
 
-        let xy_moves = move_list.get_moves().unwrap();
+        let xy_moves = move_list.get_moves();
         if xy_moves.len() > 0 {
             let move_i = rng.gen_range(0, xy_moves.len());
             let (target_x, target_y) = xy_moves[move_i];

@@ -1,6 +1,7 @@
 // TODO King, en passante, promotion, castle, castle block
 // TODO Rust review - closure types, references to closure types, lifetimes, '_, for loop iter, into_iter, slices, Ref being auto cast
 // TODO Split modules, currently too much access between classes
+// TODO Revision numbers & board instances, maintaining piece list or not
 
 use log::{debug, info, warn, error};
 use std::iter::Iterator;
@@ -28,7 +29,7 @@ fn file_rank_to_xy(file: char, rank: u8) -> Coord {
 }
 
 // Checks are for public interface
-fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<Coord, Error> {
+pub fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<Coord, Error> {
     if rank < 1 || rank > 8 {
         return Err(Error::RankOutOfBounds(rank));
     }
@@ -88,6 +89,12 @@ pub enum Square {
     Occupied(Piece, Player), Blank
 }
 
+impl Default for Square {
+    fn default() -> Self {
+        Square::Blank
+    }
+}
+
 impl Display for Square {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
@@ -103,11 +110,12 @@ impl Display for Square {
 
 #[derive(Copy, Clone, Debug)]
 pub enum Error {
-    RankOutOfBounds( u8),
-    FileOutOfBounds( char),
+    RankOutOfBounds(u8),
+    FileOutOfBounds(char),
     XyOutOfBounds(i32, i32),
     MoveListExpired,
-    MoveListOutOfBounds( usize, usize)
+    MoveListOutOfBounds(usize, usize),
+    RevertMoveExpired(u32, u32)
 }
 
 #[derive(Debug)]
@@ -117,6 +125,7 @@ pub struct MoveList {
     revision: u32
 }
 
+// TODO Same list used on multiple boards?
 impl MoveList {
     pub fn new() -> MoveList {
         MoveList { 
@@ -126,16 +135,35 @@ impl MoveList {
         }
     }
 
-    pub fn is_expired(&self) -> bool {
-        self.source.is_none()
+    pub fn is_expired(&self, board: &Board) -> bool {
+        self.source.is_none() || self.revision != board.revision
     }
 
-    pub fn get_moves(&self) -> Result<&CoordList, Error> {
-        if self.is_expired() {
-            Err(Error::MoveListExpired)
-        } else {
-            Ok(&self.v)
-        }
+    pub fn get_moves(&self) -> &CoordList {
+        &self.v
+    }
+
+    pub fn write_move_at_index(&self, board: &Board, index: usize, dest_output: &mut Coord, src_output: &mut Coord) -> Result<(), Error> {
+
+        let src = match self.source {
+            None => { return Err(Error::MoveListExpired); },
+            Some(ref x) => x 
+        };
+
+        if self.revision != board.revision { return Err(Error::MoveListExpired); }
+
+        let dest = match self.v.get(index) {
+            None => { return Err(Error::MoveListOutOfBounds(index, self.v.len())); },
+            Some(x) => x
+        };
+
+        src_output.0 = src.0;
+        src_output.1 = src.1;
+
+        dest_output.0 = dest.0;
+        dest_output.1 = dest.1;
+
+        Ok(())
     }
 }
 
@@ -153,17 +181,29 @@ impl CheckThreatTempBuffers {
     }
 }
 
-struct MoveCandidateHelper<'a, 'b> {
+#[derive(Default)]
+struct OldMoveSquares {
+    old_square_a: (Coord, Square),
+    old_square_b: (Coord, Square)
+}
+
+pub struct RevertableMove {
+    old_move_squares: OldMoveSquares,
+    old_player: Player,
+    old_revision: u32
+}
+
+struct MoveTest<'a, 'b> {
     src_x: u8,
     src_y: u8,
     src_square_player: Player,
     check_threats_and_temp_buffers: Option<(&'b HashSet<Coord>, &'a mut CheckThreatTempBuffers)>,
     data: &'a Board,
     can_capture_king: bool,
-    revert_targets: Option<[(Coord, Square); 2]>
+    old_move_squares: Option<OldMoveSquares>
 }
 
-impl <'a, 'b> MoveCandidateHelper<'a, 'b> {
+impl <'a, 'b> MoveTest<'a, 'b> {
 
     fn new(
         src_x: u8, src_y: u8,
@@ -171,10 +211,11 @@ impl <'a, 'b> MoveCandidateHelper<'a, 'b> {
         check_threats_and_temp_buffers: Option<(&'b HashSet<Coord>, &'a mut CheckThreatTempBuffers)>,
         data: &'a Board,
         can_capture_king: bool
-    ) -> MoveCandidateHelper<'a, 'b> {
-        let mut r = MoveCandidateHelper {
-            src_x, src_y, src_square_player, check_threats_and_temp_buffers, data, can_capture_king, revert_targets: None
+    ) -> MoveTest<'a, 'b> {
+        let mut r = MoveTest {
+            src_x, src_y, src_square_player, check_threats_and_temp_buffers, data, can_capture_king, old_move_squares: None
         };
+        // TODO Can import for each turn, not each move candidate
         if let Some(t) = &mut r.check_threats_and_temp_buffers {
             t.1.board.import_from(data);
         }
@@ -203,32 +244,22 @@ impl <'a, 'b> MoveCandidateHelper<'a, 'b> {
             if let Some(t) = &mut self.check_threats_and_temp_buffers {
 
                 // Revert board to constructor init state
-                if let Some(rt) = self.revert_targets {
-                    t.1.board._set_by_xy(rt[0].0.0, rt[0].0.1, rt[0].1);
-                    t.1.board._set_by_xy(rt[1].0.0, rt[1].0.1, rt[1].1);
+                if let Some(ref oms) = self.old_move_squares {
+                    t.1.board._revert_move(oms);
                 }
 
                 if let Square::Occupied(piece, player) = t.1.board._get_by_xy(self.src_x, self.src_y) {
 
                     // Get revert targets buffer
-                    let mut rt = match self.revert_targets {
-                        None => {
-                            self.revert_targets = Some([((0, 0), Square::Blank); 2]);
-                            match self.revert_targets {
-                                None => unreachable!(),
-                                Some(ref mut inner) => inner
-                            }
-                        },
-                        Some(ref mut inner) => inner
-                    };
+                    let mut oms = self.old_move_squares.get_or_insert(Default::default());
 
-                    rt[0].0.0 = dest_x;
-                    rt[0].0.1 = dest_y;
-                    rt[0].1 = t.1.board._get_by_xy(dest_x, dest_y);
+                    oms.old_square_a.0.0 = dest_x;
+                    oms.old_square_a.0.1 = dest_y;
+                    oms.old_square_a.1 = t.1.board._get_by_xy(dest_x, dest_y);
 
-                    rt[1].0.0 = self.src_x;
-                    rt[1].0.1 = self.src_y;
-                    rt[1].1 = t.1.board._get_by_xy(self.src_x, self.src_y);
+                    oms.old_square_b.0.0 = self.src_x;
+                    oms.old_square_b.0.1 = self.src_y;
+                    oms.old_square_b.1 = t.1.board._get_by_xy(self.src_x, self.src_y);
 
                     t.1.board._set_by_xy(dest_x, dest_y, Square::Occupied(piece, player));
                     t.1.board._set_by_xy(self.src_x, self.src_y, Square::Blank);
@@ -313,7 +344,7 @@ impl PlayerState {
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
-    revision: u32,
+    pub revision: u32,
     black_state: PlayerState,
     white_state: PlayerState
 }
@@ -378,7 +409,7 @@ impl Board {
         self.get_by_xy(x, y)
     }
 
-    // FIXME Checks?
+    // FIXME Checks
     pub fn get_by_xy(&self, x: u8, y: u8) -> Result<Square, Error> {
         Ok(self._get_by_xy(x, y))
     }
@@ -389,22 +420,21 @@ impl Board {
         Ok(())
     }
 
-    // FIXME Checks?
+    // FIXME Checks
     pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) -> Result<(), Error> {
-
-        if let Ok(Square::Occupied(_, occupied_player)) = self.get_by_xy(x, y) {
-            let piece_list = &mut self._get_player_state(occupied_player).piece_locs;
-            piece_list.remove(&(x, y));
-        }
-
-        if let Square::Occupied(_, new_player) = s {
-            let piece_list = &mut self._get_player_state(new_player).piece_locs;
-            piece_list.insert((x, y));
-        }
-
         self._set_by_xy(x, y, s);
         self.revision += 1;
+        Ok(())
+    }
 
+    pub fn revert_move(&mut self, r: &RevertableMove) -> Result<(), Error> {
+        if self.revision != r.old_revision + 1 {
+            return Err(Error::RevertMoveExpired(self.revision, r.old_revision));
+        }
+        self._revert_move(&r.old_move_squares);
+        // FIXME Design?
+        self.revision = r.old_revision;
+        self.player_with_turn = r.old_player;
         Ok(())
     }
 
@@ -414,18 +444,11 @@ impl Board {
         index: usize
     ) -> Result<(), Error> {
 
-        let (src_x, src_y) = match moves.source {
-            None => { return Err(Error::MoveListExpired); },
-            Some(x) => x 
-        };
-        if moves.revision != self.revision { return Err(Error::MoveListExpired); }
+        let mut target: Coord = (0, 0);
+        let mut source: Coord = (0, 0);
+        moves.write_move_at_index(self, index, &mut target, &mut source)?;
 
-        let (target_x, target_y) = match moves.v.get(index) {
-            None => { return Err(Error::MoveListOutOfBounds(index, moves.v.len())); },
-            Some(x) => x
-        };
-
-        if let Ok(Square::Occupied(piece, player)) = self.get_by_xy(src_x, src_y) {
+        if let Ok(Square::Occupied(piece, player)) = self.get_by_xy(source.0, source.1) {
 
             let player_state = self._get_player_state(player);
             // TODO Unexpected behaviour if board not started in standard format
@@ -434,11 +457,11 @@ impl Board {
                 Player::White => {
                     if !player_state.did_castle {
                         let rook_moved = piece == Piece::Rook && (
-                            (src_x == 7 && src_y == 0) ||
-                            (src_x == 7 && src_y == 7)
+                            (source.0 == 7 && source.1 == 0) ||
+                            (source.0 == 7 && source.1 == 7)
                         );
                         let king_moved = piece == Piece::King && (
-                            (src_x == 4 && src_y == 7)
+                            (source.0 == 4 && source.1 == 7)
                         );
                         if rook_moved || king_moved {
                             player_state.did_castle = true;
@@ -448,11 +471,11 @@ impl Board {
                 Player::Black => {
                     if !player_state.did_castle {
                         let rook_moved = piece == Piece::Rook && (
-                            (src_x == 0 && src_y == 0) ||
-                            (src_x == 0 && src_y == 7)
+                            (source.0 == 0 && source.1 == 0) ||
+                            (source.0 == 0 && source.1 == 7)
                         );
                         let king_moved = piece == Piece::King && (
-                            (src_x == 4 && src_y == 0)
+                            (source.0 == 4 && source.1 == 0)
                         );
                         if rook_moved || king_moved {
                             player_state.did_castle = true;
@@ -461,16 +484,38 @@ impl Board {
 
                 }
             }
-            self.set_by_xy(*target_x, *target_y, Square::Occupied(piece, player)).unwrap();
-            self.set_by_xy(src_x, src_y, Square::Blank).unwrap();
+            self._set_by_xy(target.0, target.1, Square::Occupied(piece, player));
+            self._set_by_xy(source.0, source.1, Square::Blank);
         } else {
             panic!("Unexpected blank square in check threats");
         }
 
         self.revision += 1;
-        moves.source = None;
         self.player_with_turn = self.player_with_turn.get_other_player();
         Ok(())
+    }
+
+    pub fn get_revertable_move(
+        &self,
+        moves: &MoveList,
+        index: usize
+    ) -> Result<RevertableMove, Error> {
+
+        let mut target: Coord = (0, 0);
+        let mut source: Coord = (0, 0);
+        moves.write_move_at_index(self, index, &mut target, &mut source)?;
+
+        let old_square_a = self.get_by_xy(target.0, target.1)?;
+        let old_square_b = self.get_by_xy(source.0, source.1)?;
+
+        Ok(RevertableMove {
+            old_move_squares: OldMoveSquares {
+                old_square_a: ((target.0, target.1), old_square_a),
+                old_square_b: ((source.0, source.1), old_square_b)
+            },
+            old_revision: self.revision,
+            old_player: self.player_with_turn
+        })
     }
 
     pub fn get_moves(
@@ -508,6 +553,15 @@ impl Board {
         );
 
         Ok(())
+    }
+
+    fn _revert_move(&mut self, r: &OldMoveSquares) {
+
+        let ((old_x1, old_y1), old_sqr1) = r.old_square_a;
+        let ((old_x2, old_y2), old_sqr2) = r.old_square_b;
+
+        self._set_by_xy(old_x1, old_y1, old_sqr1);
+        self._set_by_xy(old_x2, old_y2, old_sqr2);
     }
 
     fn for_each_check_threat<'a, F, R>(
@@ -552,7 +606,7 @@ impl Board {
         if square_owner != player_with_turn { return; }
         let (x, y) = (x_u8 as i8, y_u8 as i8);
 
-        let mut move_helper = MoveCandidateHelper::new(x_u8, y_u8, player_with_turn, check_threats, &self, can_capture_king);
+        let mut move_helper = MoveTest::new(x_u8, y_u8, player_with_turn, check_threats, &self, can_capture_king);
 
         info!("_get_moves src={},{} piece={}", x_u8, y_u8, piece);
 
@@ -623,7 +677,7 @@ impl Board {
 
     fn set_pawn_row(&mut self, rank: u8, player: Player) -> Result<(), Error> {
         for i in 0..8 {
-            self.set_by_xy(i, 8 - rank, Square::Occupied(Piece::Queen, player))?;
+            self.set_by_xy(i, 8 - rank, Square::Occupied(Piece::Pawn, player))?;
         }
         Ok(())
     }
@@ -643,12 +697,22 @@ impl Board {
 
     fn set_standard_rows(&mut self) {
         self.set_main_row(1, Player::White).unwrap();
-        //self.set_pawn_row(2, Player::White).unwrap();
+        self.set_pawn_row(2, Player::White).unwrap();
         self.set_main_row(8, Player::Black).unwrap();
         self.set_pawn_row(7, Player::Black).unwrap();
     }
 
     fn _set_by_xy(&mut self, x: u8, y: u8, s: Square) {
+        if let Ok(Square::Occupied(_, occupied_player)) = self.get_by_xy(x, y) {
+            let piece_list = &mut self._get_player_state(occupied_player).piece_locs;
+            piece_list.remove(&(x, y));
+        }
+
+        if let Square::Occupied(_, new_player) = s {
+            let piece_list = &mut self._get_player_state(new_player).piece_locs;
+            piece_list.insert((x, y));
+        }
+
         self.d[y as usize * 8 + x as usize] = s;
     }
 
