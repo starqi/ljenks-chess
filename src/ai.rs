@@ -85,10 +85,21 @@ impl Ai {
         } else {
             let (file, rank) = xy_to_file_rank_safe(best_move_inner.piece_loc.0 as i32, best_move_inner.piece_loc.1 as i32).unwrap();
             real_board.get_moves(file, rank, &mut self.check_bufs, &mut move_list_buf_for_children).unwrap();
+
+            let (dest_x, dest_y) = move_list_buf_for_children.get_moves().get(best_move_inner.move_list_index).unwrap();
+            let (dest_file, dest_rank) = xy_to_file_rank_safe(*dest_x as i32, *dest_y as i32).unwrap();
+
+            println!(
+                "{:?} moves {}{} to {}{}",
+                real_board.get_player_with_turn(),
+                file, rank,
+                dest_file, dest_rank
+            );
+
             real_board.make_move(&mut move_list_buf_for_children, best_move_inner.move_list_index).unwrap();
         }
-        println!("\n{}", real_board);
-        println!("Eval = {}, Curr = {}", evaluation, Ai::evaluate(&real_board, &mut self.rng));
+        println!("\n{}\n", real_board);
+        println!("Eval = {}", evaluation);
     }
 
     fn alpha_beta(
@@ -108,6 +119,7 @@ impl Ai {
         let current_player_state = self.temp_board.get_player_state(current_player);
 
         let mut best_min = MAX_EVAL;
+        let mut TODO = false;
 
         piece_locs_buf_from_above.clone_from(&current_player_state.piece_locs);
         for (p_x, p_y) in piece_locs_buf_from_above.iter() {
@@ -161,6 +173,7 @@ impl Ai {
                 // Must be <= to always set move if one exists
                 if value_to_minimize <= best_min {
                     best_min = value_to_minimize;
+                    TODO = true;
                     if let Some(a) = best_move {
                         let mut b = a.borrow_mut();
                         b.piece_loc = (*p_x, *p_y);
@@ -185,6 +198,10 @@ impl Ai {
                 }
 
             }
+        }
+
+        if !TODO {
+            println!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.temp_board);
         }
 
         if current_player == Player::White { -best_min } else { best_min }

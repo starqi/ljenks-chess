@@ -2,6 +2,7 @@
 // TODO Rust review - closure types, references to closure types, lifetimes, '_, for loop iter, into_iter, slices, Ref being auto cast
 // TODO Split modules, currently too much access between classes
 // TODO Revision numbers & board instances, maintaining piece list or not
+// TODO File, rank conversion spam
 
 use log::{debug, info, warn, error};
 use std::iter::Iterator;
@@ -707,8 +708,8 @@ impl Board {
         self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
         self.set_main_row(8, Player::Black).unwrap();
         self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
-        self.set('a', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
-        self.set('h', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
+        //self.set('a', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
+        //self.set('h', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
         //self.set('d', 1, Square::Blank).unwrap();
         //self.set('a', 1, Square::Blank).unwrap();
         //self.set('h', 1, Square::Blank).unwrap();
