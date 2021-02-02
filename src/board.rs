@@ -8,8 +8,8 @@ use std::iter::Iterator;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
 
-type Coord = (u8, u8);
-type CoordList = Vec<Coord>;
+pub type Coord = (u8, u8);
+pub type CoordList = Vec<Coord>;
 
 fn xy_to_file_rank(x: u8, y: u8) -> (char, u8) {
     (std::char::from_u32(x as u32 + ('a' as u32)).unwrap(), 8 - (y as u8))
@@ -223,6 +223,10 @@ impl <'a, 'b> MoveTest<'a, 'b> {
     }
 
     fn push(&mut self, test_dest_x: i8, test_dest_y: i8, result: &mut CoordList) -> bool {
+        self._push(test_dest_x, test_dest_y, true, result)
+    }
+
+    fn _push(&mut self, test_dest_x: i8, test_dest_y: i8, capture: bool, result: &mut CoordList) -> bool {
         if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 {
             return true;
         }
@@ -231,7 +235,10 @@ impl <'a, 'b> MoveTest<'a, 'b> {
 
         let (moveable, terminate) = match self.data._get_by_xy(dest_x, dest_y) {
             Square::Occupied(dest_piece, dest_square_player) => {
-                (dest_square_player != self.src_square_player && (self.can_capture_king || dest_piece != Piece::King), true)
+                (
+                    capture && dest_square_player != self.src_square_player && (self.can_capture_king || dest_piece != Piece::King), 
+                    true
+                )
             },
             Square::Blank => {
                 (true, false)
@@ -617,9 +624,9 @@ impl Board {
                     Player::White => (-1, 6)
                 };
 
-                move_helper.push(x, y + y_delta, result);
+                move_helper._push(x, y + y_delta, false, result);
                 if y == jump_row {
-                    move_helper.push(x, y + y_delta * 2, result);
+                    move_helper._push(x, y + y_delta * 2, false, result);
                 }
 
                 for x_delta in -1..=1 {
@@ -675,9 +682,9 @@ impl Board {
         }
     }
 
-    fn set_pawn_row(&mut self, rank: u8, player: Player) -> Result<(), Error> {
+    fn set_uniform_row(&mut self, rank: u8, player: Player, piece: Piece) -> Result<(), Error> {
         for i in 0..8 {
-            self.set_by_xy(i, 8 - rank, Square::Occupied(Piece::Pawn, player))?;
+            self.set_by_xy(i, 8 - rank, Square::Occupied(piece, player))?;
         }
         Ok(())
     }
@@ -697,9 +704,14 @@ impl Board {
 
     fn set_standard_rows(&mut self) {
         self.set_main_row(1, Player::White).unwrap();
-        self.set_pawn_row(2, Player::White).unwrap();
+        self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
         self.set_main_row(8, Player::Black).unwrap();
-        self.set_pawn_row(7, Player::Black).unwrap();
+        self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
+        self.set('a', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
+        self.set('h', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
+        //self.set('d', 1, Square::Blank).unwrap();
+        //self.set('a', 1, Square::Blank).unwrap();
+        //self.set('h', 1, Square::Blank).unwrap();
     }
 
     fn _set_by_xy(&mut self, x: u8, y: u8, s: Square) {

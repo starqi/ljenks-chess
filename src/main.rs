@@ -5,17 +5,35 @@ use ai::{Ai};
 use rand::{thread_rng, Rng};
 use board::{CheckThreatTempBuffers, xy_to_file_rank_safe, Player, Board, Square, Piece, MoveList};
 use std::{thread, io};
+use std::sync::{Mutex, Arc};
 
 fn main() {
+
+    env_logger::init();
+
     let mut board = Board::new();
-    let mut ai = Ai::new(&mut board);
+    let mut ai = Ai::new();
     let mut y = String::new();
+
+    let counter_ref = Arc::clone(&ai.counter);
+    let j = thread::spawn(move || {
+        let duration = std::time::Duration::from_secs(5);
+        loop {
+            {
+                let counter = counter_ref.lock().unwrap();
+                println!("Evaluations = {}", counter);
+            }
+            thread::sleep(duration);
+        }
+    });
+
     loop {
         io::stdin().read_line(&mut y).expect("?");
-        ai.boom();
+        ai.make_move(3, &mut board);
     }
 }
 
+/*
 fn main2() {
 
     env_logger::init();
@@ -101,3 +119,4 @@ fn debug_locations(board: &Board) {
         });
     println!("");
 }
+*/

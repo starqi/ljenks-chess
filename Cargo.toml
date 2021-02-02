@@ -1,5 +1,5 @@
 [package]
-name = "chess2"
+name = "chess_bs"
 version = "0.1.0"
 authors = ["starqi <helloimzirui@gmail.com>"]
 edition = "2018"
