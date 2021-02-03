@@ -144,9 +144,17 @@ impl Ai {
 
                     if current_player == Player::White {
                         new_beta = beta;
-                        new_alpha = -best_min;
+                        new_alpha = if -best_min > alpha {
+                            -best_min
+                        } else {
+                            alpha
+                        }
                     } else {
-                        new_beta = best_min;
+                        new_beta = if best_min < beta {
+                            best_min
+                        } else {
+                            beta
+                        };
                         new_alpha = alpha;
                     }
 
