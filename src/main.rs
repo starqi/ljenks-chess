@@ -16,7 +16,7 @@ fn main() {
     let mut y = String::new();
 
     let counter_ref = Arc::clone(&ai.counter);
-    let j = thread::spawn(move || {
+    thread::spawn(move || {
         let duration = std::time::Duration::from_secs(5);
         loop {
             {
