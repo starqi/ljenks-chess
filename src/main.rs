@@ -3,7 +3,7 @@ mod ai;
 
 use ai::{Ai};
 use rand::{thread_rng, Rng};
-use board::{CheckThreatTempBuffers, xy_to_file_rank_safe, Player, Board, Square, Piece, MoveList};
+use board::{MoveTest, xy_to_file_rank_safe, Player, Board, Square, Piece, MoveList};
 use std::{thread, io};
 use std::sync::{Mutex, Arc};
 
@@ -16,6 +16,7 @@ fn main() {
     let mut y = String::new();
 
     let counter_ref = Arc::clone(&ai.counter);
+    /*
     thread::spawn(move || {
         let duration = std::time::Duration::from_secs(5);
         loop {
@@ -26,6 +27,14 @@ fn main() {
             thread::sleep(duration);
         }
     });
+    */
+
+
+    /*
+    let mut hi = MoveList::new(5);
+    let mut hi2 = MoveList::new(5);
+    board.get_moves(&mut hi, &mut hi2);
+    */
 
     loop {
         io::stdin().read_line(&mut y).expect("?");

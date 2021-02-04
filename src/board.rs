@@ -16,7 +16,7 @@ pub type CoordEvalList = Vec<(Coord, Coord, i32)>;
 
 pub struct MoveList {
     v: CoordEvalList,
-    write_index: usize
+    pub write_index: usize
 }
 
 /// Writers are expected to assume `write_index` is set already to the correct location
@@ -33,24 +33,21 @@ impl MoveList {
         &self.v
     }
 
-    pub fn get_write_index(&self) -> usize {
-        self.write_index
-    }
-
-    pub fn set_write_index(&mut self, w: usize) {
-        if w >= self.v.len() { panic!("Out of bounds write index"); }
-        self.write_index = w;
-    }
-
     pub fn write(&mut self, from: Coord, to: Coord, eval: i32) {
-        if self.write_index >= self.v.len() {
-            self.v.push(((0, 0), (0, 0), 0));
-        }
-        let mut item = self.v[self.v.len() - 1];
+        self.grow_with_access(self.write_index);
+        let item = &mut self.v[self.write_index];
         item.0 = from;
         item.1 = to;
         item.2 = eval;
         self.write_index += 1;
+    }
+
+    fn grow_with_access(&mut self, requested_index: usize) {
+        if requested_index >= self.v.len() {
+            for _ in 0..requested_index - self.v.len() + 1 {
+                self.v.push(((0, 0), (0, 0), 0));
+            }
+        }
     }
 
     pub fn sort_subset(&mut self, start: usize, end_exclusive: usize) {
@@ -146,10 +143,12 @@ impl Display for Square {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             Square::Blank => {
-                write!(f, ".")
+                write!(f, ". ")
             },
             Square::Occupied(piece, player) => {
-                piece.custom_fmt(f, *player == Player::Black)
+                let r = piece.custom_fmt(f, *player == Player::Black);
+                write!(f, " ");
+                r
             }
         }
     }
@@ -162,23 +161,7 @@ pub enum Error {
     XyOutOfBounds(i32, i32)
 }
 
-pub struct CheckThreatTempBuffers<'a> {
-    moves: MoveList,
-    board: Board,
-    move_test: MoveTest<'a, 'a>
-}
-
-impl <'a> CheckThreatTempBuffers<'a> {
-    pub fn new() -> CheckThreatTempBuffers<'a> {
-        let board = Board::new();
-        CheckThreatTempBuffers {
-            moves: MoveList::new(50),
-            board,
-            move_test: MoveTest::new(false, &mut board)
-        }
-    }
-}
-
+// TODO Merge
 #[derive(Default)]
 struct OldMoveSquares {
     old_square_a: (Coord, Square),
@@ -190,48 +173,101 @@ pub struct RevertableMove {
     old_player: Player
 }
 
-struct MoveTest<'a, 'b> where 'a : 'b {
-    src_x: u8, src_y: u8,
-    src_square_player: Player,
-    check_threats_and_temp_buffers: Option<(&'b HashSet<Coord>, &'a mut CheckThreatTempBuffers<'a>)>,
+// TODO Should be able to substitute bitboards for the same interface
+// TODO Should also be able to generate bitboards with this class
+pub struct MoveTest<'a> {
+    src_x: i8,
+    src_y: i8,
+    src_piece: Piece,
+    src_player: Player,
     data: &'a Board,
-    can_capture_king: bool,
-    old_move_squares: Option<OldMoveSquares>
+    can_capture_king: bool
 }
 
-impl <'a, 'b> MoveTest<'a, 'b> {
+impl MoveTest<'_> {
 
-    fn new(does_checks: bool, data: &'a Board) -> MoveTest<'a, 'b> {
-        let mut r = MoveTest {
-            src_x: 0,
-            src_y: 0, 
-            src_square_player: Player::White,
-            check_threats_and_temp_buffers: if does_checks {
-                Some((H))
-            } else {
-                None
-            },
-            data,
-            can_capture_king: true,
-            old_move_squares: None
-        };
-        // TODO Can import for each turn, not each move candidate
-        if let Some(t) = &mut r.check_threats_and_temp_buffers {
-            t.1.board.import_from(data);
-        }
-        r
-    }
-
-    fn push(
-        &mut self,
-        test_dest_x: i8,
-        test_dest_y: i8,
+    pub fn fill_src(
+        src_x: u8,
+        src_y: u8,
+        src_piece: Piece,
+        src_player: Player,
+        data: &Board,
+        can_capture_king: bool,
         result: &mut MoveList
-    ) -> bool {
-        self._push(test_dest_x, test_dest_y, true, result)
+    ) {
+        debug_assert!(src_x >= 0 && src_y >= 0 && src_x <= 7 && src_y <= 7);
+        let t = MoveTest {
+            src_x: src_x as i8, src_y: src_y as i8, src_piece, src_player, data, can_capture_king
+        };
+        // TODO Array
+        match src_piece {
+            Piece::Pawn => t.push_pawn(result),
+            Piece::Queen => t.push_queen(result),
+            Piece::Knight => t.push_knight(result),
+            Piece::King => t.push_king(result),
+            Piece::Bishop => t.push_bishop(result),
+            Piece::Rook => t.push_rook(result)
+        }
     }
 
-    fn _push(&mut self, test_dest_x: i8, test_dest_y: i8, capture: bool, result: &mut MoveList) -> bool {
+    pub fn fill_player(
+        player_with_turn: Player,
+        data: &Board,
+        can_capture_king: bool,
+        result: &mut MoveList
+    ) {
+        for (x, y) in &data.get_player_state(player_with_turn).piece_locs {
+            if let Square::Occupied(piece, player) = data._get_by_xy(*x, *y) {
+                debug_assert!(player == player_with_turn);
+                MoveTest::fill_src(*x, *y, piece, player, data, can_capture_king, result);
+            } else {
+                panic!("Empty square in {:?} player's piece locs", player_with_turn);
+            }
+        }
+    }
+
+    pub fn filter_check_threats(
+        real_board: &mut Board,
+        checking_player: Player,
+
+        candidates_and_buf: &mut MoveList,
+        candidates_start: usize,
+        candidates_end_exclusive: usize,
+
+        result: &mut MoveList
+    ) {
+        for i in candidates_start..candidates_end_exclusive {
+            let revertable = real_board.get_revertable_move(candidates_and_buf, i);
+            real_board.make_move(candidates_and_buf, i);
+
+            candidates_and_buf.write_index = candidates_end_exclusive;
+            MoveTest::fill_player(
+                checking_player, 
+                real_board,
+                true,
+                candidates_and_buf
+            ); 
+            let cand_write_end_exclusive = candidates_and_buf.write_index;
+
+            let mut is_king_safe = true;
+            for j in candidates_end_exclusive..cand_write_end_exclusive {
+                let (_, (dest_x, dest_y), _) = candidates_and_buf.get_v()[j];
+                if let Square::Occupied(piece, _) = real_board._get_by_xy(dest_x, dest_y) {
+                    if piece == Piece::King {
+                        is_king_safe = false;
+                        break;
+                    }
+                }
+            }
+            if is_king_safe {
+                let safe_move = candidates_and_buf.get_v()[i];
+                result.write(safe_move.0, safe_move.1, safe_move.2);
+            }
+            real_board.revert_move(&revertable);
+        }
+    }
+
+    fn push(&self, test_dest_x: i8, test_dest_y: i8, capture: bool, result: &mut MoveList) -> bool {
         if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 {
             return true;
         }
@@ -239,12 +275,10 @@ impl <'a, 'b> MoveTest<'a, 'b> {
         let (dest_x, dest_y) = (test_dest_x as u8, test_dest_y as u8);
 
         let (moveable, terminate) = match self.data._get_by_xy(dest_x, dest_y) {
-            Square::Occupied(dest_piece, dest_square_player) => {
-                (
-                    capture && dest_square_player != self.src_square_player && (self.can_capture_king || dest_piece != Piece::King), 
+            Square::Occupied(dest_piece, dest_square_player) => {(
+                capture && dest_square_player != self.src_player && (self.can_capture_king || dest_piece != Piece::King), 
                     true
-                )
-            },
+            )},
             Square::Blank => {
                 (true, false)
             }
@@ -253,85 +287,106 @@ impl <'a, 'b> MoveTest<'a, 'b> {
         debug!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
 
         if moveable {
-            if let Some(t) = &mut self.check_threats_and_temp_buffers {
-
-                // Revert board to constructor init state
-                if let Some(ref oms) = self.old_move_squares {
-                    t.1.board._revert_move(oms);
-                }
-
-                if let Square::Occupied(piece, player) = t.1.board._get_by_xy(self.src_x, self.src_y) {
-
-                    // Get revert targets buffer
-                    let mut oms = self.old_move_squares.get_or_insert(Default::default());
-
-                    oms.old_square_a.0.0 = dest_x;
-                    oms.old_square_a.0.1 = dest_y;
-                    oms.old_square_a.1 = t.1.board._get_by_xy(dest_x, dest_y);
-
-                    oms.old_square_b.0.0 = self.src_x;
-                    oms.old_square_b.0.1 = self.src_y;
-                    oms.old_square_b.1 = t.1.board._get_by_xy(self.src_x, self.src_y);
-
-                    t.1.board._set_by_xy(dest_x, dest_y, Square::Occupied(piece, player));
-                    t.1.board._set_by_xy(self.src_x, self.src_y, Square::Blank);
-                } else {
-                    panic!("Unexpected blank square in check threats");
-                }
-
-                info!("calc check threats, checker={:?}", self.src_square_player.get_other_player());
-                info!("\n{}", t.1.board);
-
-                let first_check_threat = t.1.board.for_each_check_threat(
-                    self.src_square_player.get_other_player(),
-                    &mut t.1.moves,
-                    &mut |t_x, t_y| Some((t_x, t_y))
-                );
-                info!("threat={:?}", first_check_threat);
-
-                if first_check_threat.is_none() {
-                    result.write((self.src_x, self.src_y), (dest_x, dest_y), 0);
-                }
-            } else {
-                result.write((self.src_x, self.src_y), (dest_x, dest_y), 0);
-            }
+            result.write((self.src_x as u8, self.src_y as u8), (dest_x, dest_y), 0);
         }
 
         return terminate;
     }
 
-    fn push_rook(&mut self, src_x: i8, src_y: i8, result: &mut MoveList) {
-        for _i in 1..=src_x {
-            let i = src_x - _i;
-            if self.push(i, src_y, result) { break; }
+    fn push_pawn(&self, result: &mut MoveList) {
+        let (y_delta, jump_row) = match self.src_player {
+            Player::Black => (1, 1),
+            Player::White => (-1, 6)
+        };
+
+        let (x, y) = (self.src_x as i8, self.src_y as i8);
+        if !self.push(x, y + y_delta, false, result) {
+            if y == jump_row {
+                self.push(x, y + y_delta * 2, false, result);
+            }
         }
-        for i in src_x + 1..=7 {
-            if self.push(i, src_y, result) { break; }
+
+        for x_delta in -1..=1 {
+            if x_delta == 0 { continue; }
+
+            let x_p_delta: i8 = x + x_delta;
+            let y_p_delta: i8 = y + y_delta;
+
+            if x_p_delta < 0 || x_p_delta > 7 { continue; }
+            if y_p_delta < 0 || y_p_delta > 7 { continue; }
+
+            if let Square::Occupied(_, angled_player) = self.data._get_by_xy(x_p_delta as u8, y_p_delta as u8) {
+                if angled_player != self.src_player {
+                    self.push(x + x_delta, y + y_delta, true, result);
+                }
+            }
         }
-        for _i in 1..=src_y {
-            let i = src_y - _i;
-            if self.push(src_x, i, result) { break; }
+
+    }
+
+    fn push_rook(&self, result: &mut MoveList) {
+        for _i in 1..=self.src_x {
+            let i = self.src_x - _i;
+            if self.push(i, self.src_y, true, result) { break; }
         }
-        for i in src_y + 1..=7 {
-            if self.push(src_x, i, result) { break; }
+        for i in self.src_x + 1..=7 {
+            if self.push(i, self.src_y, true, result) { break; }
+        }
+        for _i in 1..=self.src_y {
+            let i = self.src_y - _i;
+            if self.push(self.src_x, i, true, result) { break; }
+        }
+        for i in self.src_y + 1..=7 {
+            if self.push(self.src_x, i, true, result) { break; }
         }
     }
 
-    fn push_bishop(&mut self, src_x: i8, src_y: i8, result: &mut MoveList) {
-        for i in 1..=src_x {
-            if self.push(src_x - i, src_y - i, result) { break; }
+    fn push_bishop(&self, result: &mut MoveList) {
+
+        for i in 1..=self.src_x {
+            if self.push(self.src_x - i, self.src_y - i, true, result) { break; }
         }
-        for i in 1..=src_x {
-            if self.push(src_x - i, src_y + i, result) { break; }
+        for i in 1..=self.src_x {
+            if self.push(self.src_x - i, self.src_y + i, true, result) { break; }
         }
-        for i in 1..=8 - (src_x + 1) {
-            if self.push(src_x + i, src_y - i, result) { break; }
+        for i in 1..=8 - (self.src_x + 1) {
+            if self.push(self.src_x + i, self.src_y - i, true, result) { break; }
         }
-        for i in 1..=8 - (src_x + 1) {
-            if self.push(src_x + i, src_y + i, result) { break; }
+        for i in 1..=8 - (self.src_x + 1) {
+            if self.push(self.src_x + i, self.src_y + i, true, result) { break; }
+        }
+    }
+
+    fn push_knight(&self, result: &mut MoveList) {
+
+        self.push(self.src_x - 1, self.src_y + 2, true, result);
+        self.push(self.src_x - 1, self.src_y - 2, true, result);
+
+        self.push(self.src_x - 2, self.src_y + 1, true, result);
+        self.push(self.src_x - 2, self.src_y - 1, true, result);
+
+        self.push(self.src_x + 2, self.src_y + 1, true, result);
+        self.push(self.src_x + 2, self.src_y - 1, true, result);
+
+        self.push(self.src_x + 1, self.src_y + 2, true, result);
+        self.push(self.src_x + 1, self.src_y - 2, true, result);
+    }
+
+    fn push_queen(&self, result: &mut MoveList) {
+        self.push_bishop(result);
+        self.push_rook(result);
+    }
+
+    fn push_king(&self, result: &mut MoveList) {
+        for i in -1..=1 {
+            for j in -1..=1 {
+                if i == 0 && j == 0 { continue; }
+                self.push(self.src_x + i, self.src_y + j, true, result);
+            }
         }
     }
 }
+
 
 pub struct PlayerState {
     pub piece_locs: HashSet<Coord>,
@@ -434,13 +489,13 @@ impl Board {
         Ok(())
     }
 
-    pub fn revert_move(&mut self, r: &RevertableMove) -> Result<(), Error> {
+    pub fn revert_move(&mut self, r: &RevertableMove) {
         self._revert_move(&r.old_move_squares);
         self.player_with_turn = r.old_player;
-        Ok(())
     }
 
-    pub fn make_move(&mut self, moves: &mut MoveList, index: usize) {
+    /// No restrictions, equivalent to moving a piece anywhere replacing anything on a real life board 
+    pub fn make_move(&mut self, moves: &MoveList, index: usize) {
 
         let m = match moves.get_v().get(index) {
             None => panic!("Make move out of bounds {}/{}", index, moves.get_v().len()),
@@ -452,6 +507,7 @@ impl Board {
 
         if let Ok(Square::Occupied(piece, player)) = self.get_by_xy(source.0, source.1) {
 
+            /*
             let player_state = self._get_player_state(player);
             // TODO Unexpected behaviour if board not started in standard format
             // TODO Extract
@@ -486,10 +542,16 @@ impl Board {
 
                 }
             }
-            self._set_by_xy(dest.0, dest.1, Square::Occupied(piece, player));
+            */
+
+            if piece == Piece::Pawn && ((dest.1 == 7 && player == Player::Black) || (dest.1 == 1 && player == Player::White)) {
+                self._set_by_xy(dest.0, dest.1, Square::Occupied(Piece::Queen, player));
+            } else {
+                self._set_by_xy(dest.0, dest.1, Square::Occupied(piece, player));
+            }
             self._set_by_xy(source.0, source.1, Square::Blank);
         } else {
-            panic!("Unexpected blank square in check threats");
+            panic!("Move list origin square is blank");
         }
 
         self.player_with_turn = self.player_with_turn.get_other_player();
@@ -518,14 +580,17 @@ impl Board {
     }
 
     /// For the current player
-    pub fn get_moves(
-        &self,
-        temp_check_buffers: &mut CheckThreatTempBuffers,
-        result: &mut MoveList
-    ) {
-        let other_pieces = &self.get_player_state(self.get_player_with_turn().get_other_player()).piece_locs;
-        let temp_move_test = MoveTest::new(&mut Some((other_pieces, temp_check_buffers)), &self);
-        self._get_moves(self.get_player_with_turn(), false, &mut temp_move_test, result);
+    pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
+        temp_moves.write_index = 0;
+        MoveTest::fill_player(self.get_player_with_turn(), self, false, temp_moves);
+        MoveTest::filter_check_threats(
+            self,
+            self.get_player_with_turn().get_other_player(), 
+            temp_moves,
+            0,
+            temp_moves.write_index,
+            result
+        );
     }
 
     fn _revert_move(&mut self, r: &OldMoveSquares) {
@@ -535,123 +600,6 @@ impl Board {
 
         self._set_by_xy(old_x1, old_y1, old_sqr1);
         self._set_by_xy(old_x2, old_y2, old_sqr2);
-    }
-
-    /// Move lists which are temp buffers are auto cleared, because caller should not care what's inside
-    fn for_each_check_threat<'a, F, R>(
-        &self,
-        checking_player: Player,
-        temp_move_test: &mut MoveTest,
-        temp_moves: &mut MoveList,
-        f: &mut F
-    ) -> Option<R> where F : FnMut(u8, u8) -> Option<R> {
-
-        temp_moves.set_write_index(0);
-        self._get_moves(checking_player, true, temp_move_test, temp_moves);
-        let end_exclusive = temp_moves.get_write_index();
-
-        for i in 0..end_exclusive {
-            let ((src_x, src_y), (dest_x, dest_y), _) = temp_moves.get_v()[i];
-            if let Square::Occupied(piece, _) = self._get_by_xy(dest_x, dest_y) {
-                if piece == Piece::King {
-                    if let Some(r) = f(src_x, src_y) {
-                        return Some(r);
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    /// Only constructor arguments of `temp_move_test` are kept
-    fn _get_moves(
-        &self,
-        player_with_turn: Player,
-        can_capture_king: bool,
-        temp_move_test: &mut MoveTest,
-        result: &mut MoveList
-    ) {
-        temp_move_test.src_square_player = player_with_turn;
-        temp_move_test.can_capture_king = can_capture_king;
-
-        for (x_u8, y_u8) in &self.get_player_state(player_with_turn).piece_locs {
-
-            temp_move_test.src_x = *x_u8;
-            temp_move_test.src_y = *y_u8;
-
-            let (piece, square_owner) = match self._get_by_xy(*x_u8, *y_u8) {
-                Square::Blank => { return; },
-                Square::Occupied(piece, player) => (piece, player)
-            };
-            if square_owner != player_with_turn { return; }
-            let (x, y) = (*x_u8 as i8, *y_u8 as i8);
-
-            info!("_get_moves src={},{} piece={}", x_u8, y_u8, piece);
-
-            match piece {
-                Piece::Pawn => {
-                    let (y_delta, jump_row) = match square_owner {
-                        Player::Black => (1, 1),
-                        Player::White => (-1, 6)
-                    };
-
-                    temp_move_test._push(x, y + y_delta, false, result);
-                    if y == jump_row {
-                        temp_move_test._push(x, y + y_delta * 2, false, result);
-                    }
-
-                    for x_delta in -1..=1 {
-                        if x_delta == 0 { continue; }
-
-                        let x_p_delta: i8 = x + x_delta;
-                        let y_p_delta: i8 = y + y_delta;
-
-                        if x_p_delta < 0 || x_p_delta > 7 { continue; }
-                        if y_p_delta < 0 || y_p_delta > 7 { continue; }
-
-                        if let Square::Occupied(_, angled_player) = self._get_by_xy(x_p_delta as u8, y_p_delta as u8) {
-                            if angled_player != square_owner {
-                                temp_move_test.push(x + x_delta, y + y_delta, result);
-                            }
-                        }
-                    }
-                },
-                Piece::Rook => {
-                    temp_move_test.push_rook(x, y, result);
-                },
-                Piece::Knight => {
-
-                    temp_move_test.push(x - 1, y + 2, result);
-                    temp_move_test.push(x - 1, y - 2, result);
-
-                    temp_move_test.push(x - 2, y + 1, result);
-                    temp_move_test.push(x - 2, y - 1, result);
-
-                    temp_move_test.push(x + 2, y + 1, result);
-                    temp_move_test.push(x + 2, y - 1, result);
-
-                    temp_move_test.push(x + 1, y + 2, result);
-                    temp_move_test.push(x + 1, y - 2, result);
-                },
-                Piece::Bishop => {
-                    temp_move_test.push_bishop(x, y, result);
-                },
-                Piece::Queen => {
-                    temp_move_test.push_rook(x, y, result);
-                    temp_move_test.push_bishop(x, y, result);
-                },
-                Piece::King => {
-                    for i in -1..=1 {
-                        for j in -1..=1 {
-                            if i == 0 && j == 0 {
-                                continue;
-                            }
-                            temp_move_test.push(x + i, y + j, result);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fn set_uniform_row(&mut self, rank: u8, player: Player, piece: Piece) -> Result<(), Error> {
@@ -675,10 +623,13 @@ impl Board {
 
 
     fn set_standard_rows(&mut self) {
-        self.set_main_row(1, Player::White).unwrap();
-        self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
-        self.set_main_row(8, Player::Black).unwrap();
-        self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
+        //self.set_main_row(1, Player::White).unwrap();
+        //self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
+        //self.set_main_row(8, Player::Black).unwrap();
+        //self.set_uniform_row(3, Player::Black, Piece::Pawn).unwrap();
+        self.set('e', 1, Square::Occupied(Piece::King, Player::White)).unwrap();
+        self.set('a', 7, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
+        self.set('b', 7, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
         //self.set('a', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
         //self.set('h', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
         //self.set('d', 1, Square::Blank).unwrap();
