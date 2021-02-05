@@ -623,13 +623,15 @@ impl Board {
 
 
     fn set_standard_rows(&mut self) {
-        //self.set_main_row(1, Player::White).unwrap();
-        //self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
-        //self.set_main_row(8, Player::Black).unwrap();
-        //self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
-
+        self.set_main_row(1, Player::White).unwrap();
+        self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
+        self.set_main_row(8, Player::Black).unwrap();
         self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
-        self.set('e', 1, Square::Occupied(Piece::King, Player::White)).unwrap();
+
+        //self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
+        //self.set('e', 1, Square::Occupied(Piece::King, Player::White)).unwrap();
+        //self.set('a', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
+        //self.set('b', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
     }
 
     fn _set_by_xy(&mut self, x: u8, y: u8, s: Square) {
@@ -646,7 +648,7 @@ impl Board {
         self.d[y as usize * 8 + x as usize] = s;
     }
 
-    fn _get_by_xy(&self, x: u8, y: u8) -> Square {
+    pub fn _get_by_xy(&self, x: u8, y: u8) -> Square {
         return self.d[y as usize * 8 + x as usize];
     }
 

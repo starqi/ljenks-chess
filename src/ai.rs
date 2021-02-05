@@ -2,7 +2,7 @@ use std::cell::{RefCell};
 use std::{thread, option_env};
 use std::collections::{HashSet};
 use rand::{ThreadRng, thread_rng, Rng};
-use super::board::{Coord, Player, Board, MoveList, Piece, Square, xy_to_file_rank_safe};
+use super::board::{MoveTest, Coord, Player, Board, MoveList, Piece, Square, xy_to_file_rank_safe};
 use std::sync::{Mutex, Arc};
 use log::{debug, info, warn, error};
 
@@ -24,7 +24,7 @@ pub struct Ai {
     pub counter: Arc<Mutex<u32>>
 }
 
-static MAX_EVAL: f32 = 9001.;
+static MAX_EVAL: f32 = 9000.;
 static MIN_EVAL: f32 = -MAX_EVAL;
 
 impl Ai {
@@ -191,11 +191,20 @@ impl Ai {
             };
 
             // Turn maximizing player into minimization problem
-            let value_to_minimize = if current_player == Player::White {
+            let mut value_to_minimize = if current_player == Player::White {
                 opponent_best_value * -1.
             } else {
                 opponent_best_value
             };
+
+            if value_to_minimize == MIN_EVAL {
+                let l = if is_best_in_moves1 {
+                    self.moves2.write_index - node_start_moves2_index
+                } else {
+                    self.moves1.write_index - node_start_moves1_index
+                };
+                value_to_minimize += l as f32;
+            }
 
             // Must be <= to always set move if one exists
             if value_to_minimize <= best_min {
@@ -243,8 +252,8 @@ impl Ai {
             }
         }
 
-        let eval = if current_player == Player::White { -best_min } else { best_min };
         if TODO {
+            let eval = if current_player == Player::White { -best_min } else { best_min };
 
             if is_best_in_moves1 {
                 self.moves1.write(best_src, best_dest, eval);
@@ -269,10 +278,29 @@ impl Ai {
                     self.moves2.write_index = node_start_moves2_index;
                 }
             }
-        } else {
-            println!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
-        }
 
-        eval
+            eval
+        } else {
+            info!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
+
+            let mut king_is_safe = true;
+
+            self.moves_buf.write_index = moves_start;
+            MoveTest::fill_player(current_player.get_other_player(), &self.test_board, true, &mut self.moves_buf);
+            for i in moves_start..self.moves_buf.write_index {
+                let (_, (dest_x, dest_y), _) = self.moves_buf.get_v()[i];
+                if let Square::Occupied(piece, player) = self.test_board._get_by_xy(dest_x, dest_y) {
+                    if piece == Piece::King && player == current_player {
+                        king_is_safe = false;
+                    }
+                }
+            }
+
+            if king_is_safe {  
+                0. 
+            } else {
+                if current_player == Player::White { MIN_EVAL } else { MAX_EVAL }
+            }
+        }
     }
 }
