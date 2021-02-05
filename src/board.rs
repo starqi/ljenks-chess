@@ -12,7 +12,7 @@ use std::fmt::{Display, Formatter, self};
 
 pub type Coord = (u8, u8);
 
-pub type CoordEvalList = Vec<(Coord, Coord, i32)>;
+pub type CoordEvalList = Vec<(Coord, Coord, f32)>;
 
 pub struct MoveList {
     v: CoordEvalList,
@@ -33,7 +33,7 @@ impl MoveList {
         &self.v
     }
 
-    pub fn write(&mut self, from: Coord, to: Coord, eval: i32) {
+    pub fn write(&mut self, from: Coord, to: Coord, eval: f32) {
         self.grow_with_access(self.write_index);
         let item = &mut self.v[self.write_index];
         item.0 = from;
@@ -45,7 +45,7 @@ impl MoveList {
     fn grow_with_access(&mut self, requested_index: usize) {
         if requested_index >= self.v.len() {
             for _ in 0..requested_index - self.v.len() + 1 {
-                self.v.push(((0, 0), (0, 0), 0));
+                self.v.push(((0, 0), (0, 0), 0.));
             }
         }
     }
@@ -287,7 +287,7 @@ impl MoveTest<'_> {
         debug!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
 
         if moveable {
-            result.write((self.src_x as u8, self.src_y as u8), (dest_x, dest_y), 0);
+            result.write((self.src_x as u8, self.src_y as u8), (dest_x, dest_y), 0.);
         }
 
         return terminate;
@@ -626,15 +626,10 @@ impl Board {
         //self.set_main_row(1, Player::White).unwrap();
         //self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
         //self.set_main_row(8, Player::Black).unwrap();
-        //self.set_uniform_row(3, Player::Black, Piece::Pawn).unwrap();
+        //self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
+
+        self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
         self.set('e', 1, Square::Occupied(Piece::King, Player::White)).unwrap();
-        self.set('a', 7, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
-        self.set('b', 7, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
-        //self.set('a', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
-        //self.set('h', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
-        //self.set('d', 1, Square::Blank).unwrap();
-        //self.set('a', 1, Square::Blank).unwrap();
-        //self.set('h', 1, Square::Blank).unwrap();
     }
 
     fn _set_by_xy(&mut self, x: u8, y: u8, s: Square) {

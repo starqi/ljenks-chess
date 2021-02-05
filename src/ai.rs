@@ -15,9 +15,11 @@ struct BestMove {
 }
 
 pub struct Ai {
-    global_moves: MoveList,
+    moves_buf: MoveList,
     test_board: Board,
-    temp_moves: MoveList,
+    temp_moves_for_board: MoveList,
+    moves1: MoveList,
+    moves2: MoveList,
     rng: ThreadRng,
     pub counter: Arc<Mutex<u32>>
 }
@@ -71,9 +73,11 @@ impl Ai {
 
     pub fn new() -> Ai {
         Ai {
-            global_moves: MoveList::new(1000),
+            moves_buf: MoveList::new(1000),
             test_board: Board::new(),
-            temp_moves: MoveList::new(50),
+            temp_moves_for_board: MoveList::new(50),
+            moves1: MoveList::new(50),
+            moves2: MoveList::new(50),
             rng: thread_rng(),
             counter: Arc::new(Mutex::new(0))
         }
@@ -82,18 +86,22 @@ impl Ai {
     pub fn make_move(&mut self, depth: u8, real_board: &mut Board) {
         *self.counter.lock().unwrap() = 0;
 
-        let mut test = MoveList::new(5);
-
         self.test_board.import_from(real_board);
+        self.moves1.write_index = 0;
+        self.moves2.write_index = 0;
         let best_move: RefCell<BestMove> = RefCell::new(Default::default());
         let evaluation = self.alpha_beta(
-            depth, MIN_EVAL, MAX_EVAL, 0,
-            Some(&best_move),
-            &mut test
+            depth, 
+            MIN_EVAL,
+            MAX_EVAL,
+            0,
+            false,
+            Some(&best_move)
         );
+        println!("m1/m2 {} {}", self.moves1.write_index, self.moves2.write_index);
 
-        for i in (0..test.write_index).rev() {
-            let (src, dest, eval) = test.get_v()[i];
+        for i in (0..self.moves2.write_index).rev() {
+            let (src, dest, eval) = self.moves2.get_v()[i];
             let (src_f, src_r) = xy_to_file_rank_safe(src.0 as i32, src.1 as i32).unwrap();
             let (dest_f, dest_r) = xy_to_file_rank_safe(dest.0 as i32, dest.1 as i32).unwrap();
             println!("{}{} to {}{}, eval={}", src_f, src_r, dest_f, dest_r, eval);
@@ -104,17 +112,17 @@ impl Ai {
         if !best_move_inner.written {
             println!("No moves, checkmate?");
         } else {
-            let (src, dest, _) = &self.global_moves.get_v()[best_move_inner.move_list_index];
+            let (src, dest, _) = &self.moves_buf.get_v()[best_move_inner.move_list_index];
             let (src_file, src_rank) = xy_to_file_rank_safe(src.0 as i32, src.1 as i32).unwrap();
             let (dest_file, dest_rank) = xy_to_file_rank_safe(dest.0 as i32, dest.1 as i32).unwrap();
 
             println!(
                 "{:?} moves {}{} to {}{}", real_board.get_player_with_turn(), src_file, src_rank, dest_file, dest_rank
             );
-            real_board.make_move(&mut self.global_moves, best_move_inner.move_list_index);
+            real_board.make_move(&mut self.moves_buf, best_move_inner.move_list_index);
         }
         println!("\n{}\n", real_board);
-        println!("Eval = {}, moves len = {}", evaluation, self.global_moves.get_v().len());
+        println!("Eval = {}, moves len = {}", evaluation, self.moves_buf.get_v().len());
     }
 
     // TODO Try observing iterative deepening on 2 Q vs 1 K because large space
@@ -124,26 +132,34 @@ impl Ai {
     /// We have ownership over all move list elements from `moves_start`
     fn alpha_beta(
         &mut self,
-        depth: u8, alpha: f32, beta: f32,
+        depth: u8,
+        alpha: f32,
+        beta: f32,
         moves_start: usize,
-        best_move: Option<&RefCell<BestMove>>,
-        test: &mut MoveList,
+        use_moves1_as_trace_result: bool,
+        best_move: Option<&RefCell<BestMove>>
     ) -> f32 {
+
+        let node_start_moves1_index = self.moves1.write_index;
+        let node_start_moves2_index = self.moves2.write_index;
 
         let current_player = self.test_board.get_player_with_turn();
 
-        let mut best_index: usize = 0;
+        let mut is_best_in_moves1 = true;
         let mut best_min = MAX_EVAL;
+        let mut best_src: Coord = (0, 0);
+        let mut best_dest: Coord = (0, 0);
+
         let mut TODO = false;
 
-        self.global_moves.write_index = moves_start;
-        self.test_board.get_moves(&mut self.temp_moves, &mut self.global_moves);
-        let moves_end_exclusive = self.global_moves.write_index;
+        self.moves_buf.write_index = moves_start;
+        self.test_board.get_moves(&mut self.temp_moves_for_board, &mut self.moves_buf);
+        let moves_end_exclusive = self.moves_buf.write_index;
 
         for i in moves_start..moves_end_exclusive {
 
-            let revertable = self.test_board.get_revertable_move(&self.global_moves, i);
-            self.test_board.make_move(&mut self.global_moves, i);
+            let revertable = self.test_board.get_revertable_move(&self.moves_buf, i);
+            self.test_board.make_move(&mut self.moves_buf, i);
 
             let opponent_best_value: f32 = if depth > 0 {
 
@@ -166,7 +182,7 @@ impl Ai {
                     new_alpha = alpha;
                 }
 
-                self.alpha_beta(depth - 1, new_alpha, new_beta, moves_end_exclusive, None, test)
+                self.alpha_beta(depth - 1, new_alpha, new_beta, moves_end_exclusive, !is_best_in_moves1, None)
             } else {
                 let mut counter = self.counter.lock().unwrap();
                 *counter += 1;
@@ -183,16 +199,33 @@ impl Ai {
 
             // Must be <= to always set move if one exists
             if value_to_minimize <= best_min {
+                let m = &self.moves_buf.get_v()[i];
+
                 best_min = value_to_minimize;
-                best_index = i;
+                best_src = m.0;
+                best_dest = m.1;
+
+                if is_best_in_moves1 {
+                    self.moves1.write_index = node_start_moves1_index;
+                } else {
+                    self.moves2.write_index = node_start_moves2_index;
+                }
+                is_best_in_moves1 = !is_best_in_moves1;
+
                 TODO = true;
                 if let Some(a) = best_move {
                     let mut b = a.borrow_mut();
-                    let m = &self.global_moves.get_v()[i];
+                    let m = &self.moves_buf.get_v()[i];
                     b.piece_loc = m.0;
                     b.dest_loc = m.1;
                     b.move_list_index = i;
                     b.written = true;
+                }
+            } else {
+                if is_best_in_moves1 {
+                    self.moves2.write_index = node_start_moves2_index;
+                } else {
+                    self.moves1.write_index = node_start_moves1_index;
                 }
             }
 
@@ -201,23 +234,45 @@ impl Ai {
             if current_player == Player::White {
                 let best_max = -best_min;
                 if best_max >= beta {
-                    return best_max;
+                    break;
                 }
             } else {
                 if best_min <= alpha {
-                    return best_min;
+                    break;
                 }
             }
-
         }
 
-        if !TODO {
-            println!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
+        let eval = if current_player == Player::White { -best_min } else { best_min };
+        if TODO {
+
+            if is_best_in_moves1 {
+                self.moves1.write(best_src, best_dest, eval);
+                self.moves2.write_index = node_start_moves2_index;
+            } else {
+                self.moves2.write(best_src, best_dest, eval);
+                self.moves1.write_index = node_start_moves1_index;
+            }
+
+            if use_moves1_as_trace_result != is_best_in_moves1 {
+                if is_best_in_moves1 {
+                    for i in node_start_moves1_index..self.moves1.write_index {
+                        let (src, dest, eval) = self.moves1.get_v()[i];
+                        self.moves2.write(src, dest, eval);
+                    }
+                    self.moves1.write_index = node_start_moves1_index;
+                } else {
+                    for i in node_start_moves2_index..self.moves2.write_index {
+                        let (src, dest, eval) = self.moves2.get_v()[i];
+                        self.moves1.write(src, dest, eval);
+                    }
+                    self.moves2.write_index = node_start_moves2_index;
+                }
+            }
         } else {
-            let m = &self.global_moves.get_v()[best_index];
-            test.write(m.0, m.1, m.2);
+            println!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
         }
 
-        if current_player == Player::White { -best_min } else { best_min }
+        eval
     }
 }
