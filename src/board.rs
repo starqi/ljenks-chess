@@ -4,7 +4,7 @@
 // TODO File, rank conversion spam
 // TODO Panic if not causeable by user input
 
-use std::cmp::{min, max};
+use std::sync::{Mutex};
 use log::{debug, info, warn, error};
 use std::iter::Iterator;
 use std::collections::HashSet;
@@ -49,8 +49,44 @@ type CastlePositions = [
         &'static[[Coord; 2]; 2],
         &'static[Coord; 2],
         &'static[Coord; 2]
-    );2
+    ); 2
 ];
+
+static mut castle_positions: Option<CastlePositions> = None;
+static mut castle_positions_init_mutex: Mutex<i32> = Mutex::new(0);
+
+fn ensure_castle_pos() {
+    unsafe {
+        let l = castle_positions_init_mutex.lock();
+        l.unwrap();
+
+        if let None = castle_positions {
+            let oo_pre = [
+                Vec::from(oo_pre_blanks[0]),
+                Vec::from(oo_pre_blanks[1])
+            ];
+            let ooo_pre = [
+                Vec::from(ooo_pre_blanks[0]),
+                Vec::from(ooo_pre_blanks[1])
+            ];
+
+            castle_positions = Some([
+                (oo_pre, &oo_post_blanks, &oo_king_pos, &oo_rook_pos),
+                (ooo_pre, &ooo_post_blanks, &ooo_king_pos, &ooo_rook_pos)
+            ]);
+        }
+    }
+}
+
+fn get_castle_pos() -> &'static CastlePositions {
+    unsafe {
+        if let Some(ref x) = castle_positions {
+            x
+        } else {
+            panic!("Castle positions should be initialized");
+        }
+    }
+}
 
 pub struct MoveList {
     v: CoordEvalList,
@@ -152,9 +188,10 @@ impl Display for Piece {
     }
 }
 
+/// This order will be assumed in arrays!  
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Player { 
-    Black = 1, White = 0
+    White = 0, Black
 }
 
 impl Player {
@@ -425,27 +462,19 @@ impl MoveTest<'_> {
     }
 }
 
-
 #[derive(Clone)]
 pub struct PlayerState {
+    // TODO First bitboard switch
     pub piece_locs: HashSet<Coord>,
-    pub can_ooo: bool,
-    pub can_oo: bool
+    pub can_castle: [bool; 2]
 }
 
 impl PlayerState {
     fn new() -> PlayerState {
         PlayerState {
             piece_locs: HashSet::new(),
-            can_ooo: true,
-            can_oo: true
+            can_castle: [true, true]
         }
-    }
-
-    fn reset(&mut self) {
-        self.piece_locs.clear();
-        self.can_ooo = true;
-        self.can_oo = true;
     }
 }
 
@@ -453,8 +482,7 @@ impl PlayerState {
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
-    player_state: [PlayerState; 2],
-    castle_positions: CastlePositions
+    player_state: [PlayerState; 2]
 }
 
 impl Display for Board {
@@ -471,26 +499,11 @@ impl Display for Board {
 
 impl Board {
     pub fn new() -> Board {
-
-        let oo_pre = [
-            Vec::from(oo_pre_blanks[0]),
-            Vec::from(oo_pre_blanks[1])
-        ];
-        let ooo_pre = [
-            Vec::from(ooo_pre_blanks[0]),
-            Vec::from(ooo_pre_blanks[1])
-        ];
-
-        let cp: CastlePositions = [
-            (oo_pre, &oo_post_blanks, &oo_king_pos, &oo_rook_pos),
-            (ooo_pre, &ooo_post_blanks, &ooo_king_pos, &ooo_rook_pos)
-        ];
-
+        ensure_castle_pos();
         let mut board = Board {
             d: [Square::Blank; 64],
             player_with_turn: Player::White,
-            player_state: [PlayerState::new(), PlayerState::new()],
-            castle_positions: cp
+            player_state: [PlayerState::new(), PlayerState::new()]
         };
         board.set_standard_rows();
         board
@@ -531,16 +544,17 @@ impl Board {
         let ((source_x, source_y), (dest_x, dest_y), _) = moves.v[index];
 
         let mut did_special_move = false;
-        let player_u = self.player_with_turn as usize;
+        let player_index = self.player_with_turn as usize;
         if source_x == src_coord_1_oo || source_x == src_coord_1_ooo {
 
-            let (ref _pre_blank, _post_blank, _king_pos, _rook_pos) = self.castle_positions[(source_x - src_coord_1_oo) as usize];
+            let castle_type_index = (source_x - src_coord_1_oo) as usize;
+            let (ref _pre_blank, _post_blank, _king_pos, _rook_pos) = get_castle_pos()[castle_type_index];
 
             let (pre_blank, post_blank, king_pos, rook_pos) = (
-                &_pre_blank[player_u],
-                _post_blank[player_u],
-                _king_pos[player_u],
-                _rook_pos[player_u],
+                &_pre_blank[player_index],
+                _post_blank[player_index],
+                _king_pos[player_index],
+                _rook_pos[player_index],
             );
 
             for (x, y) in pre_blank.iter() {
@@ -551,6 +565,8 @@ impl Board {
             }
             self.set_by_xy(king_pos.0, king_pos.1, Square::Occupied(Piece::King, self.player_with_turn));
             self.set_by_xy(rook_pos.0, rook_pos.1, Square::Occupied(Piece::Rook, self.player_with_turn));
+            self.player_state[player_index].can_castle[castle_type_index] = false;
+
             did_special_move = true;
 
         } else if let Ok(Square::Occupied(src_piece, src_player)) = self.get_by_xy(source_x, source_y) {
@@ -612,14 +628,14 @@ impl Board {
         );
 
         // Rewriting temp moves from 0 now
-        let player_state = self.get_player_state(self.player_with_turn);
-        if player_state.can_ooo {
-            let blank_squares = ooo_pre_blanks[self.player_with_turn as usize];
-            self.push_castle(&blank_squares, self.player_with_turn, src_coord_1_ooo, temp_moves, result);
-        }
-        if player_state.can_oo {
+        let can_castle = self.get_player_state(self.player_with_turn).can_castle;
+        if can_castle[0] {
             let blank_squares = oo_pre_blanks[self.player_with_turn as usize];
             self.push_castle(&blank_squares, self.player_with_turn, src_coord_1_oo, temp_moves, result);
+        }
+        if can_castle[1] {
+            let blank_squares = ooo_pre_blanks[self.player_with_turn as usize];
+            self.push_castle(&blank_squares, self.player_with_turn, src_coord_1_ooo, temp_moves, result);
         }
     }
 
