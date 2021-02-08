@@ -9,6 +9,7 @@ use std::sync::{Mutex, Arc};
 
 fn main() {
 
+    board::init();
     env_logger::init();
 
     let mut board = Board::new();

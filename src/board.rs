@@ -4,7 +4,6 @@
 // TODO File, rank conversion spam
 // TODO Panic if not causeable by user input
 
-use std::sync::{Mutex};
 use log::{debug, info, warn, error};
 use std::iter::Iterator;
 use std::collections::HashSet;
@@ -14,32 +13,36 @@ pub type Coord = (u8, u8);
 
 pub type CoordEvalList = Vec<(Coord, Coord, f32)>;
 
-static src_coord_1_oo: u8 = 254;
-static src_coord_1_ooo: u8 = src_coord_1_oo + 1;
-static src_coord_1_promote: u8 = 253;
+pub static SRC_COORD_1_OO: u8 = 254;
+pub static SRC_COORD_1_OOO: u8 = SRC_COORD_1_OO + 1;
+pub static SRC_COORD_1_PROMOTE: u8 = 253;
 
 // First is white, second is black, *assumes value of `Player` enum*
 
-static oo_pre_blanks: [[Coord; 2]; 2] = [
+static OO_PRE_BLANKS: [[Coord; 2]; 2] = [
     [(5, 7), (6, 7)],
     [(5, 0), (6, 0)]
 ];
-static ooo_pre_blanks: [[Coord; 3]; 2] = [
+static OOO_PRE_BLANKS: [[Coord; 3]; 2] = [
     [(1, 7), (2, 7), (3, 7)],
     [(1, 0), (2, 0), (3, 0)]
 ];
-static oo_post_blanks: [[Coord; 2]; 2] = [
+// FIXME Rename revertable move to board subset
+// FIXME Delete OO types below here, replace with subset
+// FIXME Replace make_move to simply apply the subset with "apply_subset"
+// FIXME Fix "apply_subset" to detect special codes, just like make_move
+static OO_POST_BLANKS: [[Coord; 2]; 2] = [
     [(4, 7), (7, 7)],
     [(4, 0), (7, 0)]
 ];
-static ooo_post_blanks: [[Coord; 2]; 2] = [
+static OOO_POST_BLANKS: [[Coord; 2]; 2] = [
     [(0, 7), (4, 7)],
     [(0, 0), (4, 0)]
 ];
-static oo_king_pos: [Coord; 2] = [(6, 7), (6, 0)];
-static ooo_king_pos: [Coord; 2] = [(2, 7), (2, 0)];
-static oo_rook_pos: [Coord; 2] = [(5, 7), (5, 0)];
-static ooo_rook_pos: [Coord; 2] = [(3, 7), (3, 0)];
+static OO_KING_POS: [Coord; 2] = [(6, 7), (6, 0)];
+static OOO_KING_POS: [Coord; 2] = [(2, 7), (2, 0)];
+static OO_ROOK_POS: [Coord; 2] = [(5, 7), (5, 0)];
+static OOO_ROOK_POS: [Coord; 2] = [(3, 7), (3, 0)];
 
 /// Pre blank, post blank, king pos, rook pos
 /// Must be dynamic because blank square sizes are different at compile
@@ -52,27 +55,23 @@ type CastlePositions = [
     ); 2
 ];
 
-static mut castle_positions: Option<CastlePositions> = None;
-static mut castle_positions_init_mutex: Mutex<i32> = Mutex::new(0);
+static mut CASTLE_POSITIONS: Option<CastlePositions> = None;
 
-fn ensure_castle_pos() {
+pub fn init() {
     unsafe {
-        let l = castle_positions_init_mutex.lock();
-        l.unwrap();
-
-        if let None = castle_positions {
+        if let None = CASTLE_POSITIONS {
             let oo_pre = [
-                Vec::from(oo_pre_blanks[0]),
-                Vec::from(oo_pre_blanks[1])
+                Vec::from(OO_PRE_BLANKS[0]),
+                Vec::from(OO_PRE_BLANKS[1])
             ];
             let ooo_pre = [
-                Vec::from(ooo_pre_blanks[0]),
-                Vec::from(ooo_pre_blanks[1])
+                Vec::from(OOO_PRE_BLANKS[0]),
+                Vec::from(OOO_PRE_BLANKS[1])
             ];
 
-            castle_positions = Some([
-                (oo_pre, &oo_post_blanks, &oo_king_pos, &oo_rook_pos),
-                (ooo_pre, &ooo_post_blanks, &ooo_king_pos, &ooo_rook_pos)
+            CASTLE_POSITIONS = Some([
+                (oo_pre, &OO_POST_BLANKS, &OO_KING_POS, &OO_ROOK_POS),
+                (ooo_pre, &OOO_POST_BLANKS, &OOO_KING_POS, &OOO_ROOK_POS)
             ]);
         }
     }
@@ -80,7 +79,7 @@ fn ensure_castle_pos() {
 
 fn get_castle_pos() -> &'static CastlePositions {
     unsafe {
-        if let Some(ref x) = castle_positions {
+        if let Some(ref x) = CASTLE_POSITIONS {
             x
         } else {
             panic!("Castle positions should be initialized");
@@ -236,15 +235,8 @@ pub enum Error {
     XyOutOfBounds(i32, i32)
 }
 
-// TODO Merge
-#[derive(Default)]
-struct OldMoveSquares {
-    old_square_a: (Coord, Square),
-    old_square_b: (Coord, Square)
-}
-
 pub struct RevertableMove {
-    old_move_squares: OldMoveSquares,
+    squares: [Option<(Coord, Square)>; 4],
     old_player: Player
 }
 
@@ -312,7 +304,7 @@ impl MoveTest<'_> {
         result: &mut MoveList
     ) {
         for i in candidates_start..candidates_end_exclusive {
-            let revertable = real_board.get_revertable_move(candidates_and_buf, i);
+            let revertable = real_board.make_revertable_move(candidates_and_buf, i);
             real_board.make_move(candidates_and_buf, i);
 
             candidates_and_buf.write_index = candidates_end_exclusive;
@@ -499,7 +491,6 @@ impl Display for Board {
 
 impl Board {
     pub fn new() -> Board {
-        ensure_castle_pos();
         let mut board = Board {
             d: [Square::Blank; 64],
             player_with_turn: Player::White,
@@ -533,7 +524,11 @@ impl Board {
     }
 
     pub fn revert_move(&mut self, r: &RevertableMove) {
-        self._revert_move(&r.old_move_squares);
+        for i in 0..4 {
+            if let Some(((x, y), square)) = r.squares[i] {
+                self.set_by_xy(x, y, square);
+            }
+        }
         self.player_with_turn = r.old_player;
     }
 
@@ -545,9 +540,9 @@ impl Board {
 
         let mut did_special_move = false;
         let player_index = self.player_with_turn as usize;
-        if source_x == src_coord_1_oo || source_x == src_coord_1_ooo {
+        if source_x == SRC_COORD_1_OO || source_x == SRC_COORD_1_OOO {
 
-            let castle_type_index = (source_x - src_coord_1_oo) as usize;
+            let castle_type_index = (source_x - SRC_COORD_1_OO) as usize;
             let (ref _pre_blank, _post_blank, _king_pos, _rook_pos) = get_castle_pos()[castle_type_index];
 
             let (pre_blank, post_blank, king_pos, rook_pos) = (
@@ -592,23 +587,16 @@ impl Board {
         self.player_with_turn = self.player_with_turn.get_other_player();
     }
 
-    pub fn get_revertable_move(&self, moves: &MoveList, index: usize) -> RevertableMove {
+    pub fn make_revertable_move(&self, moves: &MoveList, index: usize) -> RevertableMove {
 
-        let m = match moves.get_v().get(index) {
-            None => panic!("Get revertable move out of bounds {}/{}", index, moves.get_v().len()),
-            Some(_m) => _m
-        };
-
-        let source = m.0;
-        let dest = m.1;
-
-        let old_square_a = self._get_by_xy(dest.0, dest.1);
-        let old_square_b = self._get_by_xy(source.0, source.1);
+        let ((source_x, source_y), (dest_x, dest_y), _) = moves.v[index];
+        let old_square_a = self._get_by_xy(dest_x, dest_y);
+        let old_square_b = self._get_by_xy(source_x, source_y);
 
         RevertableMove {
             old_move_squares: OldMoveSquares {
-                old_square_a: ((dest.0, dest.1), old_square_a),
-                old_square_b: ((source.0, source.1), old_square_b)
+                old_square_a: ((dest_x, dest_y), old_square_a),
+                old_square_b: ((source_x, source_y), old_square_b)
             },
             old_player: self.player_with_turn
         }
@@ -630,12 +618,12 @@ impl Board {
         // Rewriting temp moves from 0 now
         let can_castle = self.get_player_state(self.player_with_turn).can_castle;
         if can_castle[0] {
-            let blank_squares = oo_pre_blanks[self.player_with_turn as usize];
-            self.push_castle(&blank_squares, self.player_with_turn, src_coord_1_oo, temp_moves, result);
+            let blank_squares = OO_PRE_BLANKS[self.player_with_turn as usize];
+            self.push_castle(&blank_squares, self.player_with_turn, SRC_COORD_1_OO, temp_moves, result);
         }
         if can_castle[1] {
-            let blank_squares = ooo_pre_blanks[self.player_with_turn as usize];
-            self.push_castle(&blank_squares, self.player_with_turn, src_coord_1_ooo, temp_moves, result);
+            let blank_squares = OOO_PRE_BLANKS[self.player_with_turn as usize];
+            self.push_castle(&blank_squares, self.player_with_turn, SRC_COORD_1_OOO, temp_moves, result);
         }
     }
 
@@ -679,15 +667,6 @@ impl Board {
         if can_castle {
             result.write((castle_src_1_op_code, 0), (0, 0), 0.);
         }
-    }
-
-    fn _revert_move(&mut self, r: &OldMoveSquares) {
-
-        let ((old_x1, old_y1), old_sqr1) = r.old_square_a;
-        let ((old_x2, old_y2), old_sqr2) = r.old_square_b;
-
-        self.set_by_xy(old_x1, old_y1, old_sqr1);
-        self.set_by_xy(old_x2, old_y2, old_sqr2);
     }
 
     fn set_uniform_row(&mut self, rank: u8, player: Player, piece: Piece) {
