@@ -4,7 +4,7 @@
 // TODO File, rank conversion spam
 // TODO Panic if not causeable by user input
 
-
+use std::cmp::{min, max};
 use log::{debug, info, warn, error};
 use std::iter::Iterator;
 use std::collections::HashSet;
@@ -13,6 +13,44 @@ use std::fmt::{Display, Formatter, self};
 pub type Coord = (u8, u8);
 
 pub type CoordEvalList = Vec<(Coord, Coord, f32)>;
+
+static src_coord_1_oo: u8 = 254;
+static src_coord_1_ooo: u8 = src_coord_1_oo + 1;
+static src_coord_1_promote: u8 = 253;
+
+// First is white, second is black, *assumes value of `Player` enum*
+
+static oo_pre_blanks: [[Coord; 2]; 2] = [
+    [(5, 7), (6, 7)],
+    [(5, 0), (6, 0)]
+];
+static ooo_pre_blanks: [[Coord; 3]; 2] = [
+    [(1, 7), (2, 7), (3, 7)],
+    [(1, 0), (2, 0), (3, 0)]
+];
+static oo_post_blanks: [[Coord; 2]; 2] = [
+    [(4, 7), (7, 7)],
+    [(4, 0), (7, 0)]
+];
+static ooo_post_blanks: [[Coord; 2]; 2] = [
+    [(0, 7), (4, 7)],
+    [(0, 0), (4, 0)]
+];
+static oo_king_pos: [Coord; 2] = [(6, 7), (6, 0)];
+static ooo_king_pos: [Coord; 2] = [(2, 7), (2, 0)];
+static oo_rook_pos: [Coord; 2] = [(5, 7), (5, 0)];
+static ooo_rook_pos: [Coord; 2] = [(3, 7), (3, 0)];
+
+/// Pre blank, post blank, king pos, rook pos
+/// Must be dynamic because blank square sizes are different at compile
+type CastlePositions = [
+    (
+        [Vec<Coord>; 2],
+        &'static[[Coord; 2]; 2],
+        &'static[Coord; 2],
+        &'static[Coord; 2]
+    );2
+];
 
 pub struct MoveList {
     v: CoordEvalList,
@@ -86,7 +124,7 @@ pub fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<Coord, Error> {
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Piece {
-    Pawn, Rook, Knight, Bishop, Queen, King
+    Pawn = 0, Rook, Knight, Bishop, Queen, King
 }
 
 impl Piece {
@@ -116,7 +154,7 @@ impl Display for Piece {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Player { 
-    Black, White
+    Black = 1, White = 0
 }
 
 impl Player {
@@ -388,30 +426,35 @@ impl MoveTest<'_> {
 }
 
 
+#[derive(Clone)]
 pub struct PlayerState {
     pub piece_locs: HashSet<Coord>,
-    pub did_castle: bool
+    pub can_ooo: bool,
+    pub can_oo: bool
 }
 
 impl PlayerState {
     fn new() -> PlayerState {
         PlayerState {
             piece_locs: HashSet::new(),
-            did_castle: false
+            can_ooo: true,
+            can_oo: true
         }
     }
 
     fn reset(&mut self) {
         self.piece_locs.clear();
-        self.did_castle = false;
+        self.can_ooo = true;
+        self.can_oo = true;
     }
 }
 
+#[derive(Clone)]
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
-    black_state: PlayerState,
-    white_state: PlayerState
+    player_state: [PlayerState; 2],
+    castle_positions: CastlePositions
 }
 
 impl Display for Board {
@@ -428,32 +471,29 @@ impl Display for Board {
 
 impl Board {
     pub fn new() -> Board {
+
+        let oo_pre = [
+            Vec::from(oo_pre_blanks[0]),
+            Vec::from(oo_pre_blanks[1])
+        ];
+        let ooo_pre = [
+            Vec::from(ooo_pre_blanks[0]),
+            Vec::from(ooo_pre_blanks[1])
+        ];
+
+        let cp: CastlePositions = [
+            (oo_pre, &oo_post_blanks, &oo_king_pos, &oo_rook_pos),
+            (ooo_pre, &ooo_post_blanks, &ooo_king_pos, &ooo_rook_pos)
+        ];
+
         let mut board = Board {
             d: [Square::Blank; 64],
             player_with_turn: Player::White,
-            black_state: PlayerState::new(),
-            white_state: PlayerState::new()
+            player_state: [PlayerState::new(), PlayerState::new()],
+            castle_positions: cp
         };
         board.set_standard_rows();
         board
-    }
-
-    pub fn restart(&mut self) {
-        self.black_state.reset();
-        self.white_state.reset();
-        self.d = [Square::Blank; 64];
-        self.set_standard_rows();
-    }
-
-    pub fn import_from(&mut self, other: &Board) {
-        &self.d[..].copy_from_slice(&other.d);
-        self.player_with_turn = other.player_with_turn;
-
-        // FIXME Clone interface, recursive
-        self.black_state.did_castle = other.black_state.did_castle;
-        self.black_state.piece_locs = other.black_state.piece_locs.clone();
-        self.white_state.did_castle = other.white_state.did_castle;
-        self.white_state.piece_locs = other.white_state.piece_locs.clone();
     }
 
     pub fn get_player_with_turn(&self) -> Player {
@@ -461,10 +501,7 @@ impl Board {
     }
 
     pub fn get_player_state(&self, player: Player) -> &PlayerState {
-        match player {
-            Player::White => &self.white_state,
-            Player::Black => &self.black_state
-        }
+        &self.player_state[player as usize]
     }
 
     pub fn get(&self, file: char, rank: u8) -> Result<Square, Error> {
@@ -477,16 +514,9 @@ impl Board {
         Ok(self._get_by_xy(x, y))
     }
 
-    pub fn set(&mut self, file: char, rank: u8, s: Square) -> Result<(), Error> {
-        let (x, y) = file_rank_to_xy_safe(file, rank)?;
-        self.set_by_xy(x, y, s)?;
-        Ok(())
-    }
-
-    // FIXME Checks
-    pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) -> Result<(), Error> {
-        self._set_by_xy(x, y, s);
-        Ok(())
+    fn set(&mut self, file: char, rank: u8, s: Square) {
+        let (x, y) = file_rank_to_xy(file, rank);
+        self.set_by_xy(x, y, s);
     }
 
     pub fn revert_move(&mut self, r: &RevertableMove) {
@@ -494,64 +524,53 @@ impl Board {
         self.player_with_turn = r.old_player;
     }
 
-    /// No restrictions, equivalent to moving a piece anywhere replacing anything on a real life board 
+    /// No restrictions, equivalent to moving a piece anywhere replacing anything on a real life board.
+    /// Handles special moves if match, undefined piece movement if illegal moves. 
+    /// Then flips turns.
     pub fn make_move(&mut self, moves: &MoveList, index: usize) {
+        let ((source_x, source_y), (dest_x, dest_y), _) = moves.v[index];
 
-        let m = match moves.get_v().get(index) {
-            None => panic!("Make move out of bounds {}/{}", index, moves.get_v().len()),
-            Some(_m) => _m
-        };
+        let mut did_special_move = false;
+        let player_u = self.player_with_turn as usize;
+        if source_x == src_coord_1_oo || source_x == src_coord_1_ooo {
 
-        let source = m.0;
-        let dest = m.1;
+            let (ref _pre_blank, _post_blank, _king_pos, _rook_pos) = self.castle_positions[(source_x - src_coord_1_oo) as usize];
 
-        if let Ok(Square::Occupied(piece, player)) = self.get_by_xy(source.0, source.1) {
+            let (pre_blank, post_blank, king_pos, rook_pos) = (
+                &_pre_blank[player_u],
+                _post_blank[player_u],
+                _king_pos[player_u],
+                _rook_pos[player_u],
+            );
 
-            /*
-            let player_state = self._get_player_state(player);
-            // TODO Unexpected behaviour if board not started in standard format
-            // TODO Extract
-            match player {
-                Player::White => {
-                    if !player_state.did_castle {
-                        let rook_moved = piece == Piece::Rook && (
-                            (source.0 == 7 && source.1 == 0) ||
-                            (source.0 == 7 && source.1 == 7)
-                        );
-                        let king_moved = piece == Piece::King && (
-                            (source.0 == 4 && source.1 == 7)
-                        );
-                        if rook_moved || king_moved {
-                            player_state.did_castle = true;
-                        }
-                    }
-                }
-                Player::Black => {
-                    if !player_state.did_castle {
-                        let rook_moved = piece == Piece::Rook && (
-                            (source.0 == 0 && source.1 == 0) ||
-                            (source.0 == 0 && source.1 == 7)
-                        );
-                        let king_moved = piece == Piece::King && (
-                            (source.0 == 4 && source.1 == 0)
-                        );
-                        if rook_moved || king_moved {
-                            player_state.did_castle = true;
-                        }
-                    }
-
-                }
+            for (x, y) in pre_blank.iter() {
+                self.set_by_xy(*x, *y, Square::Blank);
             }
-            */
+            for (x, y) in post_blank.iter() {
+                self.set_by_xy(*x, *y, Square::Blank);
+            }
+            self.set_by_xy(king_pos.0, king_pos.1, Square::Occupied(Piece::King, self.player_with_turn));
+            self.set_by_xy(rook_pos.0, rook_pos.1, Square::Occupied(Piece::Rook, self.player_with_turn));
+            did_special_move = true;
 
-            if piece == Piece::Pawn && ((dest.1 == 7 && player == Player::Black) || (dest.1 == 1 && player == Player::White)) {
-                self._set_by_xy(dest.0, dest.1, Square::Occupied(Piece::Queen, player));
+        } else if let Ok(Square::Occupied(src_piece, src_player)) = self.get_by_xy(source_x, source_y) {
+
+            if src_piece == Piece::Pawn && (
+                (dest_y == 7 && src_player == Player::Black) || (dest_y == 0 && src_player == Player::White)
+            ) {
+                self.set_by_xy(dest_x, dest_y, Square::Occupied(Piece::Queen, src_player));
+                self.set_by_xy(source_x, source_y, Square::Blank);
+                did_special_move = true;
+            }
+        }
+
+        if !did_special_move {
+            if let Ok(Square::Occupied(src_piece, src_player)) = self.get_by_xy(source_x, source_y) {
+                self.set_by_xy(dest_x, dest_y, Square::Occupied(src_piece, src_player));
+                self.set_by_xy(source_x, source_y, Square::Blank);
             } else {
-                self._set_by_xy(dest.0, dest.1, Square::Occupied(piece, player));
+                panic!("Move list origin square is blank");
             }
-            self._set_by_xy(source.0, source.1, Square::Blank);
-        } else {
-            panic!("Move list origin square is blank");
         }
 
         self.player_with_turn = self.player_with_turn.get_other_player();
@@ -582,15 +601,68 @@ impl Board {
     /// For the current player
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
         temp_moves.write_index = 0;
-        MoveTest::fill_player(self.get_player_with_turn(), self, false, temp_moves);
+        MoveTest::fill_player(self.player_with_turn, self, false, temp_moves);
         MoveTest::filter_check_threats(
             self,
-            self.get_player_with_turn().get_other_player(), 
+            self.player_with_turn.get_other_player(), 
             temp_moves,
             0,
             temp_moves.write_index,
             result
         );
+
+        // Rewriting temp moves from 0 now
+        let player_state = self.get_player_state(self.player_with_turn);
+        if player_state.can_ooo {
+            let blank_squares = ooo_pre_blanks[self.player_with_turn as usize];
+            self.push_castle(&blank_squares, self.player_with_turn, src_coord_1_ooo, temp_moves, result);
+        }
+        if player_state.can_oo {
+            let blank_squares = oo_pre_blanks[self.player_with_turn as usize];
+            self.push_castle(&blank_squares, self.player_with_turn, src_coord_1_oo, temp_moves, result);
+        }
+    }
+
+    /// Separate from the normal candidate move + check threat pattern
+    fn push_castle(
+        &mut self,
+        blank_squares: &[Coord],
+        player_with_turn: Player,
+        castle_src_1_op_code: u8,
+        temp_moves: &mut MoveList,
+        result: &mut MoveList
+    ) {
+        for (x, y) in blank_squares.iter() {
+            if let Square::Occupied(_, _) = self._get_by_xy(*x, *y) {
+                return;
+            } 
+        }
+
+        let mut can_castle = true;
+        for (x, y) in blank_squares.iter() {
+            self.set_by_xy(*x, *y, Square::Occupied(Piece::King, player_with_turn));
+        }
+        temp_moves.write_index = 0;
+        MoveTest::fill_player(
+            player_with_turn.get_other_player(), self, true, temp_moves
+        );
+        for i in 0..temp_moves.write_index {
+            let (_, (dest_x, dest_y), _) = temp_moves.v[i];
+            if let Square::Occupied(piece, player) = self._get_by_xy(dest_x, dest_y) {
+                debug_assert!(player == player_with_turn);
+                if piece == Piece::King {
+                    can_castle = false;
+                    break;
+                }
+            }
+        }
+        for (x, y) in blank_squares.iter() {
+            self.set_by_xy(*x, *y, Square::Blank);
+        }
+
+        if can_castle {
+            result.write((castle_src_1_op_code, 0), (0, 0), 0.);
+        }
     }
 
     fn _revert_move(&mut self, r: &OldMoveSquares) {
@@ -598,50 +670,43 @@ impl Board {
         let ((old_x1, old_y1), old_sqr1) = r.old_square_a;
         let ((old_x2, old_y2), old_sqr2) = r.old_square_b;
 
-        self._set_by_xy(old_x1, old_y1, old_sqr1);
-        self._set_by_xy(old_x2, old_y2, old_sqr2);
+        self.set_by_xy(old_x1, old_y1, old_sqr1);
+        self.set_by_xy(old_x2, old_y2, old_sqr2);
     }
 
-    fn set_uniform_row(&mut self, rank: u8, player: Player, piece: Piece) -> Result<(), Error> {
+    fn set_uniform_row(&mut self, rank: u8, player: Player, piece: Piece) {
         for i in 0..8 {
-            self.set_by_xy(i, 8 - rank, Square::Occupied(piece, player))?;
+            self.set_by_xy(i, 8 - rank, Square::Occupied(piece, player));
         }
-        Ok(())
     }
 
-    fn set_main_row(&mut self, rank: u8, player: Player) -> Result<(), Error> {
-        self.set('a', rank, Square::Occupied(Piece::Rook, player))?;
-        self.set('b', rank, Square::Occupied(Piece::Knight, player))?;
-        self.set('c', rank, Square::Occupied(Piece::Bishop, player))?;
-        self.set('d', rank, Square::Occupied(Piece::Queen, player))?;
-        self.set('e', rank, Square::Occupied(Piece::King, player))?;
-        self.set('f', rank, Square::Occupied(Piece::Bishop, player))?;
-        self.set('g', rank, Square::Occupied(Piece::Knight, player))?;
-        self.set('h', rank, Square::Occupied(Piece::Rook, player))?;
-        Ok(())
+    fn set_main_row(&mut self, rank: u8, player: Player) {
+        self.set('a', rank, Square::Occupied(Piece::Rook, player));
+        self.set('b', rank, Square::Occupied(Piece::Knight, player));
+        self.set('c', rank, Square::Occupied(Piece::Bishop, player));
+        self.set('d', rank, Square::Occupied(Piece::Queen, player));
+        self.set('e', rank, Square::Occupied(Piece::King, player));
+        self.set('f', rank, Square::Occupied(Piece::Bishop, player));
+        self.set('g', rank, Square::Occupied(Piece::Knight, player));
+        self.set('h', rank, Square::Occupied(Piece::Rook, player));
     }
 
 
     fn set_standard_rows(&mut self) {
-        self.set_main_row(1, Player::White).unwrap();
-        self.set_uniform_row(2, Player::White, Piece::Pawn).unwrap();
-        self.set_main_row(8, Player::Black).unwrap();
-        self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
-
-        //self.set_uniform_row(7, Player::Black, Piece::Pawn).unwrap();
-        //self.set('e', 1, Square::Occupied(Piece::King, Player::White)).unwrap();
-        //self.set('a', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
-        //self.set('b', 8, Square::Occupied(Piece::Queen, Player::Black)).unwrap();
+        self.set_main_row(1, Player::White);
+        self.set_uniform_row(2, Player::White, Piece::Pawn);
+        self.set_main_row(8, Player::Black);
+        self.set_uniform_row(7, Player::Black, Piece::Pawn);
     }
 
-    fn _set_by_xy(&mut self, x: u8, y: u8, s: Square) {
+    fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
         if let Ok(Square::Occupied(_, occupied_player)) = self.get_by_xy(x, y) {
-            let piece_list = &mut self._get_player_state(occupied_player).piece_locs;
+            let piece_list = &mut self.get_player_state_mut(occupied_player).piece_locs;
             piece_list.remove(&(x, y));
         }
 
         if let Square::Occupied(_, new_player) = s {
-            let piece_list = &mut self._get_player_state(new_player).piece_locs;
+            let piece_list = &mut self.get_player_state_mut(new_player).piece_locs;
             piece_list.insert((x, y));
         }
 
@@ -652,10 +717,7 @@ impl Board {
         return self.d[y as usize * 8 + x as usize];
     }
 
-    fn _get_player_state(&mut self, player: Player) -> &mut PlayerState {
-        match player {
-            Player::White => &mut self.white_state,
-            Player::Black => &mut self.black_state
-        }
+    fn get_player_state_mut(&mut self, player: Player) -> &mut PlayerState {
+        &mut self.player_state[player as usize]
     }
 }

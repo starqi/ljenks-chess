@@ -86,7 +86,7 @@ impl Ai {
     pub fn make_move(&mut self, depth: u8, real_board: &mut Board) {
         *self.counter.lock().unwrap() = 0;
 
-        self.test_board.import_from(real_board);
+        self.test_board.clone_from(real_board);
         self.moves1.write_index = 0;
         self.moves2.write_index = 0;
         let best_move: RefCell<BestMove> = RefCell::new(Default::default());
