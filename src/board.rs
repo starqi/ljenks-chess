@@ -243,11 +243,6 @@ pub enum Error {
     XyOutOfBounds(i32, i32)
 }
 
-pub struct RevertableMove {
-    my_move: BoardSubset,
-    old_player: Player
-}
-
 // TODO Rename to BasicMoveTest because no castle
 // TODO Should be able to substitute bitboards for the same interface
 // TODO Should also be able to generate bitboards with this class
@@ -362,13 +357,11 @@ impl MoveTest<'_> {
     }
 
     fn push(&self, test_dest_x: i8, test_dest_y: i8, capture: bool, result: &mut MoveList) -> bool {
-        if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 {
-            return true;
-        }
+        if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 { return true; }
 
         let (dest_x, dest_y) = (test_dest_x as u8, test_dest_y as u8);
-
-        let (moveable, terminate) = match self.data._get_by_xy(dest_x, dest_y) {
+        let dest_sq = self.data._get_by_xy(dest_x, dest_y);
+        let (moveable, terminate) = match dest_sq {
             Square::Occupied(dest_piece, dest_square_player) => {(
                 capture && dest_square_player != self.src_player && (self.can_capture_king || dest_piece != Piece::King), 
                     true
@@ -381,7 +374,16 @@ impl MoveTest<'_> {
         debug!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
 
         if moveable {
-            result.write((self.src_x as u8, self.src_y as u8), (dest_x, dest_y), 0.);
+            let mut m: BoardSubset = [None; 4];
+            m[0] = Some(((self.src_x as u8, self.src_y as u8), BeforeAfterSquares {
+                before: Square::Occupied(self.src_piece, self.src_player),
+                after: Square::Blank
+            }, 0.));
+            m[1] = Some(((dest_x, dest_y), BeforeAfterSquares {
+                before: dest_sq,
+                after: Square::Occupied(self.src_piece, self.src_player)
+            }, 0.));
+            result.write(&m);
         }
 
         return terminate;
@@ -550,13 +552,20 @@ impl Board {
         self.set_by_xy(x, y, s);
     }
 
-    pub fn revert_move(&mut self, r: &RevertableMove) {
-        for sq in r.my_move.iter() {
+    pub fn revert_move(&mut self, m: &BoardSubset) {
+        for sq in m.iter() {
             if let Some(((x, y), before_after, _)) = sq {
                 self.set_by_xy(*x, *y, before_after.before);
             }
         }
-        self.player_with_turn = r.old_player;
+    }
+
+    pub fn apply_move(&mut self, m: &BoardSubset) {
+        for sq in m.iter() {
+            if let Some(((x, y), before_after, _)) = sq {
+                self.set_by_xy(*x, *y, before_after.after);
+            }
+        }
     }
 
     /// No restrictions, equivalent to moving a piece anywhere replacing anything on a real life board.
