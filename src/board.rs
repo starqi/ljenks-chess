@@ -1,3 +1,4 @@
+// TODO Should be able to castle if king path is not blocked, currently cares about whole covered path
 // TODO King, en passante, promotion, castle, castle block
 // TODO Rust review - closure types, references to closure types, lifetimes, '_, for loop iter, into_iter, slices, Ref being auto cast
 // TODO Split modules, currently too much access between classes
@@ -10,8 +11,6 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
 
 pub type Coord = (u8, u8);
-
-pub type CoordEvalList = Vec<(Coord, Coord, f32)>;
 
 pub static SRC_COORD_1_OO: u8 = 254;
 pub static SRC_COORD_1_OOO: u8 = SRC_COORD_1_OO + 1;
@@ -30,6 +29,7 @@ static OOO_PRE_BLANKS: [[Coord; 3]; 2] = [
 // FIXME Rename revertable move to board subset
 // FIXME Delete OO types below here, replace with subset
 // FIXME Replace make_move to simply apply the subset with "apply_subset"
+// FIXME Use bounded array
 // FIXME Fix "apply_subset" to detect special codes, just like make_move
 static OO_POST_BLANKS: [[Coord; 2]; 2] = [
     [(4, 7), (7, 7)],
@@ -88,7 +88,7 @@ fn get_castle_pos() -> &'static CastlePositions {
 }
 
 pub struct MoveList {
-    v: CoordEvalList,
+    v: Vec<BoardSubset>,
     pub write_index: usize
 }
 
@@ -102,23 +102,20 @@ impl MoveList {
         }
     }
 
-    pub fn get_v(&self) -> &CoordEvalList {
+    pub fn get_v(&self) -> &Vec<BoardSubset> {
         &self.v
     }
 
-    pub fn write(&mut self, from: Coord, to: Coord, eval: f32) {
+    pub fn write(&mut self, board_subset: &BoardSubset) {
         self.grow_with_access(self.write_index);
-        let item = &mut self.v[self.write_index];
-        item.0 = from;
-        item.1 = to;
-        item.2 = eval;
+        self.v[self.write_index] = *board_subset;
         self.write_index += 1;
     }
 
     fn grow_with_access(&mut self, requested_index: usize) {
         if requested_index >= self.v.len() {
             for _ in 0..requested_index - self.v.len() + 1 {
-                self.v.push(((0, 0), (0, 0), 0.));
+                self.v.push([None; 4]);
             }
         }
     }
@@ -187,6 +184,17 @@ impl Display for Piece {
     }
 }
 
+#[derive(Default)]
+pub struct BeforeAfterSquares { 
+    before: Square,
+    after: Square
+}
+
+pub type Eval = f32;
+
+// Fairly small bounded size is useable for the most complex move which is castling
+pub type BoardSubset = [Option<(Coord, BeforeAfterSquares, Eval)>; 4];
+
 /// This order will be assumed in arrays!  
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Player { 
@@ -236,10 +244,11 @@ pub enum Error {
 }
 
 pub struct RevertableMove {
-    squares: [Option<(Coord, Square)>; 4],
+    my_move: BoardSubset,
     old_player: Player
 }
 
+// TODO Rename to BasicMoveTest because no castle
 // TODO Should be able to substitute bitboards for the same interface
 // TODO Should also be able to generate bitboards with this class
 pub struct MoveTest<'a> {
@@ -293,6 +302,31 @@ impl MoveTest<'_> {
         }
     }
 
+    fn has_king_capture_move(
+        moves: &mut MoveList,
+        start: usize,
+        end_exclusive: usize,
+        checked_player: &Player
+    ) -> bool {
+        for j in start..end_exclusive {
+            let modified_sqs = moves.get_v()[j];
+            for sq in modified_sqs.iter() {
+                if let Some((_, before_after_sqs, _)) = sq {
+                    if let Square::Occupied(before_piece, before_player) = before_after_sqs.before {
+                        if before_piece == Piece::King && before_player == *checked_player {
+                            if let Square::Occupied(_, after_player) = before_after_sqs.after {
+                                if after_player != *checked_player {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     pub fn filter_check_threats(
         real_board: &mut Board,
         checking_player: Player,
@@ -303,6 +337,9 @@ impl MoveTest<'_> {
 
         result: &mut MoveList
     ) {
+
+        let checked_player = checking_player.get_other_player();
+
         for i in candidates_start..candidates_end_exclusive {
             let revertable = real_board.make_revertable_move(candidates_and_buf, i);
             real_board.make_move(candidates_and_buf, i);
@@ -316,19 +353,9 @@ impl MoveTest<'_> {
             ); 
             let cand_write_end_exclusive = candidates_and_buf.write_index;
 
-            let mut is_king_safe = true;
-            for j in candidates_end_exclusive..cand_write_end_exclusive {
-                let (_, (dest_x, dest_y), _) = candidates_and_buf.get_v()[j];
-                if let Square::Occupied(piece, _) = real_board._get_by_xy(dest_x, dest_y) {
-                    if piece == Piece::King {
-                        is_king_safe = false;
-                        break;
-                    }
-                }
-            }
-            if is_king_safe {
+            if !MoveTest::has_king_capture_move(candidates_and_buf, candidates_end_exclusive, cand_write_end_exclusive, &checked_player) {
                 let safe_move = candidates_and_buf.get_v()[i];
-                result.write(safe_move.0, safe_move.1, safe_move.2);
+                result.write(&safe_move);
             }
             real_board.revert_move(&revertable);
         }
@@ -524,9 +551,9 @@ impl Board {
     }
 
     pub fn revert_move(&mut self, r: &RevertableMove) {
-        for i in 0..4 {
-            if let Some(((x, y), square)) = r.squares[i] {
-                self.set_by_xy(x, y, square);
+        for sq in r.my_move.iter() {
+            if let Some(((x, y), before_after, _)) = sq {
+                self.set_by_xy(*x, *y, before_after.before);
             }
         }
         self.player_with_turn = r.old_player;
@@ -588,17 +615,9 @@ impl Board {
     }
 
     pub fn make_revertable_move(&self, moves: &MoveList, index: usize) -> RevertableMove {
-
-        let ((source_x, source_y), (dest_x, dest_y), _) = moves.v[index];
-        let old_square_a = self._get_by_xy(dest_x, dest_y);
-        let old_square_b = self._get_by_xy(source_x, source_y);
-
-        RevertableMove {
-            old_move_squares: OldMoveSquares {
-                old_square_a: ((dest_x, dest_y), old_square_a),
-                old_square_b: ((source_x, source_y), old_square_b)
-            },
-            old_player: self.player_with_turn
+        return RevertableMove {
+            my_move: moves[index],
+            old_player: TODO
         }
     }
 
