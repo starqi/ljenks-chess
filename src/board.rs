@@ -5,87 +5,13 @@
 // TODO File, rank conversion spam
 // TODO Panic if not causeable by user input
 
+use std::rc::Rc;
 use log::{debug, info, warn, error};
 use std::iter::Iterator;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
 
 pub type Coord = (u8, u8);
-
-pub static SRC_COORD_1_OO: u8 = 254;
-pub static SRC_COORD_1_OOO: u8 = SRC_COORD_1_OO + 1;
-pub static SRC_COORD_1_PROMOTE: u8 = 253;
-
-// First is white, second is black, *assumes value of `Player` enum*
-
-static OO_PRE_BLANKS: [[Coord; 2]; 2] = [
-    [(5, 7), (6, 7)],
-    [(5, 0), (6, 0)]
-];
-static OOO_PRE_BLANKS: [[Coord; 3]; 2] = [
-    [(1, 7), (2, 7), (3, 7)],
-    [(1, 0), (2, 0), (3, 0)]
-];
-// FIXME Rename revertable move to board subset
-// FIXME Delete OO types below here, replace with subset
-// FIXME Replace make_move to simply apply the subset with "apply_subset"
-// FIXME Use bounded array
-// FIXME Fix "apply_subset" to detect special codes, just like make_move
-static OO_POST_BLANKS: [[Coord; 2]; 2] = [
-    [(4, 7), (7, 7)],
-    [(4, 0), (7, 0)]
-];
-static OOO_POST_BLANKS: [[Coord; 2]; 2] = [
-    [(0, 7), (4, 7)],
-    [(0, 0), (4, 0)]
-];
-static OO_KING_POS: [Coord; 2] = [(6, 7), (6, 0)];
-static OOO_KING_POS: [Coord; 2] = [(2, 7), (2, 0)];
-static OO_ROOK_POS: [Coord; 2] = [(5, 7), (5, 0)];
-static OOO_ROOK_POS: [Coord; 2] = [(3, 7), (3, 0)];
-
-/// Pre blank, post blank, king pos, rook pos
-/// Must be dynamic because blank square sizes are different at compile
-type CastlePositions = [
-    (
-        [Vec<Coord>; 2],
-        &'static[[Coord; 2]; 2],
-        &'static[Coord; 2],
-        &'static[Coord; 2]
-    ); 2
-];
-
-static mut CASTLE_POSITIONS: Option<CastlePositions> = None;
-
-pub fn init() {
-    unsafe {
-        if let None = CASTLE_POSITIONS {
-            let oo_pre = [
-                Vec::from(OO_PRE_BLANKS[0]),
-                Vec::from(OO_PRE_BLANKS[1])
-            ];
-            let ooo_pre = [
-                Vec::from(OOO_PRE_BLANKS[0]),
-                Vec::from(OOO_PRE_BLANKS[1])
-            ];
-
-            CASTLE_POSITIONS = Some([
-                (oo_pre, &OO_POST_BLANKS, &OO_KING_POS, &OO_ROOK_POS),
-                (ooo_pre, &OOO_POST_BLANKS, &OOO_KING_POS, &OOO_ROOK_POS)
-            ]);
-        }
-    }
-}
-
-fn get_castle_pos() -> &'static CastlePositions {
-    unsafe {
-        if let Some(ref x) = CASTLE_POSITIONS {
-            x
-        } else {
-            panic!("Castle positions should be initialized");
-        }
-    }
-}
 
 pub struct MoveList {
     v: Vec<MoveSnapshot>,
@@ -119,7 +45,7 @@ impl MoveList {
     fn grow_with_access(&mut self, requested_index: usize) {
         if requested_index >= self.v.len() {
             for _ in 0..requested_index - self.v.len() + 1 {
-                self.v.push([None; 4]);
+                self.v.push([None; 5]);
             }
         }
     }
@@ -197,7 +123,7 @@ pub struct BeforeAfterSquares {
 pub type Eval = f32;
 
 // Fairly small bounded size is useable for the most complex move which is castling
-pub type MoveSnapshot = [Option<(Coord, BeforeAfterSquares, Eval)>; 4];
+pub type MoveSnapshot = [Option<(Coord, BeforeAfterSquares, Eval)>; 5];
 
 /// This order will be assumed in arrays!  
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -211,6 +137,14 @@ impl Player {
             Player::Black => Player::White,
             Player::White => Player::Black
         }
+    }
+
+    fn get_first_row(self) -> u8 {
+        return if self == Player::White {
+            7
+        } else {
+            1
+        };
     }
 }
 
@@ -247,10 +181,9 @@ pub enum Error {
     XyOutOfBounds(i32, i32)
 }
 
-// TODO Rename to BasicMoveTest because no castle
 // TODO Should be able to substitute bitboards for the same interface
 // TODO Should also be able to generate bitboards with this class
-pub struct MoveTest<'a> {
+pub struct BasicMoveTest<'a> {
     src_x: i8,
     src_y: i8,
     src_piece: Piece,
@@ -259,7 +192,7 @@ pub struct MoveTest<'a> {
     can_capture_king: bool
 }
 
-impl MoveTest<'_> {
+impl <'a> BasicMoveTest<'a> {
 
     /// Pushes to `result` all the "basic" moves of a source piece with the special option to be able to capture a king
     pub fn fill_src(
@@ -272,7 +205,7 @@ impl MoveTest<'_> {
         result: &mut MoveList
     ) {
         debug_assert!(src_x >= 0 && src_y >= 0 && src_x <= 7 && src_y <= 7);
-        let t = MoveTest {
+        let t = BasicMoveTest {
             src_x: src_x as i8, src_y: src_y as i8, src_piece, src_player, data, can_capture_king
         };
         // TODO Array
@@ -296,7 +229,7 @@ impl MoveTest<'_> {
         for (x, y) in &data.get_player_state(player_with_turn).piece_locs {
             if let Square::Occupied(piece, player) = data._get_by_xy(*x, *y) {
                 debug_assert!(player == player_with_turn);
-                MoveTest::fill_src(*x, *y, piece, player, data, can_capture_king, result);
+                BasicMoveTest::fill_src(*x, *y, piece, player, data, can_capture_king, result);
             } else {
                 panic!("Empty square in {:?} player's piece locs", player_with_turn);
             }
@@ -345,7 +278,7 @@ impl MoveTest<'_> {
             real_board.make_move(candidates_and_buf, i);
 
             candidates_and_buf.write_index = candidates_end_exclusive;
-            MoveTest::fill_player(
+            BasicMoveTest::fill_player(
                 checking_player, 
                 real_board,
                 true,
@@ -353,7 +286,7 @@ impl MoveTest<'_> {
             ); 
             let cand_write_end_exclusive = candidates_and_buf.write_index;
 
-            if !MoveTest::has_king_capture_move(candidates_and_buf, candidates_end_exclusive, cand_write_end_exclusive, checked_player) {
+            if !BasicMoveTest::has_king_capture_move(candidates_and_buf, candidates_end_exclusive, cand_write_end_exclusive, checked_player) {
                 let safe_move = candidates_and_buf.get_v()[i];
                 result.write(&safe_move);
             }
@@ -397,7 +330,7 @@ impl MoveTest<'_> {
         existing_dest_square: Square,
         replacement_piece: Option<Piece>
     ) -> MoveSnapshot {
-        let mut m: MoveSnapshot = [None; 4];
+        let mut m: MoveSnapshot = [None; 5];
         m[0] = Some(((self.src_x as u8, self.src_y as u8), BeforeAfterSquares {
             before: Square::Occupied(self.src_piece, self.src_player),
             after: Square::Blank
@@ -524,17 +457,70 @@ impl MoveTest<'_> {
 
 #[derive(Clone)]
 pub struct PlayerState {
-    // TODO First bitboard switch
+    // TODO First thing to switch into bitboards
     pub piece_locs: HashSet<Coord>,
-    pub can_castle: [bool; 2]
+    pub can_castle_oo: bool,
+    pub can_castle_ooo: bool
 }
 
 impl PlayerState {
     fn new() -> PlayerState {
         PlayerState {
             piece_locs: HashSet::new(),
-            can_castle: [true, true]
+            can_castle_oo: true,
+            can_castle_ooo: true
         }
+    }
+}
+
+/// Size 2 arrays are indexed by `Player` enum numbers
+struct CastleUtils {
+    oo_move_snapshots: [MoveSnapshot; 2],
+    ooo_move_snapshots: [MoveSnapshot; 2],
+    oo_king_traversal_sqs: [[Coord; 3]; 2],
+    ooo_king_traversal_sqs: [[Coord; 4]; 2]
+}
+
+impl CastleUtils {
+
+    fn get_oo_move_snapshot_for_row(player: Player) -> MoveSnapshot {
+        let row = player.get_first_row();
+        return [
+            Some(((7, row), BeforeAfterSquares { before: Square::Occupied(Piece::Rook, player), after: Square::Blank }, 0.0 )),
+            Some(((6, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::King, player) }, 0.0 )),
+            Some(((5, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::Rook, player) }, 0.0 )),
+            Some(((4, row), BeforeAfterSquares { before: Square::Occupied(Piece::King, player), after: Square::Blank }, 0.0 )),
+            None
+        ];
+    }
+
+    fn get_ooo_move_snapshot_for_row(player: Player) -> MoveSnapshot {
+        let row = player.get_first_row();
+        return [
+            Some(((0, row), BeforeAfterSquares { before: Square::Occupied(Piece::Rook, player), after: Square::Blank }, 0.0 )),
+            Some(((1, row), BeforeAfterSquares { before: Square::Blank, after: Square::Blank }, 0.0 )),
+            Some(((2, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::King, player) }, 0.0 )),
+            Some(((3, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::Rook, player) }, 0.0 )),
+            Some(((4, row), BeforeAfterSquares { before: Square::Occupied(Piece::King, player), after: Square::Blank }, 0.0 ))
+        ];
+    }
+
+    fn new() -> CastleUtils {
+        let white_first_row = Player::get_first_row(Player::White);
+        let black_first_row = Player::get_first_row(Player::Black);
+
+        return CastleUtils {
+            oo_move_snapshots: [CastleUtils::get_ooo_move_snapshot_for_row(Player::White), CastleUtils::get_ooo_move_snapshot_for_row(Player::White)],
+            ooo_move_snapshots: [CastleUtils::get_ooo_move_snapshot_for_row(Player::Black), CastleUtils::get_ooo_move_snapshot_for_row(Player::Black)],
+            oo_king_traversal_sqs: [
+                [(1, white_first_row), (2, white_first_row), (3, white_first_row)],
+                [(1, black_first_row), (2, black_first_row), (3, black_first_row)]
+            ],
+            ooo_king_traversal_sqs: [
+                [(7, white_first_row), (6, white_first_row), (5, white_first_row), (4, white_first_row)],
+                [(7, black_first_row), (6, black_first_row), (5, black_first_row), (4, black_first_row)]
+            ]
+        };
     }
 }
 
@@ -542,7 +528,8 @@ impl PlayerState {
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
-    player_state: [PlayerState; 2]
+    player_state: [PlayerState; 2],
+    castle_utils: Rc<CastleUtils>
 }
 
 impl Display for Board {
@@ -562,7 +549,8 @@ impl Board {
         let mut board = Board {
             d: [Square::Blank; 64],
             player_with_turn: Player::White,
-            player_state: [PlayerState::new(), PlayerState::new()]
+            player_state: [PlayerState::new(), PlayerState::new()],
+            castle_utils: Rc::new(CastleUtils::new())
         };
         board.set_standard_rows();
         board
@@ -624,73 +612,14 @@ impl Board {
             }
         }
 
-        // TODO
-        /*
-        let mut did_special_move = false;
-        let player_index = self.player_with_turn as usize;
-        if source_x == SRC_COORD_1_OO || source_x == SRC_COORD_1_OOO {
-
-            let castle_type_index = (source_x - SRC_COORD_1_OO) as usize;
-            let (ref _pre_blank, _post_blank, _king_pos, _rook_pos) = get_castle_pos()[castle_type_index];
-
-            let (pre_blank, post_blank, king_pos, rook_pos) = (
-                &_pre_blank[player_index],
-                _post_blank[player_index],
-                _king_pos[player_index],
-                _rook_pos[player_index],
-            );
-
-            for (x, y) in pre_blank.iter() {
-                self.set_by_xy(*x, *y, Square::Blank);
-            }
-            for (x, y) in post_blank.iter() {
-                self.set_by_xy(*x, *y, Square::Blank);
-            }
-            self.set_by_xy(king_pos.0, king_pos.1, Square::Occupied(Piece::King, self.player_with_turn));
-            self.set_by_xy(rook_pos.0, rook_pos.1, Square::Occupied(Piece::Rook, self.player_with_turn));
-            self.player_state[player_index].can_castle[castle_type_index] = false;
-
-            did_special_move = true;
-
-        } else if let Ok(Square::Occupied(src_piece, src_player)) = self.get_by_xy(source_x, source_y) {
-
-            if src_piece == Piece::Pawn && (
-                (dest_y == 7 && src_player == Player::Black) || (dest_y == 0 && src_player == Player::White)
-            ) {
-                self.set_by_xy(dest_x, dest_y, Square::Occupied(Piece::Queen, src_player));
-                self.set_by_xy(source_x, source_y, Square::Blank);
-                did_special_move = true;
-            }
-        }
-
-        if !did_special_move {
-            if let Ok(Square::Occupied(src_piece, src_player)) = self.get_by_xy(source_x, source_y) {
-                self.set_by_xy(dest_x, dest_y, Square::Occupied(src_piece, src_player));
-                self.set_by_xy(source_x, source_y, Square::Blank);
-            } else {
-                panic!("Move list origin square is blank");
-            }
-        }
-        */
-
         self.player_with_turn = self.player_with_turn.get_other_player();
     }
-
-    // TODO
-    /*
-    pub fn make_revertable_move(&self, moves: &MoveList, index: usize) -> RevertableMove {
-        return RevertableMove {
-            my_move: moves[index],
-            old_player: TODO
-        }
-    }
-    */
 
     /// Gets the final set of legal moves
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
         temp_moves.write_index = 0;
-        MoveTest::fill_player(self.player_with_turn, self, false, temp_moves);
-        MoveTest::filter_check_threats(
+        BasicMoveTest::fill_player(self.player_with_turn, self, false, temp_moves);
+        BasicMoveTest::filter_check_threats(
             self,
             self.player_with_turn.get_other_player(), 
             temp_moves,
@@ -700,15 +629,24 @@ impl Board {
         );
 
         // Rewriting temp moves from 0 now
-        let can_castle = self.get_player_state(self.player_with_turn).can_castle;
-        if can_castle[0] {
-            // FIXME King traverse squares, not blanks
-            let blank_squares = OO_PRE_BLANKS[self.player_with_turn as usize];
-            self.push_castle(&blank_squares, self.player_with_turn, SRC_COORD_1_OO, temp_moves, result);
+        let player_state = self.get_player_state(self.player_with_turn);
+        if player_state.can_castle_oo {
+            self.push_castle(
+                &self.castle_utils.oo_king_traversal_sqs[self.player_with_turn as usize],
+                &self.castle_utils.oo_move_snapshots[self.player_with_turn as usize],
+                self.player_with_turn,
+                temp_moves,
+                result
+            );
         }
-        if can_castle[1] {
-            let blank_squares = OOO_PRE_BLANKS[self.player_with_turn as usize];
-            self.push_castle(&blank_squares, self.player_with_turn, SRC_COORD_1_OOO, temp_moves, result);
+        if player_state.can_castle_ooo {
+            self.push_castle(
+                &self.castle_utils.ooo_king_traversal_sqs[self.player_with_turn as usize],
+                &self.castle_utils.ooo_move_snapshots[self.player_with_turn as usize],
+                self.player_with_turn,
+                temp_moves,
+                result
+            );
         }
     }
 
@@ -717,8 +655,8 @@ impl Board {
     fn push_castle(
         &mut self,
         king_travel_squares: &[Coord],
+        move_snapshot: &MoveSnapshot,
         player_with_turn: Player,
-        castle_src_1_op_code: u8,
         temp_moves: &mut MoveList,
         result: &mut MoveList
     ) {
@@ -732,16 +670,16 @@ impl Board {
             self.set_by_xy(*x, *y, Square::Occupied(Piece::King, player_with_turn));
         }
         temp_moves.write_index = 0;
-        MoveTest::fill_player(
+        BasicMoveTest::fill_player(
             player_with_turn.get_other_player(), self, true, temp_moves
         );
-        let can_castle = !MoveTest::has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn)
+        let can_castle = !BasicMoveTest::has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn)
         for (x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Blank);
         }
 
         if can_castle {
-            result.write((castle_src_1_op_code, 0), (0, 0), 0.);
+            result.write(move_snapshot);
         }
     }
 
