@@ -5,6 +5,7 @@
 // TODO File, rank conversion spam
 // TODO Panic if not causeable by user input
 
+use std::ops::Deref;
 use std::rc::Rc;
 use log::{debug, info, warn, error};
 use std::iter::Iterator;
@@ -32,11 +33,11 @@ impl MoveList {
         &self.v
     }
 
-    pub fn write(&mut self, board_subset: &MoveSnapshot) {
-        self.write_and_move(*board_subset);
+    pub fn copy_and_write(&mut self, board_subset: &MoveSnapshot) {
+        self.write(*board_subset);
     }
 
-    pub fn write_and_move(&mut self, board_subset: MoveSnapshot) {
+    pub fn write(&mut self, board_subset: MoveSnapshot) {
         self.grow_with_access(self.write_index);
         self.v[self.write_index] = board_subset;
         self.write_index += 1;
@@ -45,7 +46,7 @@ impl MoveList {
     fn grow_with_access(&mut self, requested_index: usize) {
         if requested_index >= self.v.len() {
             for _ in 0..requested_index - self.v.len() + 1 {
-                self.v.push([None; 5]);
+                self.v.push(MoveSnapshot::default());
             }
         }
     }
@@ -121,9 +122,75 @@ pub struct BeforeAfterSquares {
 }
 
 pub type Eval = f32;
-
+type MoveSnapshotSquare = (Coord, BeforeAfterSquares);
+type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
 // Fairly small bounded size is useable for the most complex move which is castling
-pub type MoveSnapshot = [Option<(Coord, BeforeAfterSquares, Eval)>; 5];
+pub struct MoveSnapshot(MoveSnapshotSquares, Eval);
+
+impl Deref for MoveSnapshot {
+    type Target = MoveSnapshotSquares;
+
+    #[inline]
+    fn deref(&self) -> &MoveSnapshotSquares {
+        return &self.0;
+    }
+}
+
+impl Default for MoveSnapshot {
+    fn default() -> MoveSnapshot {
+        MoveSnapshot([None; 5], 0.)
+    }
+}
+
+impl Display for MoveSnapshot {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        let square_count = 0;
+        for sq in &self.0 {
+            if sq.is_some() {
+                square_count += 1;
+            }
+        }
+
+        if square_count == 2 {
+
+            let arrival: Option<&MoveSnapshotSquare> = None;
+            let departed: Option<&MoveSnapshotSquare> = None;
+            let arrival_i: u8 = 0;
+
+            let i: u8 = 0;
+            for sq in &self.0 {
+                if let Some(sq2) = sq {
+                    if let Square::Blank = sq2.1.after {
+                        if let Square::Occupied(piece, player) = sq2.1.before {
+                            arrival = Some(sq2);
+                            arrival_i = i;
+                            break;
+                        }
+                    }
+                }
+                i += 1;
+            }
+            if arrival.is_some() {
+                for sq in &self.0 {
+                    if i != arrival_i {
+                        if let Some(sq2) = sq {
+                            departed = Some(sq2);
+                            break;
+                        }
+                    }
+                    i += 1;
+                }
+            }
+
+            if arrival.is_some() && departed.is_some() {
+                departed.unwrap().1.before.fmt(f);
+                return write!(f, " @ {:?} to {:?}, {}", departed.unwrap().0, arrival.unwrap().0, self.1);
+            }
+        } 
+
+        write!(f, "Special move involving {} squares, {}", square_count, self.1)
+    }
+}
 
 /// This order will be assumed in arrays!  
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -140,11 +207,11 @@ impl Player {
     }
 
     fn get_first_row(self) -> u8 {
-        return if self == Player::White {
+        if self == Player::White {
             7
         } else {
             1
-        };
+        }
     }
 }
 
@@ -236,8 +303,8 @@ impl <'a> BasicMoveTest<'a> {
         }
     }
 
-    fn has_king_capture_move(
-        moves: &mut MoveList,
+    pub fn has_king_capture_move(
+        moves: &MoveList,
         start: usize,
         end_exclusive: usize,
         checked_player: Player
@@ -245,7 +312,7 @@ impl <'a> BasicMoveTest<'a> {
         for j in start..end_exclusive {
             let modified_sqs = moves.get_v()[j];
             for sq in modified_sqs.iter() {
-                if let Some((_, before_after_sqs, _)) = sq {
+                if let Some((_, before_after_sqs)) = sq {
                     if let Square::Occupied(before_piece, before_player) = before_after_sqs.before {
                         if before_piece == Piece::King && before_player == checked_player {
                             if let Square::Occupied(_, after_player) = before_after_sqs.after {
@@ -288,7 +355,7 @@ impl <'a> BasicMoveTest<'a> {
 
             if !BasicMoveTest::has_king_capture_move(candidates_and_buf, candidates_end_exclusive, cand_write_end_exclusive, checked_player) {
                 let safe_move = candidates_and_buf.get_v()[i];
-                result.write(&safe_move);
+                result.write(safe_move);
             }
 
             real_board.undo_move(candidates_and_buf, i);
@@ -317,7 +384,7 @@ impl <'a> BasicMoveTest<'a> {
         debug!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
 
         if moveable {
-            result.write(&self.make_move_snapshot(dest_x, dest_y, existing_dest_sq, replacement_piece));
+            result.write(self.make_move_snapshot(dest_x, dest_y, existing_dest_sq, replacement_piece));
         }
 
         return (moveable, terminate);
@@ -330,15 +397,15 @@ impl <'a> BasicMoveTest<'a> {
         existing_dest_square: Square,
         replacement_piece: Option<Piece>
     ) -> MoveSnapshot {
-        let mut m: MoveSnapshot = [None; 5];
+        let mut m = MoveSnapshot::default();
         m[0] = Some(((self.src_x as u8, self.src_y as u8), BeforeAfterSquares {
             before: Square::Occupied(self.src_piece, self.src_player),
             after: Square::Blank
-        }, 0.));
+        }));
         m[1] = Some(((dest_x, dest_y), BeforeAfterSquares {
             before: existing_dest_square,
             after: Square::Occupied(replacement_piece.unwrap_or(self.src_piece), self.src_player)
-        }, 0.));
+        }));
         return m;
     }
 
@@ -485,24 +552,24 @@ impl CastleUtils {
 
     fn get_oo_move_snapshot_for_row(player: Player) -> MoveSnapshot {
         let row = player.get_first_row();
-        return [
-            Some(((7, row), BeforeAfterSquares { before: Square::Occupied(Piece::Rook, player), after: Square::Blank }, 0.0 )),
-            Some(((6, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::King, player) }, 0.0 )),
-            Some(((5, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::Rook, player) }, 0.0 )),
-            Some(((4, row), BeforeAfterSquares { before: Square::Occupied(Piece::King, player), after: Square::Blank }, 0.0 )),
+        return MoveSnapshot([
+            Some(((7, row), BeforeAfterSquares { before: Square::Occupied(Piece::Rook, player), after: Square::Blank })),
+            Some(((6, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::King, player) })),
+            Some(((5, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::Rook, player) })),
+            Some(((4, row), BeforeAfterSquares { before: Square::Occupied(Piece::King, player), after: Square::Blank })),
             None
-        ];
+        ], 0.);
     }
 
     fn get_ooo_move_snapshot_for_row(player: Player) -> MoveSnapshot {
         let row = player.get_first_row();
-        return [
-            Some(((0, row), BeforeAfterSquares { before: Square::Occupied(Piece::Rook, player), after: Square::Blank }, 0.0 )),
-            Some(((1, row), BeforeAfterSquares { before: Square::Blank, after: Square::Blank }, 0.0 )),
-            Some(((2, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::King, player) }, 0.0 )),
-            Some(((3, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::Rook, player) }, 0.0 )),
-            Some(((4, row), BeforeAfterSquares { before: Square::Occupied(Piece::King, player), after: Square::Blank }, 0.0 ))
-        ];
+        return MoveSnapshot([
+            Some(((0, row), BeforeAfterSquares { before: Square::Occupied(Piece::Rook, player), after: Square::Blank })),
+            Some(((1, row), BeforeAfterSquares { before: Square::Blank, after: Square::Blank })),
+            Some(((2, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::King, player) })),
+            Some(((3, row), BeforeAfterSquares { before: Square::Blank, after: Square::Occupied(Piece::Rook, player) })),
+            Some(((4, row), BeforeAfterSquares { before: Square::Occupied(Piece::King, player), after: Square::Blank }))
+        ], 0.);
     }
 
     fn new() -> CastleUtils {
@@ -581,7 +648,7 @@ impl Board {
 
     pub fn revert_move(&mut self, m: &MoveSnapshot) {
         for sq in m.iter() {
-            if let Some(((x, y), before_after, _)) = sq {
+            if let Some(((x, y), before_after)) = sq {
                 self.set_by_xy(*x, *y, before_after.before);
             }
         }
@@ -589,7 +656,7 @@ impl Board {
 
     pub fn apply_move(&mut self, m: &MoveSnapshot) {
         for sq in m.iter() {
-            if let Some(((x, y), before_after, _)) = sq {
+            if let Some(((x, y), before_after)) = sq {
                 self.set_by_xy(*x, *y, before_after.after);
             }
         }
@@ -598,7 +665,7 @@ impl Board {
     pub fn undo_move(&mut self, moves: &MoveList, index: usize) {
         let m = moves.v[index];
         for square_holder in m.iter() {
-            if let Some(((x, y), before_after, _)) = square_holder {
+            if let Some(((x, y), before_after)) = square_holder {
                 self.set_by_xy(*x, *y, before_after.before);
             }
         }
@@ -607,7 +674,7 @@ impl Board {
     pub fn make_move(&mut self, moves: &MoveList, index: usize) {
         let m = moves.v[index];
         for square_holder in m.iter() {
-            if let Some(((x, y), before_after, _)) = square_holder {
+            if let Some(((x, y), before_after)) = square_holder {
                 self.set_by_xy(*x, *y, before_after.after);
             }
         }
@@ -673,13 +740,13 @@ impl Board {
         BasicMoveTest::fill_player(
             player_with_turn.get_other_player(), self, true, temp_moves
         );
-        let can_castle = !BasicMoveTest::has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn)
+        let can_castle = !BasicMoveTest::has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn);
         for (x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Blank);
         }
 
         if can_castle {
-            result.write(move_snapshot);
+            result.copy_and_write(move_snapshot);
         }
     }
 

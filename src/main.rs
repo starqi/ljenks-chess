@@ -3,7 +3,7 @@ mod ai;
 
 use ai::{Ai};
 use rand::{thread_rng, Rng};
-use board::{MoveTest, xy_to_file_rank_safe, Player, Board, Square, Piece, MoveList};
+use board::{BasicMoveTest, xy_to_file_rank_safe, Player, Board, Square, Piece, MoveList};
 use std::{thread, io};
 use std::sync::{Mutex, Arc};
 

@@ -1,17 +1,16 @@
+use super::board::MoveSnapshot;
 use std::cell::{RefCell};
 use std::{thread, option_env};
 use std::collections::{HashSet};
 use rand::{ThreadRng, thread_rng, Rng};
-use super::board::{MoveTest, Coord, Player, Board, MoveList, Piece, Square, xy_to_file_rank_safe};
+use super::board::{BasicMoveTest, Coord, Player, Board, MoveList, Piece, Square, xy_to_file_rank_safe};
 use std::sync::{Mutex, Arc};
 use log::{debug, info, warn, error};
 
 #[derive(Default)]
 struct BestMove {
-    piece_loc: Coord,
-    dest_loc: Coord,
-    move_list_index: usize,
-    written: bool
+    best_move: Option<MoveSnapshot>,
+    move_list_index: usize
 }
 
 pub struct Ai {
@@ -101,24 +100,16 @@ impl Ai {
         println!("m1/m2 {} {}", self.moves1.write_index, self.moves2.write_index);
 
         for i in (0..self.moves2.write_index).rev() {
-            let (src, dest, eval) = self.moves2.get_v()[i];
-            let (src_f, src_r) = xy_to_file_rank_safe(src.0 as i32, src.1 as i32).unwrap();
-            let (dest_f, dest_r) = xy_to_file_rank_safe(dest.0 as i32, dest.1 as i32).unwrap();
-            println!("{}{} to {}{}, eval={}", src_f, src_r, dest_f, dest_r, eval);
+            let m = self.moves2.get_v()[i];
+            println!("{}", m);
         }
         println!("");
 
         let best_move_inner = best_move.borrow();
-        if !best_move_inner.written {
+        if best_move_inner.best_move.is_none() {
             println!("No moves, checkmate?");
         } else {
-            let (src, dest, _) = &self.moves_buf.get_v()[best_move_inner.move_list_index];
-            let (src_file, src_rank) = xy_to_file_rank_safe(src.0 as i32, src.1 as i32).unwrap();
-            let (dest_file, dest_rank) = xy_to_file_rank_safe(dest.0 as i32, dest.1 as i32).unwrap();
-
-            println!(
-                "{:?} moves {}{} to {}{}", real_board.get_player_with_turn(), src_file, src_rank, dest_file, dest_rank
-            );
+            println!("Best: {}", best_move_inner.best_move.unwrap());
             real_board.make_move(&mut self.moves_buf, best_move_inner.move_list_index);
         }
         println!("\n{}\n", real_board);
@@ -137,7 +128,7 @@ impl Ai {
         beta: f32,
         moves_start: usize,
         use_moves1_as_trace_result: bool,
-        best_move: Option<&RefCell<BestMove>>
+        best_move_result: Option<&RefCell<BestMove>>
     ) -> f32 {
 
         let node_start_moves1_index = self.moves1.write_index;
@@ -146,9 +137,8 @@ impl Ai {
         let current_player = self.test_board.get_player_with_turn();
 
         let mut is_best_in_moves1 = true;
+        let mut best_move: Option<&MoveSnapshot> = None;
         let mut best_min = MAX_EVAL;
-        let mut best_src: Coord = (0, 0);
-        let mut best_dest: Coord = (0, 0);
 
         let mut TODO = false;
 
@@ -158,7 +148,6 @@ impl Ai {
 
         for i in moves_start..moves_end_exclusive {
 
-            let revertable = self.test_board.get_revertable_move(&self.moves_buf, i);
             self.test_board.make_move(&mut self.moves_buf, i);
 
             let opponent_best_value: f32 = if depth > 0 {
@@ -211,8 +200,7 @@ impl Ai {
                 let m = &self.moves_buf.get_v()[i];
 
                 best_min = value_to_minimize;
-                best_src = m.0;
-                best_dest = m.1;
+                best_move = Some(m);
 
                 if is_best_in_moves1 {
                     self.moves1.write_index = node_start_moves1_index;
@@ -222,13 +210,11 @@ impl Ai {
                 is_best_in_moves1 = !is_best_in_moves1;
 
                 TODO = true;
-                if let Some(a) = best_move {
+                if let Some(a) = best_move_result {
                     let mut b = a.borrow_mut();
                     let m = &self.moves_buf.get_v()[i];
-                    b.piece_loc = m.0;
-                    b.dest_loc = m.1;
+                    b.best_move = Some(*best_move.unwrap());
                     b.move_list_index = i;
-                    b.written = true;
                 }
             } else {
                 if is_best_in_moves1 {
@@ -238,7 +224,7 @@ impl Ai {
                 }
             }
 
-            self.test_board.revert_move(&revertable);
+            self.test_board.undo_move(&mut self.moves_buf, i);
 
             if current_player == Player::White {
                 let best_max = -best_min;
@@ -256,24 +242,22 @@ impl Ai {
             let eval = if current_player == Player::White { -best_min } else { best_min };
 
             if is_best_in_moves1 {
-                self.moves1.write(best_src, best_dest, eval);
+                self.moves1.copy_and_write(best_move.unwrap());
                 self.moves2.write_index = node_start_moves2_index;
             } else {
-                self.moves2.write(best_src, best_dest, eval);
+                self.moves2.copy_and_write(best_move.unwrap());
                 self.moves1.write_index = node_start_moves1_index;
             }
 
             if use_moves1_as_trace_result != is_best_in_moves1 {
                 if is_best_in_moves1 {
                     for i in node_start_moves1_index..self.moves1.write_index {
-                        let (src, dest, eval) = self.moves1.get_v()[i];
-                        self.moves2.write(src, dest, eval);
+                        self.moves2.write(self.moves1.get_v()[i]);
                     }
                     self.moves1.write_index = node_start_moves1_index;
                 } else {
                     for i in node_start_moves2_index..self.moves2.write_index {
-                        let (src, dest, eval) = self.moves2.get_v()[i];
-                        self.moves1.write(src, dest, eval);
+                        self.moves1.write(self.moves2.get_v()[i]);
                     }
                     self.moves2.write_index = node_start_moves2_index;
                 }
@@ -283,20 +267,22 @@ impl Ai {
         } else {
             info!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
 
-            let mut king_is_safe = true;
-
             self.moves_buf.write_index = moves_start;
-            MoveTest::fill_player(current_player.get_other_player(), &self.test_board, true, &mut self.moves_buf);
+            BasicMoveTest::fill_player(current_player.get_other_player(), &self.test_board, true, &mut self.moves_buf);
+            if BasicMoveTest::has_king_capture_move(&self.moves_buf, moves_start, self.moves_buf.write_index, current_player) {
+                // FIXME
+                /*
             for i in moves_start..self.moves_buf.write_index {
-                let (_, (dest_x, dest_y), _) = self.moves_buf.get_v()[i];
+                let m = self.moves_buf.get_v()[i];
+                BasicMoveTest::has_king_capture_move()
                 if let Square::Occupied(piece, player) = self.test_board._get_by_xy(dest_x, dest_y) {
                     if piece == Piece::King && player == current_player {
                         king_is_safe = false;
                     }
                 }
             }
+            */
 
-            if king_is_safe {  
                 0. 
             } else {
                 if current_player == Player::White { MIN_EVAL } else { MAX_EVAL }
