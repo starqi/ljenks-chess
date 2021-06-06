@@ -88,7 +88,7 @@ fn get_castle_pos() -> &'static CastlePositions {
 }
 
 pub struct MoveList {
-    v: Vec<BoardSubset>,
+    v: Vec<MoveSnapshot>,
     pub write_index: usize
 }
 
@@ -102,13 +102,17 @@ impl MoveList {
         }
     }
 
-    pub fn get_v(&self) -> &Vec<BoardSubset> {
+    pub fn get_v(&self) -> &Vec<MoveSnapshot> {
         &self.v
     }
 
-    pub fn write(&mut self, board_subset: &BoardSubset) {
+    pub fn write(&mut self, board_subset: &MoveSnapshot) {
+        self.write_and_move(*board_subset);
+    }
+
+    pub fn write_and_move(&mut self, board_subset: MoveSnapshot) {
         self.grow_with_access(self.write_index);
-        self.v[self.write_index] = *board_subset;
+        self.v[self.write_index] = board_subset;
         self.write_index += 1;
     }
 
@@ -193,7 +197,7 @@ pub struct BeforeAfterSquares {
 pub type Eval = f32;
 
 // Fairly small bounded size is useable for the most complex move which is castling
-pub type BoardSubset = [Option<(Coord, BeforeAfterSquares, Eval)>; 4];
+pub type MoveSnapshot = [Option<(Coord, BeforeAfterSquares, Eval)>; 4];
 
 /// This order will be assumed in arrays!  
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -257,6 +261,7 @@ pub struct MoveTest<'a> {
 
 impl MoveTest<'_> {
 
+    /// Pushes to `result` all the "basic" moves of a source piece with the special option to be able to capture a king
     pub fn fill_src(
         src_x: u8,
         src_y: u8,
@@ -281,6 +286,7 @@ impl MoveTest<'_> {
         }
     }
 
+    /// Calls `fill_src` for all pieces owned by a player 
     pub fn fill_player(
         player_with_turn: Player,
         data: &Board,
@@ -301,16 +307,16 @@ impl MoveTest<'_> {
         moves: &mut MoveList,
         start: usize,
         end_exclusive: usize,
-        checked_player: &Player
+        checked_player: Player
     ) -> bool {
         for j in start..end_exclusive {
             let modified_sqs = moves.get_v()[j];
             for sq in modified_sqs.iter() {
                 if let Some((_, before_after_sqs, _)) = sq {
                     if let Square::Occupied(before_piece, before_player) = before_after_sqs.before {
-                        if before_piece == Piece::King && before_player == *checked_player {
+                        if before_piece == Piece::King && before_player == checked_player {
                             if let Square::Occupied(_, after_player) = before_after_sqs.after {
-                                if after_player != *checked_player {
+                                if after_player != checked_player {
                                     return false;
                                 }
                             }
@@ -322,6 +328,7 @@ impl MoveTest<'_> {
         return true;
     }
 
+    /// Filters out input moves which cannot be made because king will be captured
     pub fn filter_check_threats(
         real_board: &mut Board,
         checking_player: Player,
@@ -332,11 +339,9 @@ impl MoveTest<'_> {
 
         result: &mut MoveList
     ) {
-
         let checked_player = checking_player.get_other_player();
 
         for i in candidates_start..candidates_end_exclusive {
-            let revertable = real_board.make_revertable_move(candidates_and_buf, i);
             real_board.make_move(candidates_and_buf, i);
 
             candidates_and_buf.write_index = candidates_end_exclusive;
@@ -348,23 +353,28 @@ impl MoveTest<'_> {
             ); 
             let cand_write_end_exclusive = candidates_and_buf.write_index;
 
-            if !MoveTest::has_king_capture_move(candidates_and_buf, candidates_end_exclusive, cand_write_end_exclusive, &checked_player) {
+            if !MoveTest::has_king_capture_move(candidates_and_buf, candidates_end_exclusive, cand_write_end_exclusive, checked_player) {
                 let safe_move = candidates_and_buf.get_v()[i];
                 result.write(&safe_move);
             }
-            real_board.revert_move(&revertable);
+
+            real_board.undo_move(candidates_and_buf, i);
         }
     }
 
-    fn push(&self, test_dest_x: i8, test_dest_y: i8, capture: bool, result: &mut MoveList) -> bool {
-        if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 { return true; }
+    /// `can_capture` - eg. Pawn cannot capture forwards
+    /// Returns whether a move was added, and when applicable, whether the search along the same line should be terminated
+    fn push(&self, test_dest_x: i8, test_dest_y: i8, can_capture: bool, replacement_piece: Option<Piece>, result: &mut MoveList) -> (bool, bool) {
+        if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 { 
+            return (false, true); 
+        }
 
         let (dest_x, dest_y) = (test_dest_x as u8, test_dest_y as u8);
-        let dest_sq = self.data._get_by_xy(dest_x, dest_y);
-        let (moveable, terminate) = match dest_sq {
+        let existing_dest_sq = self.data._get_by_xy(dest_x, dest_y);
+        let (moveable, terminate) = match existing_dest_sq {
             Square::Occupied(dest_piece, dest_square_player) => {(
-                capture && dest_square_player != self.src_player && (self.can_capture_king || dest_piece != Piece::King), 
-                    true
+                can_capture && dest_square_player != self.src_player && (self.can_capture_king || dest_piece != Piece::King), 
+                true
             )},
             Square::Blank => {
                 (true, false)
@@ -374,31 +384,57 @@ impl MoveTest<'_> {
         debug!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
 
         if moveable {
-            let mut m: BoardSubset = [None; 4];
-            m[0] = Some(((self.src_x as u8, self.src_y as u8), BeforeAfterSquares {
-                before: Square::Occupied(self.src_piece, self.src_player),
-                after: Square::Blank
-            }, 0.));
-            m[1] = Some(((dest_x, dest_y), BeforeAfterSquares {
-                before: dest_sq,
-                after: Square::Occupied(self.src_piece, self.src_player)
-            }, 0.));
-            result.write(&m);
+            result.write(&self.make_move_snapshot(dest_x, dest_y, existing_dest_sq, replacement_piece));
         }
 
-        return terminate;
+        return (moveable, terminate);
+    }
+
+    fn make_move_snapshot(
+        &self,
+        dest_x: u8,
+        dest_y: u8,
+        existing_dest_square: Square,
+        replacement_piece: Option<Piece>
+    ) -> MoveSnapshot {
+        let mut m: MoveSnapshot = [None; 4];
+        m[0] = Some(((self.src_x as u8, self.src_y as u8), BeforeAfterSquares {
+            before: Square::Occupied(self.src_piece, self.src_player),
+            after: Square::Blank
+        }, 0.));
+        m[1] = Some(((dest_x, dest_y), BeforeAfterSquares {
+            before: existing_dest_square,
+            after: Square::Occupied(replacement_piece.unwrap_or(self.src_piece), self.src_player)
+        }, 0.));
+        return m;
+    }
+
+    fn push_promotions(&self, test_dest_x: i8, test_dest_y: i8, can_capture: bool, result: &mut MoveList) -> (bool, bool) {
+        let r = self.push(test_dest_x, test_dest_y, can_capture, Some(Piece::Rook), result);
+        if r.0 {
+            let existing_dest_sq = self.data._get_by_xy(test_dest_x as u8, test_dest_y as u8);
+            self.make_move_snapshot(test_dest_x as u8, test_dest_y as u8, existing_dest_sq, Some(Piece::Queen)); 
+            self.make_move_snapshot(test_dest_x as u8, test_dest_y as u8, existing_dest_sq, Some(Piece::Bishop)); 
+            self.make_move_snapshot(test_dest_x as u8, test_dest_y as u8, existing_dest_sq, Some(Piece::Knight)); 
+        }
+        return r;
     }
 
     fn push_pawn(&self, result: &mut MoveList) {
-        let (y_delta, jump_row) = match self.src_player {
-            Player::Black => (1, 1),
-            Player::White => (-1, 6)
+        let (y_delta, jump_row, pre_promote_row) = match self.src_player {
+            Player::Black => (1, 1, 6),
+            Player::White => (-1, 6, 1)
         };
 
         let (x, y) = (self.src_x as i8, self.src_y as i8);
-        if !self.push(x, y + y_delta, false, result) {
-            if y == jump_row {
-                self.push(x, y + y_delta * 2, false, result);
+
+        if y == pre_promote_row {
+            self.push_promotions(x, y + y_delta, false, result);
+        } else {
+            if !self.push(x, y + y_delta, false, None, result).1 { // Same as rook ray. If 1-square hop is not blocked, consider 2-square hop.
+                if y == jump_row {
+                    self.push(x, y + y_delta * 2, false, None, result);
+                }
             }
         }
 
@@ -413,59 +449,62 @@ impl MoveTest<'_> {
 
             if let Square::Occupied(_, angled_player) = self.data._get_by_xy(x_p_delta as u8, y_p_delta as u8) {
                 if angled_player != self.src_player {
-                    self.push(x + x_delta, y + y_delta, true, result);
+                    if y == pre_promote_row {
+                        self.push(x + x_delta, y + y_delta, true, None, result);
+                    } else {
+                        self.push_promotions(x + x_delta, y + y_delta, true, result);
+                    }
                 }
             }
         }
-
     }
 
     fn push_rook(&self, result: &mut MoveList) {
         for _i in 1..=self.src_x {
             let i = self.src_x - _i;
-            if self.push(i, self.src_y, true, result) { break; }
+            if self.push(i, self.src_y, true, None, result).1 { break; }
         }
         for i in self.src_x + 1..=7 {
-            if self.push(i, self.src_y, true, result) { break; }
+            if self.push(i, self.src_y, true, None, result).1 { break; }
         }
         for _i in 1..=self.src_y {
             let i = self.src_y - _i;
-            if self.push(self.src_x, i, true, result) { break; }
+            if self.push(self.src_x, i, true, None, result).1 { break; }
         }
         for i in self.src_y + 1..=7 {
-            if self.push(self.src_x, i, true, result) { break; }
+            if self.push(self.src_x, i, true, None, result).1 { break; }
         }
     }
 
     fn push_bishop(&self, result: &mut MoveList) {
 
         for i in 1..=self.src_x {
-            if self.push(self.src_x - i, self.src_y - i, true, result) { break; }
+            if self.push(self.src_x - i, self.src_y - i, true, None, result).1 { break; }
         }
         for i in 1..=self.src_x {
-            if self.push(self.src_x - i, self.src_y + i, true, result) { break; }
+            if self.push(self.src_x - i, self.src_y + i, true, None, result).1 { break; }
         }
         for i in 1..=8 - (self.src_x + 1) {
-            if self.push(self.src_x + i, self.src_y - i, true, result) { break; }
+            if self.push(self.src_x + i, self.src_y - i, true, None, result).1 { break; }
         }
         for i in 1..=8 - (self.src_x + 1) {
-            if self.push(self.src_x + i, self.src_y + i, true, result) { break; }
+            if self.push(self.src_x + i, self.src_y + i, true, None, result).1 { break; }
         }
     }
 
     fn push_knight(&self, result: &mut MoveList) {
 
-        self.push(self.src_x - 1, self.src_y + 2, true, result);
-        self.push(self.src_x - 1, self.src_y - 2, true, result);
+        self.push(self.src_x - 1, self.src_y + 2, true, None, result).1;
+        self.push(self.src_x - 1, self.src_y - 2, true, None, result).1;
 
-        self.push(self.src_x - 2, self.src_y + 1, true, result);
-        self.push(self.src_x - 2, self.src_y - 1, true, result);
+        self.push(self.src_x - 2, self.src_y + 1, true, None, result).1;
+        self.push(self.src_x - 2, self.src_y - 1, true, None, result).1;
 
-        self.push(self.src_x + 2, self.src_y + 1, true, result);
-        self.push(self.src_x + 2, self.src_y - 1, true, result);
+        self.push(self.src_x + 2, self.src_y + 1, true, None, result).1;
+        self.push(self.src_x + 2, self.src_y - 1, true, None, result).1;
 
-        self.push(self.src_x + 1, self.src_y + 2, true, result);
-        self.push(self.src_x + 1, self.src_y - 2, true, result);
+        self.push(self.src_x + 1, self.src_y + 2, true, None, result).1;
+        self.push(self.src_x + 1, self.src_y - 2, true, None, result).1;
     }
 
     fn push_queen(&self, result: &mut MoveList) {
@@ -477,7 +516,7 @@ impl MoveTest<'_> {
         for i in -1..=1 {
             for j in -1..=1 {
                 if i == 0 && j == 0 { continue; }
-                self.push(self.src_x + i, self.src_y + j, true, result);
+                self.push(self.src_x + i, self.src_y + j, true, None, result);
             }
         }
     }
@@ -552,7 +591,7 @@ impl Board {
         self.set_by_xy(x, y, s);
     }
 
-    pub fn revert_move(&mut self, m: &BoardSubset) {
+    pub fn revert_move(&mut self, m: &MoveSnapshot) {
         for sq in m.iter() {
             if let Some(((x, y), before_after, _)) = sq {
                 self.set_by_xy(*x, *y, before_after.before);
@@ -560,7 +599,7 @@ impl Board {
         }
     }
 
-    pub fn apply_move(&mut self, m: &BoardSubset) {
+    pub fn apply_move(&mut self, m: &MoveSnapshot) {
         for sq in m.iter() {
             if let Some(((x, y), before_after, _)) = sq {
                 self.set_by_xy(*x, *y, before_after.after);
@@ -568,12 +607,25 @@ impl Board {
         }
     }
 
-    /// No restrictions, equivalent to moving a piece anywhere replacing anything on a real life board.
-    /// Handles special moves if match, undefined piece movement if illegal moves. 
-    /// Then flips turns.
-    pub fn make_move(&mut self, moves: &MoveList, index: usize) {
-        let ((source_x, source_y), (dest_x, dest_y), _) = moves.v[index];
+    pub fn undo_move(&mut self, moves: &MoveList, index: usize) {
+        let m = moves.v[index];
+        for square_holder in m.iter() {
+            if let Some(((x, y), before_after, _)) = square_holder {
+                self.set_by_xy(*x, *y, before_after.before);
+            }
+        }
+    }
 
+    pub fn make_move(&mut self, moves: &MoveList, index: usize) {
+        let m = moves.v[index];
+        for square_holder in m.iter() {
+            if let Some(((x, y), before_after, _)) = square_holder {
+                self.set_by_xy(*x, *y, before_after.after);
+            }
+        }
+
+        // TODO
+        /*
         let mut did_special_move = false;
         let player_index = self.player_with_turn as usize;
         if source_x == SRC_COORD_1_OO || source_x == SRC_COORD_1_OOO {
@@ -619,18 +671,22 @@ impl Board {
                 panic!("Move list origin square is blank");
             }
         }
+        */
 
         self.player_with_turn = self.player_with_turn.get_other_player();
     }
 
+    // TODO
+    /*
     pub fn make_revertable_move(&self, moves: &MoveList, index: usize) -> RevertableMove {
         return RevertableMove {
             my_move: moves[index],
             old_player: TODO
         }
     }
+    */
 
-    /// For the current player
+    /// Gets the final set of legal moves
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
         temp_moves.write_index = 0;
         MoveTest::fill_player(self.player_with_turn, self, false, temp_moves);
@@ -646,6 +702,7 @@ impl Board {
         // Rewriting temp moves from 0 now
         let can_castle = self.get_player_state(self.player_with_turn).can_castle;
         if can_castle[0] {
+            // FIXME King traverse squares, not blanks
             let blank_squares = OO_PRE_BLANKS[self.player_with_turn as usize];
             self.push_castle(&blank_squares, self.player_with_turn, SRC_COORD_1_OO, temp_moves, result);
         }
@@ -655,40 +712,31 @@ impl Board {
         }
     }
 
+    /// Assumes castle has not already been done
     /// Separate from the normal candidate move + check threat pattern
     fn push_castle(
         &mut self,
-        blank_squares: &[Coord],
+        king_travel_squares: &[Coord],
         player_with_turn: Player,
         castle_src_1_op_code: u8,
         temp_moves: &mut MoveList,
         result: &mut MoveList
     ) {
-        for (x, y) in blank_squares.iter() {
+        for (x, y) in king_travel_squares.iter() {
             if let Square::Occupied(_, _) = self._get_by_xy(*x, *y) {
                 return;
             } 
         }
 
-        let mut can_castle = true;
-        for (x, y) in blank_squares.iter() {
+        for (x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Occupied(Piece::King, player_with_turn));
         }
         temp_moves.write_index = 0;
         MoveTest::fill_player(
             player_with_turn.get_other_player(), self, true, temp_moves
         );
-        for i in 0..temp_moves.write_index {
-            let (_, (dest_x, dest_y), _) = temp_moves.v[i];
-            if let Square::Occupied(piece, player) = self._get_by_xy(dest_x, dest_y) {
-                debug_assert!(player == player_with_turn);
-                if piece == Piece::King {
-                    can_castle = false;
-                    break;
-                }
-            }
-        }
-        for (x, y) in blank_squares.iter() {
+        let can_castle = !MoveTest::has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn)
+        for (x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Blank);
         }
 
