@@ -6,7 +6,6 @@
 // TODO Panic if not causeable by user input
 
 use std::ops::Deref;
-use log::{debug};
 use std::iter::Iterator;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
@@ -109,6 +108,7 @@ pub fn file_rank_to_xy_safe(file: char, rank: u8) -> Result<Coord, Error> {
     return Ok(file_rank_to_xy(file, rank));
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum Piece {
     Pawn = 0, Rook, Knight, Bishop, Queen, King
@@ -409,7 +409,7 @@ impl <'a> BasicMoveTest<'a> {
             }
         };
 
-        debug!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
+        //println!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
 
         if moveable {
             result.write(self.make_move_snapshot(dest_x, dest_y, existing_dest_sq, replacement_piece));

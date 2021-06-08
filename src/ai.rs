@@ -1,8 +1,5 @@
 use std::cell::{RefCell};
-use rand::{ThreadRng, thread_rng};
 use super::board::{Coord, CastleUtils, MoveSnapshot, BasicMoveTest, Player, Board, MoveList, Piece, Square};
-use std::sync::{Mutex, Arc};
-use log::{info};
 
 #[derive(Default)]
 struct BestMove {
@@ -15,9 +12,7 @@ pub struct Ai {
     test_board: Board,
     temp_moves_for_board: MoveList,
     moves1: MoveList,
-    moves2: MoveList,
-    rng: ThreadRng,
-    pub counter: Arc<Mutex<u32>>
+    moves2: MoveList
 }
 
 static MAX_EVAL: f32 = 9000.;
@@ -73,14 +68,11 @@ impl Ai {
             test_board: Board::new(),
             temp_moves_for_board: MoveList::new(50),
             moves1: MoveList::new(50),
-            moves2: MoveList::new(50),
-            rng: thread_rng(),
-            counter: Arc::new(Mutex::new(0))
+            moves2: MoveList::new(50)
         }
     }
 
     pub fn make_move(&mut self, castle_utils: &CastleUtils, depth: u8, real_board: &mut Board) {
-        *self.counter.lock().unwrap() = 0;
 
         self.test_board.clone_from(real_board);
         self.moves1.write_index = 0;
@@ -168,9 +160,6 @@ impl Ai {
 
                 self.alpha_beta(castle_utils, depth - 1, new_alpha, new_beta, moves_end_exclusive, !is_best_in_moves1, None)
             } else {
-                let mut counter = self.counter.lock().unwrap();
-                *counter += 1;
-
                 Ai::evaluate(&self.test_board)
             };
 
@@ -265,7 +254,7 @@ impl Ai {
 
             eval
         } else {
-            info!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
+            println!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
 
             self.moves_buf.write_index = moves_start;
             BasicMoveTest::fill_player(current_player.get_other_player(), &self.test_board, true, &mut self.moves_buf);
