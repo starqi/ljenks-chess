@@ -8,7 +8,7 @@ class Board {
 
         // Pawn = 0, Rook, Knight, Bishop, Queen, King
         this.numToLetter = [
-            'p', 'r', 'k', 'b', 'q', 'k'
+            'p', 'r', 'n', 'b', 'q', 'k'
         ];
 
         this.board = document.getElementById('board');

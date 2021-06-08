@@ -771,20 +771,20 @@ impl Board {
     }
 
     fn set_main_row(&mut self, rank: u8, player: Player) {
-        //self.set('a', rank, Square::Occupied(Piece::Rook, player));
-        //self.set('b', rank, Square::Occupied(Piece::Knight, player));
-        //self.set('c', rank, Square::Occupied(Piece::Bishop, player));
-        //self.set('d', rank, Square::Occupied(Piece::Queen, player));
+        self.set('a', rank, Square::Occupied(Piece::Rook, player));
+        self.set('b', rank, Square::Occupied(Piece::Knight, player));
+        self.set('c', rank, Square::Occupied(Piece::Bishop, player));
+        self.set('d', rank, Square::Occupied(Piece::Queen, player));
         self.set('e', rank, Square::Occupied(Piece::King, player));
-        //self.set('f', rank, Square::Occupied(Piece::Bishop, player));
-        //self.set('g', rank, Square::Occupied(Piece::Knight, player));
-        //self.set('h', rank, Square::Occupied(Piece::Rook, player));
+        self.set('f', rank, Square::Occupied(Piece::Bishop, player));
+        self.set('g', rank, Square::Occupied(Piece::Knight, player));
+        self.set('h', rank, Square::Occupied(Piece::Rook, player));
     }
 
 
     fn set_standard_rows(&mut self) {
         self.set_main_row(1, Player::White);
-        //self.set_uniform_row(2, Player::White, Piece::Pawn);
+        self.set_uniform_row(2, Player::White, Piece::Pawn);
         self.set_main_row(8, Player::Black);
         self.set_uniform_row(7, Player::Black, Piece::Pawn);
     }
