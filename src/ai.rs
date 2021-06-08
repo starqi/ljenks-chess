@@ -1,8 +1,6 @@
-use super::board::CastleUtils;
-use super::board::MoveSnapshot;
 use std::cell::{RefCell};
 use rand::{ThreadRng, thread_rng};
-use super::board::{BasicMoveTest, Player, Board, MoveList, Piece, Square};
+use super::board::{Coord, CastleUtils, MoveSnapshot, BasicMoveTest, Player, Board, MoveList, Piece, Square};
 use std::sync::{Mutex, Arc};
 use log::{info};
 
@@ -29,7 +27,7 @@ impl Ai {
 
     pub fn evaluate_player(board: &Board, player: Player) -> f32 {
         let mut value: f32 = 0.;
-        for (x, y) in board.get_player_state(player).piece_locs.iter() {
+        for Coord(x, y) in board.get_player_state(player).piece_locs.iter() {
             let fy = *y as f32;
 
             if let Ok(Square::Occupied(piece, _)) = board.get_by_xy(*x, *y) {
@@ -99,11 +97,7 @@ impl Ai {
         );
         println!("m1/m2 {} {}", self.moves1.write_index, self.moves2.write_index);
 
-        for i in (0..self.moves2.write_index).rev() {
-            let m = self.moves2.get_v()[i];
-            println!("{}", m);
-        }
-        println!("");
+        self.moves2.print(0, self.moves2.write_index);
 
         let best_move_inner = best_move.borrow();
         if best_move_inner.best_move.is_none() {

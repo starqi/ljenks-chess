@@ -1,9 +1,8 @@
 mod board;
 mod ai;
 
-use crate::board::CastleUtils;
 use ai::{Ai};
-use board::{Board};
+use board::{MoveList, CastleUtils, Board};
 use std::{thread, io};
 use std::sync::{Arc};
 
@@ -16,6 +15,7 @@ fn main() {
     let mut ai = Ai::new();
     let mut y = String::new();
 
+    /*
     let counter_ref = Arc::clone(&ai.counter);
     thread::spawn(move || {
         let duration = std::time::Duration::from_secs(5);
@@ -27,10 +27,16 @@ fn main() {
             thread::sleep(duration);
         }
     });
+    */
+
+    //let mut temp_moves = MoveList::new(10);
+    //let mut moves_result = MoveList::new(10);
 
     loop {
         io::stdin().read_line(&mut y).expect("?");
+
         ai.make_move(&castle_utils, 3, &mut board);
+        //board.get_moves(&castle_utils, &mut temp_moves, &mut moves_result);
     }
 }
 
