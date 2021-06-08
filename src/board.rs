@@ -478,9 +478,9 @@ impl <'a> BasicMoveTest<'a> {
             if let Square::Occupied(_, angled_player) = self.data._get_by_xy(x_p_delta as u8, y_p_delta as u8) {
                 if angled_player != self.src_player {
                     if y == pre_promote_row {
-                        self.push(x + x_delta, y + y_delta, true, None, result);
-                    } else {
                         self.push_promotions(x + x_delta, y + y_delta, true, result);
+                    } else {
+                        self.push(x + x_delta, y + y_delta, true, None, result);
                     }
                 }
             }
