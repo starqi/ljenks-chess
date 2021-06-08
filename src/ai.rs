@@ -1,11 +1,10 @@
+use super::board::CastleUtils;
 use super::board::MoveSnapshot;
 use std::cell::{RefCell};
-use std::{thread, option_env};
-use std::collections::{HashSet};
-use rand::{ThreadRng, thread_rng, Rng};
-use super::board::{BasicMoveTest, Coord, Player, Board, MoveList, Piece, Square, xy_to_file_rank_safe};
+use rand::{ThreadRng, thread_rng};
+use super::board::{BasicMoveTest, Player, Board, MoveList, Piece, Square};
 use std::sync::{Mutex, Arc};
-use log::{debug, info, warn, error};
+use log::{info};
 
 #[derive(Default)]
 struct BestMove {
@@ -82,7 +81,7 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, depth: u8, real_board: &mut Board) {
+    pub fn make_move(&mut self, castle_utils: &CastleUtils, depth: u8, real_board: &mut Board) {
         *self.counter.lock().unwrap() = 0;
 
         self.test_board.clone_from(real_board);
@@ -90,6 +89,7 @@ impl Ai {
         self.moves2.write_index = 0;
         let best_move: RefCell<BestMove> = RefCell::new(Default::default());
         let evaluation = self.alpha_beta(
+            castle_utils,
             depth, 
             MIN_EVAL,
             MAX_EVAL,
@@ -110,7 +110,7 @@ impl Ai {
             println!("No moves, checkmate?");
         } else {
             println!("Best: {}", best_move_inner.best_move.unwrap());
-            real_board.make_move(&mut self.moves_buf, best_move_inner.move_list_index);
+            real_board.make_move(&self.moves_buf.get_v()[best_move_inner.move_list_index]);
         }
         println!("\n{}\n", real_board);
         println!("Eval = {}, moves len = {}", evaluation, self.moves_buf.get_v().len());
@@ -123,6 +123,7 @@ impl Ai {
     /// We have ownership over all move list elements from `moves_start`
     fn alpha_beta(
         &mut self,
+        castle_utils: &CastleUtils,
         depth: u8,
         alpha: f32,
         beta: f32,
@@ -137,18 +138,18 @@ impl Ai {
         let current_player = self.test_board.get_player_with_turn();
 
         let mut is_best_in_moves1 = true;
-        let mut best_move: Option<&MoveSnapshot> = None;
+        let mut best_move: Option<*const MoveSnapshot> = None;
         let mut best_min = MAX_EVAL;
 
-        let mut TODO = false;
+        let mut initialized_a_move = false;
 
         self.moves_buf.write_index = moves_start;
-        self.test_board.get_moves(&mut self.temp_moves_for_board, &mut self.moves_buf);
+        self.test_board.get_moves(castle_utils, &mut self.temp_moves_for_board, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
 
         for i in moves_start..moves_end_exclusive {
 
-            self.test_board.make_move(&mut self.moves_buf, i);
+            self.test_board.make_move(&self.moves_buf.get_v()[i]);
 
             let opponent_best_value: f32 = if depth > 0 {
 
@@ -171,7 +172,7 @@ impl Ai {
                     new_alpha = alpha;
                 }
 
-                self.alpha_beta(depth - 1, new_alpha, new_beta, moves_end_exclusive, !is_best_in_moves1, None)
+                self.alpha_beta(castle_utils, depth - 1, new_alpha, new_beta, moves_end_exclusive, !is_best_in_moves1, None)
             } else {
                 let mut counter = self.counter.lock().unwrap();
                 *counter += 1;
@@ -209,11 +210,12 @@ impl Ai {
                 }
                 is_best_in_moves1 = !is_best_in_moves1;
 
-                TODO = true;
+                initialized_a_move = true;
                 if let Some(a) = best_move_result {
                     let mut b = a.borrow_mut();
-                    let m = &self.moves_buf.get_v()[i];
-                    b.best_move = Some(*best_move.unwrap());
+                    unsafe {
+                        b.best_move = Some(*best_move.unwrap());
+                    }
                     b.move_list_index = i;
                 }
             } else {
@@ -224,7 +226,7 @@ impl Ai {
                 }
             }
 
-            self.test_board.undo_move(&mut self.moves_buf, i);
+            self.test_board.undo_move(&self.moves_buf.get_v()[i]);
 
             if current_player == Player::White {
                 let best_max = -best_min;
@@ -238,14 +240,18 @@ impl Ai {
             }
         }
 
-        if TODO {
+        if initialized_a_move {
             let eval = if current_player == Player::White { -best_min } else { best_min };
 
             if is_best_in_moves1 {
-                self.moves1.copy_and_write(best_move.unwrap());
+                unsafe {
+                    self.moves1.write(*best_move.unwrap());
+                }
                 self.moves2.write_index = node_start_moves2_index;
             } else {
-                self.moves2.copy_and_write(best_move.unwrap());
+                unsafe {
+                    self.moves2.write(*best_move.unwrap());
+                }
                 self.moves1.write_index = node_start_moves1_index;
             }
 

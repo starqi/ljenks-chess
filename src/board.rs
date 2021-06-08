@@ -6,8 +6,7 @@
 // TODO Panic if not causeable by user input
 
 use std::ops::Deref;
-use std::rc::Rc;
-use log::{debug, info, warn, error};
+use log::{debug};
 use std::iter::Iterator;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
@@ -115,7 +114,7 @@ impl Display for Piece {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 pub struct BeforeAfterSquares { 
     before: Square,
     after: Square
@@ -123,8 +122,11 @@ pub struct BeforeAfterSquares {
 
 pub type Eval = f32;
 type MoveSnapshotSquare = (Coord, BeforeAfterSquares);
-type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
+
 // Fairly small bounded size is useable for the most complex move which is castling
+type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
+
+#[derive(Copy, Clone)]
 pub struct MoveSnapshot(MoveSnapshotSquares, Eval);
 
 impl Deref for MoveSnapshot {
@@ -144,7 +146,7 @@ impl Default for MoveSnapshot {
 
 impl Display for MoveSnapshot {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-        let square_count = 0;
+        let mut square_count = 0;
         for sq in &self.0 {
             if sq.is_some() {
                 square_count += 1;
@@ -153,15 +155,15 @@ impl Display for MoveSnapshot {
 
         if square_count == 2 {
 
-            let arrival: Option<&MoveSnapshotSquare> = None;
-            let departed: Option<&MoveSnapshotSquare> = None;
-            let arrival_i: u8 = 0;
+            let mut arrival: Option<&MoveSnapshotSquare> = None;
+            let mut departed: Option<&MoveSnapshotSquare> = None;
+            let mut arrival_i: u8 = 0;
 
-            let i: u8 = 0;
+            let mut i: u8 = 0;
             for sq in &self.0 {
                 if let Some(sq2) = sq {
                     if let Square::Blank = sq2.1.after {
-                        if let Square::Occupied(piece, player) = sq2.1.before {
+                        if let Square::Occupied(_, _) = sq2.1.before {
                             arrival = Some(sq2);
                             arrival_i = i;
                             break;
@@ -183,7 +185,7 @@ impl Display for MoveSnapshot {
             }
 
             if arrival.is_some() && departed.is_some() {
-                departed.unwrap().1.before.fmt(f);
+                departed.unwrap().1.before.fmt(f)?;
                 return write!(f, " @ {:?} to {:?}, {}", departed.unwrap().0, arrival.unwrap().0, self.1);
             }
         } 
@@ -234,7 +236,7 @@ impl Display for Square {
             },
             Square::Occupied(piece, player) => {
                 let r = piece.custom_fmt(f, *player == Player::Black);
-                write!(f, " ");
+                write!(f, " ")?;
                 r
             }
         }
@@ -271,7 +273,7 @@ impl <'a> BasicMoveTest<'a> {
         can_capture_king: bool,
         result: &mut MoveList
     ) {
-        debug_assert!(src_x >= 0 && src_y >= 0 && src_x <= 7 && src_y <= 7);
+        debug_assert!(src_x <= 7 && src_y <= 7);
         let t = BasicMoveTest {
             src_x: src_x as i8, src_y: src_y as i8, src_piece, src_player, data, can_capture_king
         };
@@ -342,7 +344,7 @@ impl <'a> BasicMoveTest<'a> {
         let checked_player = checking_player.get_other_player();
 
         for i in candidates_start..candidates_end_exclusive {
-            real_board.make_move(candidates_and_buf, i);
+            real_board.make_move(&candidates_and_buf.v[i]);
 
             candidates_and_buf.write_index = candidates_end_exclusive;
             BasicMoveTest::fill_player(
@@ -358,7 +360,7 @@ impl <'a> BasicMoveTest<'a> {
                 result.write(safe_move);
             }
 
-            real_board.undo_move(candidates_and_buf, i);
+            real_board.undo_move(&candidates_and_buf.v[i]);
         }
     }
 
@@ -398,11 +400,11 @@ impl <'a> BasicMoveTest<'a> {
         replacement_piece: Option<Piece>
     ) -> MoveSnapshot {
         let mut m = MoveSnapshot::default();
-        m[0] = Some(((self.src_x as u8, self.src_y as u8), BeforeAfterSquares {
+        m.0[0] = Some(((self.src_x as u8, self.src_y as u8), BeforeAfterSquares {
             before: Square::Occupied(self.src_piece, self.src_player),
             after: Square::Blank
         }));
-        m[1] = Some(((dest_x, dest_y), BeforeAfterSquares {
+        m.0[1] = Some(((dest_x, dest_y), BeforeAfterSquares {
             before: existing_dest_square,
             after: Square::Occupied(replacement_piece.unwrap_or(self.src_piece), self.src_player)
         }));
@@ -526,22 +528,22 @@ impl <'a> BasicMoveTest<'a> {
 pub struct PlayerState {
     // TODO First thing to switch into bitboards
     pub piece_locs: HashSet<Coord>,
-    pub can_castle_oo: bool,
-    pub can_castle_ooo: bool
+    pub can_oo: bool,
+    pub can_ooo: bool
 }
 
 impl PlayerState {
     fn new() -> PlayerState {
         PlayerState {
             piece_locs: HashSet::new(),
-            can_castle_oo: true,
-            can_castle_ooo: true
+            can_oo: true,
+            can_ooo: true
         }
     }
 }
 
 /// Size 2 arrays are indexed by `Player` enum numbers
-struct CastleUtils {
+pub struct CastleUtils {
     oo_move_snapshots: [MoveSnapshot; 2],
     ooo_move_snapshots: [MoveSnapshot; 2],
     oo_king_traversal_sqs: [[Coord; 3]; 2],
@@ -572,12 +574,12 @@ impl CastleUtils {
         ], 0.);
     }
 
-    fn new() -> CastleUtils {
+    pub fn new() -> CastleUtils {
         let white_first_row = Player::get_first_row(Player::White);
         let black_first_row = Player::get_first_row(Player::Black);
 
         return CastleUtils {
-            oo_move_snapshots: [CastleUtils::get_ooo_move_snapshot_for_row(Player::White), CastleUtils::get_ooo_move_snapshot_for_row(Player::White)],
+            oo_move_snapshots: [CastleUtils::get_oo_move_snapshot_for_row(Player::White), CastleUtils::get_oo_move_snapshot_for_row(Player::White)],
             ooo_move_snapshots: [CastleUtils::get_ooo_move_snapshot_for_row(Player::Black), CastleUtils::get_ooo_move_snapshot_for_row(Player::Black)],
             oo_king_traversal_sqs: [
                 [(1, white_first_row), (2, white_first_row), (3, white_first_row)],
@@ -595,8 +597,7 @@ impl CastleUtils {
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
-    player_state: [PlayerState; 2],
-    castle_utils: Rc<CastleUtils>
+    player_state: [PlayerState; 2]
 }
 
 impl Display for Board {
@@ -616,8 +617,7 @@ impl Board {
         let mut board = Board {
             d: [Square::Blank; 64],
             player_with_turn: Player::White,
-            player_state: [PlayerState::new(), PlayerState::new()],
-            castle_utils: Rc::new(CastleUtils::new())
+            player_state: [PlayerState::new(), PlayerState::new()]
         };
         board.set_standard_rows();
         board
@@ -646,7 +646,7 @@ impl Board {
         self.set_by_xy(x, y, s);
     }
 
-    pub fn revert_move(&mut self, m: &MoveSnapshot) {
+    pub fn undo_move(&mut self, m: &MoveSnapshot) {
         for sq in m.iter() {
             if let Some(((x, y), before_after)) = sq {
                 self.set_by_xy(*x, *y, before_after.before);
@@ -654,36 +654,17 @@ impl Board {
         }
     }
 
-    pub fn apply_move(&mut self, m: &MoveSnapshot) {
+    pub fn make_move(&mut self, m: &MoveSnapshot) {
         for sq in m.iter() {
             if let Some(((x, y), before_after)) = sq {
                 self.set_by_xy(*x, *y, before_after.after);
             }
         }
-    }
-
-    pub fn undo_move(&mut self, moves: &MoveList, index: usize) {
-        let m = moves.v[index];
-        for square_holder in m.iter() {
-            if let Some(((x, y), before_after)) = square_holder {
-                self.set_by_xy(*x, *y, before_after.before);
-            }
-        }
-    }
-
-    pub fn make_move(&mut self, moves: &MoveList, index: usize) {
-        let m = moves.v[index];
-        for square_holder in m.iter() {
-            if let Some(((x, y), before_after)) = square_holder {
-                self.set_by_xy(*x, *y, before_after.after);
-            }
-        }
-
         self.player_with_turn = self.player_with_turn.get_other_player();
     }
 
     /// Gets the final set of legal moves
-    pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
+    pub fn get_moves(&mut self, castle_utils: &CastleUtils, temp_moves: &mut MoveList, result: &mut MoveList) {
         temp_moves.write_index = 0;
         BasicMoveTest::fill_player(self.player_with_turn, self, false, temp_moves);
         BasicMoveTest::filter_check_threats(
@@ -695,21 +676,24 @@ impl Board {
             result
         );
 
-        // Rewriting temp moves from 0 now
-        let player_state = self.get_player_state(self.player_with_turn);
-        if player_state.can_castle_oo {
+        let (can_oo, can_ooo) = {
+            let ps = self.get_player_state(self.player_with_turn);
+            (ps.can_oo, ps.can_ooo)
+        };
+
+        if can_oo {
             self.push_castle(
-                &self.castle_utils.oo_king_traversal_sqs[self.player_with_turn as usize],
-                &self.castle_utils.oo_move_snapshots[self.player_with_turn as usize],
+                &castle_utils.oo_king_traversal_sqs[self.player_with_turn as usize],
+                &castle_utils.oo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
                 temp_moves,
                 result
             );
         }
-        if player_state.can_castle_ooo {
+        if can_ooo {
             self.push_castle(
-                &self.castle_utils.ooo_king_traversal_sqs[self.player_with_turn as usize],
-                &self.castle_utils.ooo_move_snapshots[self.player_with_turn as usize],
+                &castle_utils.ooo_king_traversal_sqs[self.player_with_turn as usize],
+                &castle_utils.ooo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
                 temp_moves,
                 result
