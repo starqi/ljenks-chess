@@ -1,7 +1,8 @@
 TODO
 
-- Seeing AI capture own pieces...
+- Seeing AI capture own pieces?
 - Finish castling
 - En passant + old board state
-- Fix until back to original
-- Project structue
+- Can only apply moves from an internal move list 
+- Add console.log support
+- Investigate Webpack Wasm generation

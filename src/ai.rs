@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::cell::{RefCell};
 use super::game::coords::*;
 use super::game::move_list::*;
@@ -5,12 +6,6 @@ use super::game::board::*;
 use super::game::castle_utils::*;
 use super::game::entities::*;
 use super::game::basic_move_test::*;
-
-#[derive(Default)]
-struct BestMove {
-    best_move: Option<MoveSnapshot>,
-    move_list_index: usize
-}
 
 pub struct Ai {
     moves_buf: MoveList,
@@ -21,13 +16,12 @@ pub struct Ai {
 }
 
 static MAX_EVAL: f32 = 9000.;
-static MIN_EVAL: f32 = -MAX_EVAL;
 
 impl Ai {
 
-    pub fn evaluate_player(board: &Board, player: Player) -> f32 {
+    pub fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_white_else_zero: f32, locs: &HashSet<Coord>) -> f32 {
         let mut value: f32 = 0.;
-        for Coord(x, y) in board.get_player_state(player).piece_locs.iter() {
+        for Coord(x, y) in locs.iter() {
             let fy = *y as f32;
 
             if let Square::Occupied(piece, _) = board.get_by_xy(*x, *y) {
@@ -45,26 +39,20 @@ impl Ai {
                 value += piece_value;
                 value += match piece {
                     Piece::Pawn => {
-                        let x = match player {
-                            Player::White => 7. - fy,
-                            Player::Black => fy
-                        };
-                        x * x * 0.075
+                        seven_if_white_else_zero + neg_one_if_white_else_one * fy * 0.1
                     },
                     _ => {
-                        0.3 * (3.5 - unadvanced)
+                        0.1 * (3.5 - unadvanced)
                     }
                 };
             }
         }
-        if player == Player::Black {
-            value *= -1.;
-        }
-        value
+        value * neg_one_if_white_else_one as f32 * -1.
     }
 
     pub fn evaluate(board: &Board) -> f32 {
-        Ai::evaluate_player(board, Player::Black) + Ai::evaluate_player(board, Player::White)
+        Ai::evaluate_player(board, 1., 0., &board.get_player_state(Player::Black).piece_locs) +
+            Ai::evaluate_player(board, -1., 7., &board.get_player_state(Player::White).piece_locs)
     }
 
     pub fn new() -> Ai {
@@ -82,55 +70,51 @@ impl Ai {
         self.test_board.clone_from(real_board);
         self.moves1.write_index = 0;
         self.moves2.write_index = 0;
-        let best_move: RefCell<BestMove> = RefCell::new(Default::default());
-        let evaluation = self.alpha_beta(
+
+        let m = self.test_board.get_player_with_turn().get_multiplier();
+        let evaluation = m * self.alpha_beta(
             castle_utils,
             depth, 
-            MIN_EVAL,
+            -MAX_EVAL,
             MAX_EVAL,
             0,
-            false,
-            Some(&best_move)
+            false
         );
         println!("m1/m2 {} {}", self.moves1.write_index, self.moves2.write_index);
 
         self.moves2.print(0, self.moves2.write_index);
 
-        let best_move_inner = best_move.borrow();
-        if best_move_inner.best_move.is_none() {
+        if self.moves2.write_index <= 0 {
             println!("No moves, checkmate?");
         } else {
-            println!("Best: {}", best_move_inner.best_move.unwrap());
-            real_board.make_move(&self.moves_buf.get_v()[best_move_inner.move_list_index]);
+            let best_move = &self.moves2.get_v()[self.moves2.write_index - 1];
+            println!("Best: {}", best_move);
+            real_board.make_move(best_move);
         }
         println!("\n{}\n", real_board);
         println!("Eval = {}, moves len = {}", evaluation, self.moves_buf.get_v().len());
     }
 
     // TODO Try observing iterative deepening on 2 Q vs 1 K because large space
-    // FIXME Need to output principle path or at least length to tie break quicker mates, so you don't infinitely chase after the longer one
-    // FIXME Check detection if no moves to distinguish stalemate
-    // TODO Both players are maximizing
     /// We have ownership over all move list elements from `moves_start`
     fn alpha_beta(
         &mut self,
         castle_utils: &CastleUtils,
-        depth: u8,
-        alpha: f32,
+        remaining_depth: u8,
+        mut alpha: f32,
         beta: f32,
         moves_start: usize,
-        use_moves1_as_trace_result: bool,
-        best_move_result: Option<&RefCell<BestMove>>
+        use_moves1_as_trace_result: bool
     ) -> f32 {
 
         let node_start_moves1_index = self.moves1.write_index;
         let node_start_moves2_index = self.moves2.write_index;
 
         let current_player = self.test_board.get_player_with_turn();
+        let opponent = current_player.get_other_player();
 
         let mut is_best_in_moves1 = true;
         let mut best_move: Option<*const MoveSnapshot> = None;
-        let mut best_min = MAX_EVAL;
 
         let mut initialized_a_move = false;
 
@@ -141,55 +125,32 @@ impl Ai {
         for i in moves_start..moves_end_exclusive {
 
             self.test_board.make_move(&self.moves_buf.get_v()[i]);
-
-            let opponent_best_value: f32 = if depth > 0 {
-
-                let new_alpha: f32;
-                let new_beta: f32;
-
-                if current_player == Player::White {
-                    new_beta = beta;
-                    new_alpha = if -best_min > alpha {
-                        -best_min
-                    } else {
-                        alpha
-                    }
-                } else {
-                    new_beta = if best_min < beta {
-                        best_min
-                    } else {
-                        beta
-                    };
-                    new_alpha = alpha;
-                }
-
-                self.alpha_beta(castle_utils, depth - 1, new_alpha, new_beta, moves_end_exclusive, !is_best_in_moves1, None)
+            let max_this: f32 = if remaining_depth > 0 {
+                -self.alpha_beta(castle_utils, remaining_depth - 1, -beta, -alpha, moves_end_exclusive, !is_best_in_moves1)
             } else {
-                Ai::evaluate(&self.test_board)
+                // eg. Black is the opponent, we are white -> 1.0 multiplier -> prefer higher evaluations 
+                -opponent.get_multiplier() * Ai::evaluate(&self.test_board)
             };
+            self.test_board.undo_move(&self.moves_buf.get_v()[i]);
 
-            // Turn maximizing player into minimization problem
-            let mut value_to_minimize = if current_player == Player::White {
-                opponent_best_value * -1.
-            } else {
-                opponent_best_value
-            };
-
-            if value_to_minimize == MIN_EVAL {
-                let l = if is_best_in_moves1 {
-                    self.moves2.write_index - node_start_moves2_index
-                } else {
-                    self.moves1.write_index - node_start_moves1_index
-                };
-                value_to_minimize += l as f32;
-            }
-
-            // Must be <= to always set move if one exists
-            if value_to_minimize <= best_min {
+            // Remember: If moves are equal, then act as if candidate is inferior, to save computation
+            if max_this >= beta {
+                return beta;
+            } else if max_this > alpha { // Must be >= to always set move if one exists FIXME ??????????????
                 let m = &self.moves_buf.get_v()[i];
 
-                best_min = value_to_minimize;
+                alpha = max_this;
                 best_move = Some(m);
+
+                // Devalue forced mate based on # of moves to do it
+                if alpha == MAX_EVAL {
+                    let l = if is_best_in_moves1 {
+                        self.moves2.write_index - node_start_moves2_index
+                    } else {
+                        self.moves1.write_index - node_start_moves1_index
+                    };
+                    alpha -= l as f32;
+                }
 
                 if is_best_in_moves1 {
                     self.moves1.write_index = node_start_moves1_index;
@@ -199,13 +160,6 @@ impl Ai {
                 is_best_in_moves1 = !is_best_in_moves1;
 
                 initialized_a_move = true;
-                if let Some(a) = best_move_result {
-                    let mut b = a.borrow_mut();
-                    unsafe {
-                        b.best_move = Some(*best_move.unwrap());
-                    }
-                    b.move_list_index = i;
-                }
             } else {
                 if is_best_in_moves1 {
                     self.moves2.write_index = node_start_moves2_index;
@@ -213,24 +167,9 @@ impl Ai {
                     self.moves1.write_index = node_start_moves1_index;
                 }
             }
-
-            self.test_board.undo_move(&self.moves_buf.get_v()[i]);
-
-            if current_player == Player::White {
-                let best_max = -best_min;
-                if best_max >= beta {
-                    break;
-                }
-            } else {
-                if best_min <= alpha {
-                    break;
-                }
-            }
         }
 
         if initialized_a_move {
-            let eval = if current_player == Player::White { -best_min } else { best_min };
-
             if is_best_in_moves1 {
                 unsafe {
                     self.moves1.write(*best_move.unwrap());
@@ -257,16 +196,16 @@ impl Ai {
                 }
             }
 
-            eval
+            alpha
         } else {
             println!("... Potentially no moves for {:?}: \n\n{}\n", current_player, self.test_board);
 
             self.moves_buf.write_index = moves_start;
             BasicMoveTest::fill_player(current_player.get_other_player(), &self.test_board, true, &mut self.moves_buf);
             if BasicMoveTest::has_king_capture_move(&self.moves_buf, moves_start, self.moves_buf.write_index, current_player) {
-                if current_player == Player::White { MIN_EVAL } else { MAX_EVAL }
+                -MAX_EVAL
             } else {
-                0. 
+                0. // Stalemate
             }
         }
     }

@@ -31,25 +31,31 @@ impl Display for Piece {
     }
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Player { 
     White = 0, Black
 }
 
+static player_to_other_player: [Player; 2] = [Player::Black, Player::White];
+static player_to_multiplier: [f32; 2] = [1., -1.];
+static player_to_first_row: [u8; 2] = [7, 1];
+
 impl Player {
-    pub fn get_other_player(&self) -> Player {
-        match self {
-            Player::Black => Player::White,
-            Player::White => Player::Black
-        }
+
+    #[inline]
+    pub fn get_other_player(self) -> Player {
+        player_to_other_player[self as usize]
     }
 
+    #[inline]
     pub fn get_first_row(self) -> u8 {
-        if self == Player::White {
-            7
-        } else {
-            1
-        }
+        player_to_first_row[self as usize]
+    }
+
+    #[inline]
+    pub fn get_multiplier(self) -> f32 {
+        player_to_multiplier[self as usize]
     }
 }
 

@@ -94,10 +94,12 @@ impl MoveList {
         }
     }
 
+    #[inline]
     pub fn get_v(&self) -> &Vec<MoveSnapshot> {
         &self.v
     }
 
+    #[inline]
     pub fn copy_and_write(&mut self, board_subset: &MoveSnapshot) {
         self.write(*board_subset);
     }
@@ -128,6 +130,7 @@ impl MoveList {
         };
 
         println!("[Moves, {}-{}]", start, end_exclusive);
+        // TODO Minor: Optional rev, for principal variation
         for i in (start..end_exclusive).rev() {
             println!("{}", self.v[i]);
         }

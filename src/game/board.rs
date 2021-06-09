@@ -1,9 +1,3 @@
-// TODO Should be able to castle if king path is not blocked, currently cares about whole covered path
-// TODO King, en passante, promotion, castle, castle block
-// TODO Rust review - closure types, references to closure types, lifetimes, '_, for loop iter, into_iter, slices, Ref being auto cast
-// TODO Split modules, currently too much access between classes
-// TODO File, rank conversion spam
-// TODO Panic if not causeable by user input
 
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
