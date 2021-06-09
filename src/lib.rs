@@ -32,7 +32,7 @@ impl Main {
     }
 
     pub fn make_move(&mut self) {
-        self.ai.make_move(&self.castle_utils, 3, &mut self.board);
+        self.ai.make_move(&self.castle_utils, 1, &mut self.board);
     }
 
     pub fn get_piece(&self, x: i32, y: i32) -> i8 {

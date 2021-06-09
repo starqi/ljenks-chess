@@ -39,10 +39,10 @@ impl Ai {
                 value += piece_value;
                 value += match piece {
                     Piece::Pawn => {
-                        seven_if_white_else_zero + neg_one_if_white_else_one * fy * 0.1
+                        seven_if_white_else_zero + neg_one_if_white_else_one * fy * 0.3
                     },
                     _ => {
-                        0.1 * (3.5 - unadvanced)
+                        0.3 * (3.5 - unadvanced)
                     }
                 };
             }
