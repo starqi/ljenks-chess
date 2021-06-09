@@ -1,5 +1,10 @@
 use std::cell::{RefCell};
-use super::board::{Coord, CastleUtils, MoveSnapshot, BasicMoveTest, Player, Board, MoveList, Piece, Square};
+use super::game::coords::*;
+use super::game::move_list::*;
+use super::game::board::*;
+use super::game::castle_utils::*;
+use super::game::entities::*;
+use super::game::basic_move_test::*;
 
 #[derive(Default)]
 struct BestMove {
@@ -25,7 +30,7 @@ impl Ai {
         for Coord(x, y) in board.get_player_state(player).piece_locs.iter() {
             let fy = *y as f32;
 
-            if let Ok(Square::Occupied(piece, _)) = board.get_by_xy(*x, *y) {
+            if let Square::Occupied(piece, _) = board.get_by_xy(*x, *y) {
 
                 let unadvanced = (3.5 - fy).abs();
 
@@ -259,22 +264,9 @@ impl Ai {
             self.moves_buf.write_index = moves_start;
             BasicMoveTest::fill_player(current_player.get_other_player(), &self.test_board, true, &mut self.moves_buf);
             if BasicMoveTest::has_king_capture_move(&self.moves_buf, moves_start, self.moves_buf.write_index, current_player) {
-                // FIXME
-                /*
-            for i in moves_start..self.moves_buf.write_index {
-                let m = self.moves_buf.get_v()[i];
-                BasicMoveTest::has_king_capture_move()
-                if let Square::Occupied(piece, player) = self.test_board._get_by_xy(dest_x, dest_y) {
-                    if piece == Piece::King && player == current_player {
-                        king_is_safe = false;
-                    }
-                }
-            }
-            */
-
-                0. 
-            } else {
                 if current_player == Player::White { MIN_EVAL } else { MAX_EVAL }
+            } else {
+                0. 
             }
         }
     }
