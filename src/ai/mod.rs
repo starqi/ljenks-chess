@@ -38,19 +38,24 @@ impl Ai {
         if moves_end_exclusive == 0 {
             console_log!("No legal moves");
         } else {
-            for i in 0..moves_end_exclusive {
-                self.test_board.make_move(&self.moves_buf.get_v()[i]);
-                let evaluation_as_maximizer = -self.negamax(
-                    castle_utils,
-                    depth - 2, 
-                    -MAX_EVAL,
-                    MAX_EVAL,
-                    moves_end_exclusive
-                );
-                self.moves_buf.get_mutable_snapshot(i).1 = evaluation_as_maximizer;
-                self.test_board.undo_move(&self.moves_buf.get_v()[i]);
+            let real_depth = depth - 2;
+            for d in 0..real_depth {
+                for i in (0..moves_end_exclusive).rev() {
+                    self.test_board.make_move(&self.moves_buf.get_v()[i]);
+                    let evaluation_as_maximizer = -self.negamax(
+                        castle_utils,
+                        d,
+                        -MAX_EVAL,
+                        MAX_EVAL,
+                        moves_end_exclusive
+                    );
+                    self.moves_buf.get_mutable_snapshot(i).1 = evaluation_as_maximizer;
+                    self.test_board.undo_move(&self.moves_buf.get_v()[i]);
+                }
+                self.moves_buf.sort_subset(0, moves_end_exclusive);
+                let leading_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
+                console_log!("Leading move: {}", leading_move);
             }
-            self.moves_buf.sort_subset(0, moves_end_exclusive);
             self.moves_buf.print(0, moves_end_exclusive);
             let best_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
             console_log!("Making move: {}", best_move);

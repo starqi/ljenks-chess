@@ -72,15 +72,19 @@ class Board {
             image.style.visibility = 'hidden';
         }
     }
+
+    updateFromWasm() {
+        for (let i = 0; i < 8; ++i) {
+            for (let j = 0; j < 8; ++j) {
+                this.setSquareFromWasm(j, i);
+            }
+        }
+    }
 }
 
 const board = new Board();
+board.updateFromWasm();
 setInterval(() => {
     board.main.make_move();
-
-    for (let i = 0; i < 8; ++i) {
-        for (let j = 0; j < 8; ++j) {
-            board.setSquareFromWasm(j, i);
-        }
-    }
+    board.updateFromWasm();
 }, 1000);
