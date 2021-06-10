@@ -1,10 +1,8 @@
 TODO
 
-- Negamax makes no sense with old ideas 
-    - Moves are not necessarily found, you would then assume stalemate...
-    - Or every move is bad, yet you'll always select the last shit move with no distinction...
-    - Extra run to print PV, delete
-
+- unsafe sort is crashing
+- Extra run to print PV, delete
+- Devalue forced mate based on # of moves to do it
 - Seeing AI capture own pieces?
 - Finish castling
 - En passant + old board state

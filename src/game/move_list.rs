@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt::{Error as FmtError, Display, Formatter};
 use std::ops::Deref;
 use super::coords::*;
@@ -14,6 +15,31 @@ pub type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
 
 #[derive(Copy, Clone)]
 pub struct MoveSnapshot(pub MoveSnapshotSquares, pub Eval);
+
+impl PartialEq for MoveSnapshot {
+    fn eq(&self, other: &MoveSnapshot) -> bool {
+        self.1 == other.1
+    }
+}
+
+impl PartialOrd for MoveSnapshot {
+    fn partial_cmp(&self, other: &MoveSnapshot) -> Option<Ordering> {
+        self.1.partial_cmp(&other.1)
+    }
+}
+
+impl Eq for MoveSnapshot {}
+
+impl Ord for MoveSnapshot {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.1 == other.1 {
+            // Allowing float equality comparison makes no difference here
+            Ordering::Equal
+        } else {
+            self.1.partial_cmp(&other.1).unwrap()
+        }
+    }
+}
 
 impl Deref for MoveSnapshot {
     type Target = MoveSnapshotSquares;
@@ -95,6 +121,11 @@ impl MoveList {
     }
 
     #[inline]
+    pub fn get_mutable_snapshot(&mut self, i: usize) -> &mut MoveSnapshot {
+        &mut self.v[i]
+    }
+
+    #[inline]
     pub fn get_v(&self) -> &Vec<MoveSnapshot> {
         &self.v
     }
@@ -119,7 +150,10 @@ impl MoveList {
     }
 
     pub fn sort_subset(&mut self, start: usize, end_exclusive: usize) {
-
+        unsafe {
+            let mut v = Vec::from_raw_parts(&mut self.v[start] as *mut MoveSnapshot, end_exclusive - start, end_exclusive - start);
+            v.sort_unstable();
+        }
     }
 
     pub fn print(&self, start: usize, _end_exclusive: usize) {
