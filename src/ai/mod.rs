@@ -11,7 +11,8 @@ pub struct Ai {
     test_board: Board,
     temp_moves_for_board: MoveList,
     memo: HashMap<i128, EvaluationAndDepth>,
-    memo_hits: usize
+    memo_hits: usize,
+    fast_found_hits: usize
 }
 
 struct EvaluationAndDepth(f32, u8);
@@ -27,7 +28,8 @@ impl Ai {
             test_board: Board::new(),
             temp_moves_for_board: MoveList::new(50),
             memo: HashMap::new(),
-            memo_hits: 0
+            memo_hits: 0,
+            fast_found_hits: 0
         }
     }
 
@@ -69,7 +71,9 @@ impl Ai {
             console_log!("\n{}\n", real_board);
             console_log!("{}", evaluation::evaluate(real_board));
             console_log!("{}", real_board.as_number());
-            console_log!("Memo hits - {}, size - {}", self.memo_hits, self.memo.len());
+            console_log!("Memo hits - {}, size - {}, fast found - {}", self.memo_hits, self.memo.len(), self.fast_found_hits);
+            self.memo_hits = 0;
+            self.fast_found_hits = 0;
             self.memo.clear();
         }
     }
@@ -94,6 +98,7 @@ impl Ai {
         self.moves_buf.write_index = moves_start;
         self.test_board.get_moves(castle_utils, &mut self.temp_moves_for_board, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
+        let mut one_between_node_found = false;
 
         for i in moves_start..moves_end_exclusive {
 
@@ -107,13 +112,35 @@ impl Ai {
                 }
             }
 
-            let max_this: f32 = if let Some(EvaluationAndDepth(saved_eval, _)) = memo {
+            let max_this: f32 = if let Some(EvaluationAndDepth(saved_max_this, _)) = memo {
                 self.memo_hits += 1;
-                *saved_eval
+                *saved_max_this
             } else {
-                let r = -self.negamax(castle_utils, remaining_depth - 1, -beta, -alpha, moves_end_exclusive);
-                self.memo.insert(as_num, EvaluationAndDepth(r, remaining_depth - 1));
-                r
+
+                let mut fast_found_max_this = 0.0f32;
+                let mut fast_found = false;
+
+                if one_between_node_found {
+                    fast_found_max_this = -self.negamax(castle_utils, remaining_depth - 1, -alpha - 1., -alpha, moves_end_exclusive);
+                    if fast_found_max_this <= alpha {
+                        fast_found = true;
+                        self.fast_found_hits += 1;
+                    }
+                } 
+
+                if fast_found {
+                    fast_found_max_this
+                } else {
+                    let a = -beta;
+                    let b = -alpha;
+                    let eval = self.negamax(castle_utils, remaining_depth - 1, a, b, moves_end_exclusive);
+                    let _max_this = -eval;
+                    if eval > a && eval < b {
+                        // Only save exact evals
+                        self.memo.insert(as_num, EvaluationAndDepth(_max_this, remaining_depth - 1));
+                    }
+                    _max_this
+                }
             };
 
             self.test_board.undo_move(&self.moves_buf.get_v()[i]);
@@ -122,6 +149,7 @@ impl Ai {
                 return beta;
             } else if max_this > alpha {
                 alpha = max_this;
+                one_between_node_found = true;
             }
         }
 
