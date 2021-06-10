@@ -3,9 +3,9 @@ use super::super::game::entities::*;
 use super::super::game::coords::*;
 use super::super::game::board::*;
 
-pub fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_white_else_zero: f32, locs: &HashSet<Coord>) -> f32 {
+pub fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_white_else_zero: f32, ps: &PlayerState) -> f32 {
     let mut value: f32 = 0.;
-    for Coord(x, y) in locs.iter() {
+    for Coord(x, y) in ps.piece_locs.iter() {
         let fy = *y as f32;
 
         if let Square::Occupied(piece, _) = board.get_by_xy(*x, *y) {
@@ -31,10 +31,12 @@ pub fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_w
             };
         }
     }
+    if ps.castled_somewhere { value += 1.5; }
     value * neg_one_if_white_else_one as f32 * -1.
 }
 
 pub fn evaluate(board: &Board) -> f32 {
-    evaluate_player(board, 1., 0., &board.get_player_state(Player::Black).piece_locs) +
-        evaluate_player(board, -1., 7., &board.get_player_state(Player::White).piece_locs)
+    let white_s = &board.get_player_state(Player::White);
+    let black_s = &board.get_player_state(Player::Black);
+    evaluate_player(board, 1., 0., black_s) + evaluate_player(board, -1., 7., white_s)
 }

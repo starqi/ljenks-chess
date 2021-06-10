@@ -119,7 +119,15 @@ impl <'a> BasicMoveTest<'a> {
 
     /// `can_capture` - eg. Pawn cannot capture forwards
     /// Returns whether a move was added, and when applicable, whether the search along the same line should be terminated
-    fn push(&self, test_dest_x: i8, test_dest_y: i8, can_capture: bool, replacement_piece: Option<Piece>, result: &mut MoveList) -> (bool, bool) {
+    fn push(
+        &self,
+        test_dest_x: i8,
+        test_dest_y: i8,
+        can_capture: bool,
+        replacement_piece: Option<Piece>,
+        result: &mut MoveList
+    ) -> (bool, bool) {
+
         if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 { 
             return (false, true); 
         }
@@ -145,6 +153,7 @@ impl <'a> BasicMoveTest<'a> {
         return (moveable, terminate);
     }
 
+    /// Precondition: We have decided that this move is allowed, eg. finished evaluating ability to capture own pieces
     fn make_move_snapshot(
         &self,
         dest_x: u8,
@@ -153,14 +162,34 @@ impl <'a> BasicMoveTest<'a> {
         replacement_piece: Option<Piece>
     ) -> MoveSnapshot {
         let mut m = MoveSnapshot::default();
+
         m.0[0] = Some((Coord(self.src_x as u8, self.src_y as u8), BeforeAfterSquares(
             Square::Occupied(self.src_piece, self.src_player),
             Square::Blank
         )));
+
         m.0[1] = Some((Coord(dest_x, dest_y), BeforeAfterSquares(
             existing_dest_square,
             Square::Occupied(replacement_piece.unwrap_or(self.src_piece), self.src_player)
         )));
+
+        let mut first_prevented_oo = false; 
+        let mut first_prevented_ooo = false;
+        let player_state = self.data.get_player_state(self.src_player);
+        if self.src_piece == Piece::Rook {
+            first_prevented_oo = self.src_x == 7 && !player_state.moved_oo_piece;
+            first_prevented_ooo = self.src_x == 0 && !player_state.moved_ooo_piece;
+        } else if self.src_piece == Piece::King {
+            first_prevented_oo = !player_state.moved_oo_piece;
+            first_prevented_ooo = !player_state.moved_ooo_piece;
+        }
+
+        m.2 = if let Square::Occupied(_, _) = existing_dest_square {
+            MoveDescription::Capture(first_prevented_oo, first_prevented_ooo)
+        } else {
+            MoveDescription::Move(first_prevented_oo, first_prevented_ooo)
+        };
+
         return m;
     }
 

@@ -5,6 +5,16 @@ use super::coords::*;
 use super::entities::*;
 use crate::{console_log};
 
+/// (bool, bool) means (first to prevent oo, first to prevent ooo)
+#[derive(Copy, Clone)]
+pub enum MoveDescription {
+    Capture(bool, bool),
+    Move(bool, bool),
+    Oo,
+    Ooo,
+    Special
+}
+
 #[derive(Default, Copy, Clone)]
 pub struct BeforeAfterSquares(pub Square, pub Square);
 
@@ -15,7 +25,7 @@ pub type MoveSnapshotSquare = (Coord, BeforeAfterSquares);
 pub type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
 
 #[derive(Copy, Clone)]
-pub struct MoveSnapshot(pub MoveSnapshotSquares, pub Eval);
+pub struct MoveSnapshot(pub MoveSnapshotSquares, pub Eval, pub MoveDescription);
 
 impl PartialEq for MoveSnapshot {
     fn eq(&self, other: &MoveSnapshot) -> bool {
@@ -53,56 +63,67 @@ impl Deref for MoveSnapshot {
 
 impl Default for MoveSnapshot {
     fn default() -> MoveSnapshot {
-        MoveSnapshot([None; 5], 0.)
+        MoveSnapshot([None; 5], 0., MoveDescription::Special)
     }
 }
 
 impl Display for MoveSnapshot {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        let mut square_count = 0;
-        for sq in &self.0 {
-            if sq.is_some() {
-                square_count += 1;
-            }
-        }
+        match self.2 {
+            MoveDescription::Capture(poo, pooo) | MoveDescription::Move(poo, pooo) => {
 
-        if square_count == 2 {
+                let mut arrival: Option<&MoveSnapshotSquare> = None;
+                let mut departed: Option<&MoveSnapshotSquare> = None;
+                let mut departed_i: u8 = 0;
 
-            let mut arrival: Option<&MoveSnapshotSquare> = None;
-            let mut departed: Option<&MoveSnapshotSquare> = None;
-            let mut departed_i: u8 = 0;
-
-            let mut i: u8 = 0;
-            for sq in &self.0 {
-                if let Some(k@(_, BeforeAfterSquares(Square::Occupied(_, _), Square::Blank))) = sq {
-                    departed = Some(k);
-                    departed_i = i;
-                    break;
-                }
-                i += 1;
-            }
-
-            if departed.is_some() {
-                i = 0;
+                let mut i: u8 = 0;
                 for sq in &self.0 {
-                    if i != departed_i {
-                        if let Some(sq2) = sq {
-                            arrival = Some(sq2);
-                            break;
-                        }
+                    if let Some(k@(_, BeforeAfterSquares(Square::Occupied(_, _), Square::Blank))) = sq {
+                        departed = Some(k);
+                        departed_i = i;
+                        break;
                     }
                     i += 1;
                 }
-            }
 
-            if let Some((arrival_coord, BeforeAfterSquares(_, after))) = arrival {
-                if let Some((departed_coord, _)) = departed {
-                    return write!(f, "{}@ {} to {} ({})", after, departed_coord, arrival_coord, self.1);
+                if departed.is_some() {
+                    i = 0;
+                    for sq in &self.0 {
+                        if i != departed_i {
+                            if let Some(sq2) = sq {
+                                arrival = Some(sq2);
+                                break;
+                            }
+                        }
+                        i += 1;
+                    }
                 }
-            }
-        } 
 
-        write!(f, "Special move involving {} squares, {}", square_count, self.1)
+                if let Some((arrival_coord, BeforeAfterSquares(_, after))) = arrival {
+                    if let Some((departed_coord, _)) = departed {
+                        write!(f, "{}@ {} to {} ({})", after, departed_coord, arrival_coord, self.1)?;
+                        if poo {
+                            write!(f, " [oox]")?;
+                        }
+                        if pooo {
+                            write!(f, " [ooox]")?;
+                        }
+                        return Ok(());
+                    }
+                }
+
+                write!(f, "Error: Broken capture/move... ({})", self.1)
+            },
+            MoveDescription::Oo => {
+                write!(f, "oo ({})", self.1)
+            },
+            MoveDescription::Ooo => {
+                write!(f, "ooo ({})", self.1)
+            },
+            _ => {
+                write!(f, "Special move?... ({})", self.1)
+            }
+        }
     }
 }
 

@@ -39,7 +39,7 @@ pub enum Player {
 
 static PLAYER_TO_OTHER_PLAYER: [Player; 2] = [Player::Black, Player::White];
 static PLAYER_TO_MULTIPLIER: [f32; 2] = [1., -1.];
-static PLAYER_TO_FIRST_ROW: [u8; 2] = [7, 1];
+static PLAYER_TO_FIRST_ROW: [u8; 2] = [7, 0];
 
 impl Player {
 

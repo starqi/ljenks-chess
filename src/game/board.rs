@@ -11,16 +11,18 @@ use super::basic_move_test::*;
 pub struct PlayerState {
     // TODO First thing to switch into bitboards
     pub piece_locs: HashSet<Coord>,
-    pub can_oo: bool,
-    pub can_ooo: bool
+    pub moved_oo_piece: bool,
+    pub moved_ooo_piece: bool,
+    pub castled_somewhere: bool
 }
 
 impl PlayerState {
     fn new() -> PlayerState {
         PlayerState {
             piece_locs: HashSet::new(),
-            can_oo: true,
-            can_ooo: true
+            moved_oo_piece: false,
+            moved_ooo_piece: false,
+            castled_somewhere: false
         }
     }
 }
@@ -127,6 +129,8 @@ impl Board {
                 self.set_by_xy(*x, *y, before_after.0);
             }
         }
+        let player_state = self.get_player_state_mut(self.player_with_turn.get_other_player());
+        Self::update_castle_state_based_on_move(m, player_state, false);
         self.player_with_turn = self.player_with_turn.get_other_player();
     }
 
@@ -136,7 +140,33 @@ impl Board {
                 self.set_by_xy(*x, *y, before_after.1);
             }
         }
+        let player_state = self.get_player_state_mut(self.player_with_turn);
+        Self::update_castle_state_based_on_move(m, player_state, true);
         self.player_with_turn = self.player_with_turn.get_other_player();
+    }
+
+    fn update_castle_state_based_on_move(m: &MoveSnapshot, player_state: &mut PlayerState, b: bool) {
+        match m.2 {
+            MoveDescription::Ooo | MoveDescription::Oo => {
+                player_state.castled_somewhere = b;
+                player_state.moved_oo_piece = b;
+                player_state.moved_ooo_piece = b;
+            },
+            _ => {
+                match m.2 {
+                    MoveDescription::Capture(true, _) | MoveDescription::Move(true, _) => {
+                        player_state.moved_oo_piece = b;
+                    },
+                    _ => ()
+                };
+                match m.2 {
+                    MoveDescription::Capture(_, true) | MoveDescription::Move(_, true) => {
+                        player_state.moved_ooo_piece = b;
+                    },
+                    _ => ()
+                };
+            }
+        };
     }
 
     /// Gets the final set of legal moves
@@ -152,15 +182,13 @@ impl Board {
             result
         );
 
-        // TODO Orig position check
-        /*
-        let (can_oo, can_ooo) = {
+        let (moved_oo_piece, moved_ooo_piece) = {
             let ps = self.get_player_state(self.player_with_turn);
-            (ps.can_oo, ps.can_ooo)
+            (ps.moved_oo_piece, ps.moved_ooo_piece)
         };
 
-        if can_oo {
-            self.push_castle(
+        if !moved_oo_piece {
+            self.try_push_castle(
                 &castle_utils.oo_king_traversal_sqs[self.player_with_turn as usize],
                 &castle_utils.oo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
@@ -168,8 +196,9 @@ impl Board {
                 result
             );
         }
-        if can_ooo {
-            self.push_castle(
+
+        if !moved_ooo_piece {
+            self.try_push_castle(
                 &castle_utils.ooo_king_traversal_sqs[self.player_with_turn as usize],
                 &castle_utils.ooo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
@@ -177,12 +206,10 @@ impl Board {
                 result
             );
         }
-        */
     }
 
-    /// Assumes castle has not already been done
-    /// Separate from the normal candidate move + check threat pattern
-    fn push_castle(
+    /// Only does piece checks, not state checks
+    fn try_push_castle(
         &mut self,
         king_travel_squares: &[Coord],
         move_snapshot: &MoveSnapshot,
