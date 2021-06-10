@@ -37,25 +37,25 @@ pub enum Player {
     White = 0, Black
 }
 
-static player_to_other_player: [Player; 2] = [Player::Black, Player::White];
-static player_to_multiplier: [f32; 2] = [1., -1.];
-static player_to_first_row: [u8; 2] = [7, 1];
+static PLAYER_TO_OTHER_PLAYER: [Player; 2] = [Player::Black, Player::White];
+static PLAYER_TO_MULTIPLIER: [f32; 2] = [1., -1.];
+static PLAYER_TO_FIRST_ROW: [u8; 2] = [7, 1];
 
 impl Player {
 
     #[inline]
     pub fn get_other_player(self) -> Player {
-        player_to_other_player[self as usize]
+        PLAYER_TO_OTHER_PLAYER[self as usize]
     }
 
     #[inline]
     pub fn get_first_row(self) -> u8 {
-        player_to_first_row[self as usize]
+        PLAYER_TO_FIRST_ROW[self as usize]
     }
 
     #[inline]
     pub fn get_multiplier(self) -> f32 {
-        player_to_multiplier[self as usize]
+        PLAYER_TO_MULTIPLIER[self as usize]
     }
 }
 

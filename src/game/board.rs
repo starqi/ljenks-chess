@@ -55,6 +55,18 @@ impl Board {
         board
     }
 
+    pub fn as_number(&self) -> i128 {
+        let mut h: i128 = 0;
+        for sq in self.d.iter() {
+            h *= 13;
+            h += 6 + match sq {
+                Square::Blank => 0,
+                Square::Occupied(piece, player) => (*piece as i8 + 1) * (player.get_multiplier() as i8)
+            } as i128;
+        }
+        h * self.get_player_with_turn().get_multiplier() as i128
+    }
+
     //////////////////////////////////////////////////
     // Player state
 

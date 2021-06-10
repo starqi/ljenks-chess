@@ -1,16 +1,20 @@
 mod evaluation;
 
+use std::collections::HashMap;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::game::castle_utils::*;
-use super::game::entities::*;
 use crate::{console_log};
 
 pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
-    temp_moves_for_board: MoveList
+    temp_moves_for_board: MoveList,
+    memo: HashMap<i128, EvaluationAndDepth>,
+    memo_hits: usize
 }
+
+struct EvaluationAndDepth(f32, u8);
 
 static MAX_EVAL: f32 = 9000.;
 
@@ -21,13 +25,15 @@ impl Ai {
         Ai {
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
-            temp_moves_for_board: MoveList::new(50)
+            temp_moves_for_board: MoveList::new(50),
+            memo: HashMap::new(),
+            memo_hits: 0
         }
     }
 
     pub fn make_move(&mut self, castle_utils: &CastleUtils, depth: u8, real_board: &mut Board) {
 
-        assert!(depth >= 2);
+        assert!(depth >= 1);
 
         self.test_board.clone_from(real_board);
         let m = self.test_board.get_player_with_turn().get_multiplier();
@@ -38,7 +44,7 @@ impl Ai {
         if moves_end_exclusive == 0 {
             console_log!("No legal moves");
         } else {
-            let real_depth = depth - 2;
+            let real_depth = depth - 1;
             for d in 0..real_depth {
                 for i in (0..moves_end_exclusive).rev() {
                     self.test_board.make_move(&self.moves_buf.get_v()[i]);
@@ -62,6 +68,9 @@ impl Ai {
             real_board.make_move(best_move);
             console_log!("\n{}\n", real_board);
             console_log!("{}", evaluation::evaluate(real_board));
+            console_log!("{}", real_board.as_number());
+            console_log!("Memo hits - {}, size - {}", self.memo_hits, self.memo.len());
+            self.memo.clear();
         }
     }
 
@@ -76,8 +85,11 @@ impl Ai {
         moves_start: usize
     ) -> f32 {
 
-        let current_player = self.test_board.get_player_with_turn();
-        let opponent = current_player.get_other_player();
+        if remaining_depth <= 0 {
+            let eval = evaluation::evaluate(&self.test_board);
+            // FIXME What is official strategy?
+            return self.test_board.get_player_with_turn().get_multiplier() * eval;
+        }
 
         self.moves_buf.write_index = moves_start;
         self.test_board.get_moves(castle_utils, &mut self.temp_moves_for_board, &mut self.moves_buf);
@@ -86,12 +98,24 @@ impl Ai {
         for i in moves_start..moves_end_exclusive {
 
             self.test_board.make_move(&self.moves_buf.get_v()[i]);
-            let max_this: f32 = if remaining_depth > 0 {
-                -self.negamax(castle_utils, remaining_depth - 1, -beta, -alpha, moves_end_exclusive)
+            let as_num = self.test_board.as_number();
+
+            let mut memo: Option<&EvaluationAndDepth> = self.memo.get(&as_num);
+            if let Some(EvaluationAndDepth(_, depth)) = memo {
+                if *depth < remaining_depth - 1 {
+                    memo = None;
+                }
+            }
+
+            let max_this: f32 = if let Some(EvaluationAndDepth(saved_eval, _)) = memo {
+                self.memo_hits += 1;
+                *saved_eval
             } else {
-                // eg. Black is the opponent, we are white -> 1.0 multiplier -> prefer higher evaluations 
-                -opponent.get_multiplier() * evaluation::evaluate(&self.test_board)
+                let r = -self.negamax(castle_utils, remaining_depth - 1, -beta, -alpha, moves_end_exclusive);
+                self.memo.insert(as_num, EvaluationAndDepth(r, remaining_depth - 1));
+                r
             };
+
             self.test_board.undo_move(&self.moves_buf.get_v()[i]);
 
             if max_this >= beta {
