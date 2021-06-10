@@ -2,14 +2,14 @@
     <head>
         <style>
             .no-select {
-                pointer-events: none;
                 user-select: none;
             }
         </style>
     </head>
     <body>
-        <div id="board" class="no-select">
-
+        <div id="board" class="no-select" style="position: absolute;">
+            <img id="dragged" style="position: absolute; visibility: hidden;">
+            </div>
         </div>
         <script src="loader.js"></script>
     </body>
