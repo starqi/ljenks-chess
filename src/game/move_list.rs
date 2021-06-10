@@ -3,6 +3,7 @@ use std::fmt::{Error as FmtError, Display, Formatter};
 use std::ops::Deref;
 use super::coords::*;
 use super::entities::*;
+use crate::{console_log};
 
 #[derive(Default, Copy, Clone)]
 pub struct BeforeAfterSquares(pub Square, pub Square);
@@ -150,10 +151,8 @@ impl MoveList {
     }
 
     pub fn sort_subset(&mut self, start: usize, end_exclusive: usize) {
-        unsafe {
-            let mut v = Vec::from_raw_parts(&mut self.v[start] as *mut MoveSnapshot, end_exclusive - start, end_exclusive - start);
-            v.sort_unstable();
-        }
+        let s = &mut self.v[start..end_exclusive];
+        s.sort_unstable();
     }
 
     pub fn print(&self, start: usize, _end_exclusive: usize) {
@@ -163,12 +162,11 @@ impl MoveList {
             self.v.len()
         };
 
-        println!("[Moves, {}-{}]", start, end_exclusive);
-        // TODO Minor: Optional rev, for principal variation
-        for i in (start..end_exclusive).rev() {
-            println!("{}", self.v[i]);
+        console_log!("[Moves, {}-{}]", start, end_exclusive);
+        for i in start..end_exclusive {
+            console_log!("{}", self.v[i]);
         }
-        println!("");
+        console_log!("");
     }
 }
 

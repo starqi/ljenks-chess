@@ -21,12 +21,12 @@ pub fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_w
                 _ => 0.
             };
             value += piece_value;
-            value += match piece {
+            value += 0.3 * match piece {
                 Piece::Pawn => {
-                    seven_if_white_else_zero + neg_one_if_white_else_one * fy * 0.3
+                    seven_if_white_else_zero + neg_one_if_white_else_one * fy
                 },
                 _ => {
-                    0.3 * (3.5 - unadvanced)
+                    3.5 - unadvanced
                 }
             };
         }

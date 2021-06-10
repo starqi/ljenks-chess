@@ -3,6 +3,7 @@ mod evaluation;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::game::castle_utils::*;
+use super::game::entities::*;
 use crate::{console_log};
 
 pub struct Ai {
@@ -26,6 +27,8 @@ impl Ai {
 
     pub fn make_move(&mut self, castle_utils: &CastleUtils, depth: u8, real_board: &mut Board) {
 
+        assert!(depth >= 2);
+
         self.test_board.clone_from(real_board);
         let m = self.test_board.get_player_with_turn().get_multiplier();
 
@@ -36,20 +39,24 @@ impl Ai {
             console_log!("No legal moves");
         } else {
             for i in 0..moves_end_exclusive {
-                let evaluation_as_maximizer = self.negamax(
+                self.test_board.make_move(&self.moves_buf.get_v()[i]);
+                let evaluation_as_maximizer = -self.negamax(
                     castle_utils,
-                    depth, 
+                    depth - 2, 
                     -MAX_EVAL,
                     MAX_EVAL,
                     moves_end_exclusive
-                    );
+                );
                 self.moves_buf.get_mutable_snapshot(i).1 = evaluation_as_maximizer;
+                self.test_board.undo_move(&self.moves_buf.get_v()[i]);
             }
-            //self.moves_buf.sort_subset(0, moves_end_exclusive);
+            self.moves_buf.sort_subset(0, moves_end_exclusive);
+            self.moves_buf.print(0, moves_end_exclusive);
             let best_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
             console_log!("Making move: {}", best_move);
             real_board.make_move(best_move);
             console_log!("\n{}\n", real_board);
+            console_log!("{}", evaluation::evaluate(real_board));
         }
     }
 
