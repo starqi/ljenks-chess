@@ -7,16 +7,25 @@ use game::castle_utils::*;
 use game::entities::*;
 use wasm_bindgen::prelude::*;
 
+// Use `js_namespace` here to bind `console.log(..)` instead of just `log(..)`
 #[wasm_bindgen]
 extern "C" {
-    // Use `js_namespace` here to bind `console.log(..)` instead of just `log(..)`
     #[wasm_bindgen(js_namespace = console)]
     fn log(s: &str);
+    #[wasm_bindgen(js_namespace = console)]
+    fn error(s: &str);
 }
+
+// TODO Combine
 
 #[macro_export]
 macro_rules! console_log {
     ($($t:tt)*) => (crate::log(&format_args!($($t)*).to_string()))
+}
+
+#[macro_export]
+macro_rules! console_error {
+    ($($t:tt)*) => (crate::error(&format_args!($($t)*).to_string()))
 }
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -44,7 +53,7 @@ impl Main {
     }
 
     pub fn make_move(&mut self) {
-        self.ai.make_move(&self.castle_utils, 4, &mut self.board);
+        self.ai.make_move(&self.castle_utils, 5, &mut self.board);
     }
 
     pub fn get_piece(&self, x: i32, y: i32) -> i8 {

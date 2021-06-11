@@ -1,5 +1,6 @@
 TODO
 
+- Space metric but only with acquiesce, "stable position"
 - Extra run to print PV, delete
 - Devalue forced mate based on # of moves to do it
 - Seeing AI capture own pieces?

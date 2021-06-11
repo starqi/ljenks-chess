@@ -60,7 +60,7 @@ impl Ai {
                     self.moves_buf.get_mutable_snapshot(i).1 = evaluation_as_maximizer;
                     self.test_board.undo_move(&self.moves_buf.get_v()[i]);
                 }
-                self.moves_buf.sort_subset(0, moves_end_exclusive);
+                self.moves_buf.sort_subset_by_eval(0, moves_end_exclusive);
                 let leading_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
                 console_log!("Leading move: {}", leading_move);
             }
@@ -98,9 +98,17 @@ impl Ai {
         self.moves_buf.write_index = moves_start;
         self.test_board.get_moves(castle_utils, &mut self.temp_moves_for_board, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
-        let mut one_between_node_found = false;
 
-        for i in moves_start..moves_end_exclusive {
+        evaluation::sort_subset_captures(&mut self.moves_buf, moves_start, moves_end_exclusive);
+
+        /*
+        crate::console_log!("SLOW DEBUG FIXME");
+        crate::console_log!("{}", self.test_board);
+        self.moves_buf.print(moves_start, moves_end_exclusive);
+        */
+
+        let mut one_between_node_found = false;
+        for i in (moves_start..moves_end_exclusive).rev() {
 
             self.test_board.make_move(&self.moves_buf.get_v()[i]);
             let as_num = self.test_board.as_number();

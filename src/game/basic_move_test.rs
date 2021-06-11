@@ -185,9 +185,9 @@ impl <'a> BasicMoveTest<'a> {
         }
 
         m.2 = if let Square::Occupied(_, _) = existing_dest_square {
-            MoveDescription::Capture(first_prevented_oo, first_prevented_ooo)
+            MoveDescription::Capture(first_prevented_oo, first_prevented_ooo, 1)
         } else {
-            MoveDescription::Move(first_prevented_oo, first_prevented_ooo)
+            MoveDescription::Move(first_prevented_oo, first_prevented_ooo, 1)
         };
 
         return m;

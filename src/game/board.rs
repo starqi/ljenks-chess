@@ -154,13 +154,13 @@ impl Board {
             },
             _ => {
                 match m.2 {
-                    MoveDescription::Capture(true, _) | MoveDescription::Move(true, _) => {
+                    MoveDescription::Capture(true, _, _) | MoveDescription::Move(true, _, _) => {
                         player_state.moved_oo_piece = b;
                     },
                     _ => ()
                 };
                 match m.2 {
-                    MoveDescription::Capture(_, true) | MoveDescription::Move(_, true) => {
+                    MoveDescription::Capture(_, true, _) | MoveDescription::Move(_, true, _) => {
                         player_state.moved_ooo_piece = b;
                     },
                     _ => ()

@@ -5,11 +5,11 @@ use super::coords::*;
 use super::entities::*;
 use crate::{console_log};
 
-/// (bool, bool) means (first to prevent oo, first to prevent ooo)
+/// (bool, bool, u8) = (first to prevent oo, first to prevent ooo, dest sq index)
 #[derive(Copy, Clone)]
 pub enum MoveDescription {
-    Capture(bool, bool),
-    Move(bool, bool),
+    Capture(bool, bool, u8),
+    Move(bool, bool, u8),
     Oo,
     Ooo,
     Special
@@ -26,31 +26,6 @@ pub type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
 
 #[derive(Copy, Clone)]
 pub struct MoveSnapshot(pub MoveSnapshotSquares, pub Eval, pub MoveDescription);
-
-impl PartialEq for MoveSnapshot {
-    fn eq(&self, other: &MoveSnapshot) -> bool {
-        self.1 == other.1
-    }
-}
-
-impl PartialOrd for MoveSnapshot {
-    fn partial_cmp(&self, other: &MoveSnapshot) -> Option<Ordering> {
-        self.1.partial_cmp(&other.1)
-    }
-}
-
-impl Eq for MoveSnapshot {}
-
-impl Ord for MoveSnapshot {
-    fn cmp(&self, other: &Self) -> Ordering {
-        if self.1 == other.1 {
-            // Allowing float equality comparison makes no difference here
-            Ordering::Equal
-        } else {
-            self.1.partial_cmp(&other.1).unwrap()
-        }
-    }
-}
 
 impl Deref for MoveSnapshot {
     type Target = MoveSnapshotSquares;
@@ -70,49 +45,19 @@ impl Default for MoveSnapshot {
 impl Display for MoveSnapshot {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
         match self.2 {
-            MoveDescription::Capture(poo, pooo) | MoveDescription::Move(poo, pooo) => {
-
-                let mut arrival: Option<&MoveSnapshotSquare> = None;
-                let mut departed: Option<&MoveSnapshotSquare> = None;
-                let mut departed_i: u8 = 0;
-
-                let mut i: u8 = 0;
-                for sq in &self.0 {
-                    if let Some(k@(_, BeforeAfterSquares(Square::Occupied(_, _), Square::Blank))) = sq {
-                        departed = Some(k);
-                        departed_i = i;
-                        break;
+            MoveDescription::Capture(p_oo, p_ooo, dest_sq_index) | MoveDescription::Move(p_oo, p_ooo, dest_sq_index) => {
+                if let Some((arrival_coord, BeforeAfterSquares(_, after))) = self.0[dest_sq_index as usize] {
+                    write!(f, "{}{} ({})", after, arrival_coord, self.1)?;
+                    if p_oo {
+                        write!(f, " [p_oo]")?;
                     }
-                    i += 1;
+                    if p_ooo {
+                        write!(f, " [p_ooo]")?;
+                    }
+                    return Ok(());
                 }
 
-                if departed.is_some() {
-                    i = 0;
-                    for sq in &self.0 {
-                        if i != departed_i {
-                            if let Some(sq2) = sq {
-                                arrival = Some(sq2);
-                                break;
-                            }
-                        }
-                        i += 1;
-                    }
-                }
-
-                if let Some((arrival_coord, BeforeAfterSquares(_, after))) = arrival {
-                    if let Some((departed_coord, _)) = departed {
-                        write!(f, "{}@ {} to {} ({})", after, departed_coord, arrival_coord, self.1)?;
-                        if poo {
-                            write!(f, " [oox]")?;
-                        }
-                        if pooo {
-                            write!(f, " [ooox]")?;
-                        }
-                        return Ok(());
-                    }
-                }
-
-                write!(f, "Error: Broken capture/move... ({})", self.1)
+                write!(f, "Error... ({})", self.1)
             },
             MoveDescription::Oo => {
                 write!(f, "oo ({})", self.1)
@@ -171,9 +116,16 @@ impl MoveList {
         }
     }
 
-    pub fn sort_subset(&mut self, start: usize, end_exclusive: usize) {
+    pub fn sort_subset_by_eval(&mut self, start: usize, end_exclusive: usize) {
         let s = &mut self.v[start..end_exclusive];
-        s.sort_unstable();
+        s.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+    }
+
+    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, to_eval: impl Fn(&MoveSnapshot) -> f32) {
+        for i in start..end_exclusive {
+            let m = &mut self.v[i];
+            m.1 = to_eval(m);
+        }
     }
 
     pub fn print(&self, start: usize, _end_exclusive: usize) {
