@@ -18,14 +18,14 @@ pub enum MoveDescription {
 #[derive(Default, Copy, Clone)]
 pub struct BeforeAfterSquares(pub Square, pub Square);
 
-pub type Eval = f32;
 pub type MoveSnapshotSquare = (Coord, BeforeAfterSquares);
 
 // Fairly small bounded size is useable for the most complex move which is castling
 pub type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
 
+// TODO Upgrade to inline methods
 #[derive(Copy, Clone)]
-pub struct MoveSnapshot(pub MoveSnapshotSquares, pub Eval, pub MoveDescription);
+pub struct MoveSnapshot(pub MoveSnapshotSquares, pub f32, pub MoveDescription);
 
 impl Deref for MoveSnapshot {
     type Target = MoveSnapshotSquares;
@@ -121,7 +121,7 @@ impl MoveList {
         s.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
     }
 
-    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, to_eval: impl Fn(&MoveSnapshot) -> f32) {
+    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, mut to_eval: impl FnMut(&MoveSnapshot) -> f32) {
         for i in start..end_exclusive {
             let m = &mut self.v[i];
             m.1 = to_eval(m);

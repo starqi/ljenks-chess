@@ -9,7 +9,7 @@ use crate::{console_log};
 pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
-    temp_moves_for_board: MoveList,
+    temp_moves: MoveList,
     memo: HashMap<i128, EvaluationAndDepth>,
     memo_hits: usize,
     fast_found_hits: usize
@@ -26,7 +26,7 @@ impl Ai {
         Ai {
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
-            temp_moves_for_board: MoveList::new(50),
+            temp_moves: MoveList::new(50),
             memo: HashMap::new(),
             memo_hits: 0,
             fast_found_hits: 0
@@ -41,11 +41,27 @@ impl Ai {
         let m = self.test_board.get_player_with_turn().get_multiplier();
 
         self.moves_buf.write_index = 0;
-        self.test_board.get_moves(castle_utils, &mut self.temp_moves_for_board, &mut self.moves_buf);
+        self.test_board.get_moves(castle_utils, &mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
         if moves_end_exclusive == 0 {
             console_log!("No legal moves");
         } else {
+
+
+
+        crate::console_log!("FIXME");
+        crate::console_log!("{}", self.test_board);
+        evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, 0, moves_end_exclusive, &mut self.temp_moves);
+        self.moves_buf.print(0, moves_end_exclusive);
+
+
+
+
+
+
+
+
+
             let real_depth = depth - 1;
             for d in 0..real_depth {
                 for i in (0..moves_end_exclusive).rev() {
@@ -60,6 +76,23 @@ impl Ai {
                     self.moves_buf.get_mutable_snapshot(i).1 = evaluation_as_maximizer;
                     self.test_board.undo_move(&self.moves_buf.get_v()[i]);
                 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 self.moves_buf.sort_subset_by_eval(0, moves_end_exclusive);
                 let leading_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
                 console_log!("Leading move: {}", leading_move);
@@ -96,16 +129,10 @@ impl Ai {
         }
 
         self.moves_buf.write_index = moves_start;
-        self.test_board.get_moves(castle_utils, &mut self.temp_moves_for_board, &mut self.moves_buf);
+        self.test_board.get_moves(castle_utils, &mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
 
-        evaluation::sort_subset_captures(&mut self.moves_buf, moves_start, moves_end_exclusive);
-
-        /*
-        crate::console_log!("SLOW DEBUG FIXME");
-        crate::console_log!("{}", self.test_board);
-        self.moves_buf.print(moves_start, moves_end_exclusive);
-        */
+        evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
 
         let mut one_between_node_found = false;
         for i in (moves_start..moves_end_exclusive).rev() {

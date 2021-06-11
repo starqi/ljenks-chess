@@ -11,7 +11,8 @@ pub struct BasicMoveTest<'a> {
     src_piece: Piece,
     src_player: Player,
     data: &'a Board,
-    can_capture_king: bool
+    can_capture_king: bool,
+    last_push_was_moveable: bool
 }
 
 impl <'a> BasicMoveTest<'a> {
@@ -27,8 +28,8 @@ impl <'a> BasicMoveTest<'a> {
         result: &mut MoveList
     ) {
         debug_assert!(src_x <= 7 && src_y <= 7);
-        let t = BasicMoveTest {
-            src_x: src_x as i8, src_y: src_y as i8, src_piece, src_player, data, can_capture_king
+        let mut t = BasicMoveTest {
+            src_x: src_x as i8, src_y: src_y as i8, src_piece, src_player, data, can_capture_king, last_push_was_moveable: false
         };
         // TODO Array
         match src_piece {
@@ -66,16 +67,10 @@ impl <'a> BasicMoveTest<'a> {
     ) -> bool {
         for j in start..end_exclusive {
             let modified_sqs = moves.get_v()[j];
-            for sq in modified_sqs.iter() {
-                if let Some((_, before_after_sqs)) = sq {
-                    if let Square::Occupied(before_piece, before_player) = before_after_sqs.0 {
-                        if before_piece == Piece::King && before_player == checked_player {
-                            if let Square::Occupied(_, after_player) = before_after_sqs.1 {
-                                if after_player != checked_player {
-                                    return true;
-                                }
-                            }
-                        }
+            for sq_holder in modified_sqs.iter() {
+                if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, before_player), Square::Occupied(_, after_player)))) = sq_holder {
+                    if *before_piece == Piece::King && *before_player == checked_player && *after_player != checked_player {
+                        return true;
                     }
                 }
             }
@@ -118,18 +113,19 @@ impl <'a> BasicMoveTest<'a> {
     }
 
     /// `can_capture` - eg. Pawn cannot capture forwards
-    /// Returns whether a move was added, and when applicable, whether the search along the same line should be terminated
+    /// Returns whether the search along the same line should be terminated (if applicable)
     fn push(
-        &self,
+        &mut self,
         test_dest_x: i8,
         test_dest_y: i8,
         can_capture: bool,
         replacement_piece: Option<Piece>,
         result: &mut MoveList
-    ) -> (bool, bool) {
+    ) -> bool {
 
         if test_dest_x < 0 || test_dest_x > 7 || test_dest_y < 0 || test_dest_y > 7 { 
-            return (false, true); 
+            self.last_push_was_moveable = false;
+            return true;
         }
 
         let (dest_x, dest_y) = (test_dest_x as u8, test_dest_y as u8);
@@ -150,7 +146,8 @@ impl <'a> BasicMoveTest<'a> {
             result.write(self.make_move_snapshot(dest_x, dest_y, existing_dest_sq, replacement_piece));
         }
 
-        return (moveable, terminate);
+        self.last_push_was_moveable = moveable;
+        return terminate;
     }
 
     /// Precondition: We have decided that this move is allowed, eg. finished evaluating ability to capture own pieces
@@ -193,18 +190,17 @@ impl <'a> BasicMoveTest<'a> {
         return m;
     }
 
-    fn push_promotions(&self, test_dest_x: i8, test_dest_y: i8, can_capture: bool, result: &mut MoveList) -> (bool, bool) {
-        let r = self.push(test_dest_x, test_dest_y, can_capture, Some(Piece::Knight), result);
-        if r.0 {
+    fn push_promotions(&mut self, test_dest_x: i8, test_dest_y: i8, can_capture: bool, result: &mut MoveList) {
+        self.push(test_dest_x, test_dest_y, can_capture, Some(Piece::Knight), result);
+        if self.last_push_was_moveable {
             let existing_dest_sq = self.data.get_by_xy(test_dest_x as u8, test_dest_y as u8);
             result.write(self.make_move_snapshot(test_dest_x as u8, test_dest_y as u8, existing_dest_sq, Some(Piece::Queen))); 
             result.write(self.make_move_snapshot(test_dest_x as u8, test_dest_y as u8, existing_dest_sq, Some(Piece::Bishop))); 
             result.write(self.make_move_snapshot(test_dest_x as u8, test_dest_y as u8, existing_dest_sq, Some(Piece::Rook))); 
         }
-        return r;
     }
 
-    fn push_pawn(&self, result: &mut MoveList) {
+    fn push_pawn(&mut self, result: &mut MoveList) {
         let (y_delta, jump_row, pre_promote_row) = match self.src_player {
             Player::Black => (1, 1, 6),
             Player::White => (-1, 6, 1)
@@ -215,7 +211,7 @@ impl <'a> BasicMoveTest<'a> {
         if y == pre_promote_row {
             self.push_promotions(x, y + y_delta, false, result);
         } else {
-            if !self.push(x, y + y_delta, false, None, result).1 { // Same as rook ray. If 1-square hop is not blocked, consider 2-square hop.
+            if !self.push(x, y + y_delta, false, None, result) { // Same as rook ray. If 1-square hop is not blocked, consider 2-square hop.
                 if y == jump_row {
                     self.push(x, y + y_delta * 2, false, None, result);
                 }
@@ -243,60 +239,60 @@ impl <'a> BasicMoveTest<'a> {
         }
     }
 
-    fn push_rook(&self, result: &mut MoveList) {
+    fn push_rook(&mut self, result: &mut MoveList) {
         for _i in 1..=self.src_x {
             let i = self.src_x - _i;
-            if self.push(i, self.src_y, true, None, result).1 { break; }
+            if self.push(i, self.src_y, true, None, result) { break; }
         }
         for i in self.src_x + 1..=7 {
-            if self.push(i, self.src_y, true, None, result).1 { break; }
+            if self.push(i, self.src_y, true, None, result) { break; }
         }
         for _i in 1..=self.src_y {
             let i = self.src_y - _i;
-            if self.push(self.src_x, i, true, None, result).1 { break; }
+            if self.push(self.src_x, i, true, None, result) { break; }
         }
         for i in self.src_y + 1..=7 {
-            if self.push(self.src_x, i, true, None, result).1 { break; }
+            if self.push(self.src_x, i, true, None, result) { break; }
         }
     }
 
-    fn push_bishop(&self, result: &mut MoveList) {
+    fn push_bishop(&mut self, result: &mut MoveList) {
 
         for i in 1..=self.src_x {
-            if self.push(self.src_x - i, self.src_y - i, true, None, result).1 { break; }
+            if self.push(self.src_x - i, self.src_y - i, true, None, result) { break; }
         }
         for i in 1..=self.src_x {
-            if self.push(self.src_x - i, self.src_y + i, true, None, result).1 { break; }
+            if self.push(self.src_x - i, self.src_y + i, true, None, result) { break; }
         }
         for i in 1..=8 - (self.src_x + 1) {
-            if self.push(self.src_x + i, self.src_y - i, true, None, result).1 { break; }
+            if self.push(self.src_x + i, self.src_y - i, true, None, result) { break; }
         }
         for i in 1..=8 - (self.src_x + 1) {
-            if self.push(self.src_x + i, self.src_y + i, true, None, result).1 { break; }
+            if self.push(self.src_x + i, self.src_y + i, true, None, result) { break; }
         }
     }
 
-    fn push_knight(&self, result: &mut MoveList) {
+    fn push_knight(&mut self, result: &mut MoveList) {
 
-        self.push(self.src_x - 1, self.src_y + 2, true, None, result).1;
-        self.push(self.src_x - 1, self.src_y - 2, true, None, result).1;
+        self.push(self.src_x - 1, self.src_y + 2, true, None, result);
+        self.push(self.src_x - 1, self.src_y - 2, true, None, result);
 
-        self.push(self.src_x - 2, self.src_y + 1, true, None, result).1;
-        self.push(self.src_x - 2, self.src_y - 1, true, None, result).1;
+        self.push(self.src_x - 2, self.src_y + 1, true, None, result);
+        self.push(self.src_x - 2, self.src_y - 1, true, None, result);
 
-        self.push(self.src_x + 2, self.src_y + 1, true, None, result).1;
-        self.push(self.src_x + 2, self.src_y - 1, true, None, result).1;
+        self.push(self.src_x + 2, self.src_y + 1, true, None, result);
+        self.push(self.src_x + 2, self.src_y - 1, true, None, result);
 
-        self.push(self.src_x + 1, self.src_y + 2, true, None, result).1;
-        self.push(self.src_x + 1, self.src_y - 2, true, None, result).1;
+        self.push(self.src_x + 1, self.src_y + 2, true, None, result);
+        self.push(self.src_x + 1, self.src_y - 2, true, None, result);
     }
 
-    fn push_queen(&self, result: &mut MoveList) {
+    fn push_queen(&mut self, result: &mut MoveList) {
         self.push_bishop(result);
         self.push_rook(result);
     }
 
-    fn push_king(&self, result: &mut MoveList) {
+    fn push_king(&mut self, result: &mut MoveList) {
         for i in -1..=1 {
             for j in -1..=1 {
                 if i == 0 && j == 0 { continue; }
