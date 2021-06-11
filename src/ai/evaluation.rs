@@ -6,7 +6,7 @@ use super::super::game::basic_move_test::*;
 
 /// Precondition: Pawn = 0, Rook, Knight, Bishop, Queen, King
 static PIECE_VALUES: [f32; 6] = [
-    1., 5., 3., 3., 9., 18.
+    1., 5., 3., 3., 9., 10.
 ];
 
 fn evaluate_piece(piece: Piece) -> f32 {
@@ -15,23 +15,22 @@ fn evaluate_piece(piece: Piece) -> f32 {
 
 fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_white_else_zero: f32, ps: &PlayerState) -> f32 {
     let mut value: f32 = 0.;
+
     for Coord(x, y) in ps.piece_locs.iter() {
         let fy = *y as f32;
 
         if let Square::Occupied(piece, _) = board.get_by_xy(*x, *y) {
-            let unadvanced = (3.5 - fy).abs();
             value += evaluate_piece(piece);
-            value += 0.3 * match piece {
-                Piece::Pawn => {
-                    seven_if_white_else_zero + neg_one_if_white_else_one * fy
-                },
-                _ => {
-                    3.5 - unadvanced
+            if piece == Piece::Pawn {
+                value += 0.3 * (seven_if_white_else_zero + neg_one_if_white_else_one * fy);
+            } else {
+                if fy > 0. && fy < 7. {
+                    value += 0.75;
                 }
-            };
+            }
         }
     }
-    if ps.castled_somewhere { value += 1.5; }
+    if ps.castled_somewhere { value += 3.0; }
     value * neg_one_if_white_else_one as f32 * -1.
 }
 
@@ -59,7 +58,7 @@ pub fn sort_moves_by_aggression(board: &Board, m: &mut MoveList, start: usize, e
                     if let MoveSnapshot(sqs, _, MoveDescription::Capture(_, _, dest_sq_index)) = temp_ml.get_v()[i] {
                         if let Some((_, BeforeAfterSquares(Square::Occupied(attacked_piece, attacked_player), _))) = sqs[dest_sq_index as usize] {
                             if attacked_player != *after_player {
-                                score += evaluate_piece(attacked_piece) * 0.1;
+                                score += evaluate_piece(attacked_piece) * 0.5;
                             }
                         }
                     }
