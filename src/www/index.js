@@ -24,6 +24,7 @@ class Board {
         this.dragged.height = this.LEN;
 
         this.squareImages = [];
+        this.wasmData = new Array(64);
 
         for (let i = 0; i < 8; ++i) {
             const rowElement = document.createElement('div');
@@ -35,7 +36,8 @@ class Board {
                 square.style.width = this.LEN;
                 square.style.height = this.LEN;
                 square.style.display = 'inline-block';
-                square.style.backgroundColor = (i + delta) % 2 === 0 ? '#aaaaaa' : '#333333';
+                square.style.backgroundColor = (i + delta) % 2 === 0 ? '#eeeeee' : '#539164';
+                square.dataset.backgroundColor = square.style.backgroundColor;
 
                 const image = new Image();
                 image.width = this.LEN;
@@ -100,13 +102,34 @@ class Board {
     }
 
     setSquareFromWasm(row, col) {
+        const existing = this.wasmData[row * 8 + col];
         const num = board.main.get_piece(col, row);
-        if (num === 0) {
-            this.setSquare(row, col, null);
+        if (existing === num) {
+            this.colorSquare(row, col, false);
         } else {
-            const isWhite = num > 0;
-            const letter = this.numToLetter[Math.abs(num) - 1];
-            if (letter !== undefined) this.setSquare(row, col, letter, isWhite);
+            if (num === 0) {
+                this.setSquare(row, col, null);
+            } else {
+                const isWhite = num > 0;
+                const letter = this.numToLetter[Math.abs(num) - 1];
+                if (letter !== undefined) this.setSquare(row, col, letter, isWhite);
+            }
+            this.wasmData[row * 8 + col] = num;
+            if (existing !== undefined) this.colorSquare(row, col, true); // Don't color on first sync from undefined -> number
+        }
+        return num;
+    }
+
+    colorSquare(row, col, isColored) {
+        const imageRow = this.squareImages[row];
+        if (imageRow === undefined) return;
+        const image = imageRow[col];
+        if (image === undefined) return;
+
+        if (isColored) {
+            image.parentElement.style.backgroundColor = '#a33c2c';
+        } else {
+            image.parentElement.style.backgroundColor = image.parentElement.dataset.backgroundColor;        
         }
     }
 
