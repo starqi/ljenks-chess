@@ -1,3 +1,5 @@
+mod extern_funcs;
+mod macros;
 mod game;
 mod ai;
 
@@ -7,27 +9,6 @@ use game::castle_utils::*;
 use game::entities::*;
 use wasm_bindgen::prelude::*;
 
-// Use `js_namespace` here to bind `console.log(..)` instead of just `log(..)`
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-    #[wasm_bindgen(js_namespace = console)]
-    fn error(s: &str);
-}
-
-// TODO Combine
-
-#[macro_export]
-macro_rules! console_log {
-    ($($t:tt)*) => (crate::log(&format_args!($($t)*).to_string()))
-}
-
-#[macro_export]
-macro_rules! console_error {
-    ($($t:tt)*) => (crate::error(&format_args!($($t)*).to_string()))
-}
-
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
 #[cfg(feature = "wee_alloc")]
@@ -35,7 +16,7 @@ macro_rules! console_error {
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
-struct Main {
+pub struct Main {
     board: Board,
     castle_utils: CastleUtils,
     ai: Ai

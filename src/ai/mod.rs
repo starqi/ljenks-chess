@@ -47,20 +47,12 @@ impl Ai {
             console_log!("No legal moves");
         } else {
 
-
-
-        crate::console_log!("FIXME");
-        crate::console_log!("{}", self.test_board);
-        evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, 0, moves_end_exclusive, &mut self.temp_moves);
-        self.moves_buf.print(0, moves_end_exclusive);
-
-
-
-
-
-
-
-
+            /*
+            crate::console_log!("FIXME");
+            crate::console_log!("{}", self.test_board);
+            evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, 0, moves_end_exclusive, &mut self.temp_moves);
+            self.moves_buf.print(0, moves_end_exclusive);
+            */
 
             let real_depth = depth - 1;
             for d in 0..real_depth {
@@ -76,28 +68,11 @@ impl Ai {
                     self.moves_buf.get_mutable_snapshot(i).1 = evaluation_as_maximizer;
                     self.test_board.undo_move(&self.moves_buf.get_v()[i]);
                 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                 self.moves_buf.sort_subset_by_eval(0, moves_end_exclusive);
                 let leading_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
                 console_log!("Leading move: {}", leading_move);
             }
-            self.moves_buf.print(0, moves_end_exclusive);
+            //self.moves_buf.print(0, moves_end_exclusive);
             let best_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
             console_log!("Making move: {}", best_move);
             real_board.make_move(best_move);
@@ -124,7 +99,6 @@ impl Ai {
 
         if remaining_depth <= 0 {
             let eval = evaluation::evaluate(&self.test_board);
-            // FIXME What is official strategy?
             return self.test_board.get_player_with_turn().get_multiplier() * eval;
         }
 
