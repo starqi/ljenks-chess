@@ -3,7 +3,6 @@ mod evaluation;
 use std::collections::HashMap;
 use super::game::move_list::*;
 use super::game::board::*;
-use super::game::castle_utils::*;
 use crate::{console_log};
 
 pub struct Ai {
@@ -33,7 +32,7 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, castle_utils: &CastleUtils, depth: u8, real_board: &mut Board) {
+    pub fn make_move(&mut self, depth: u8, real_board: &mut Board) {
 
         assert!(depth >= 1);
 
@@ -41,7 +40,7 @@ impl Ai {
         let m = self.test_board.get_player_with_turn().get_multiplier();
 
         self.moves_buf.write_index = 0;
-        self.test_board.get_moves(castle_utils, &mut self.temp_moves, &mut self.moves_buf);
+        self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
         if moves_end_exclusive == 0 {
             console_log!("No legal moves");
@@ -59,7 +58,6 @@ impl Ai {
                 for i in (0..moves_end_exclusive).rev() {
                     self.test_board.make_move(&self.moves_buf.get_v()[i]);
                     let evaluation_as_maximizer = -self.negamax(
-                        castle_utils,
                         d,
                         -MAX_EVAL,
                         MAX_EVAL,
@@ -90,7 +88,6 @@ impl Ai {
     /// Only calculates score
     fn negamax(
         &mut self,
-        castle_utils: &CastleUtils,
         remaining_depth: u8,
         mut alpha: f32,
         beta: f32,
@@ -103,7 +100,7 @@ impl Ai {
         }
 
         self.moves_buf.write_index = moves_start;
-        self.test_board.get_moves(castle_utils, &mut self.temp_moves, &mut self.moves_buf);
+        self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
 
         evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
@@ -130,7 +127,7 @@ impl Ai {
                 let mut fast_found = false;
 
                 if one_between_node_found {
-                    fast_found_max_this = -self.negamax(castle_utils, remaining_depth - 1, -alpha - 1., -alpha, moves_end_exclusive);
+                    fast_found_max_this = -self.negamax(remaining_depth - 1, -alpha - 1., -alpha, moves_end_exclusive);
                     if fast_found_max_this <= alpha {
                         fast_found = true;
                         self.fast_found_hits += 1;
@@ -142,7 +139,7 @@ impl Ai {
                 } else {
                     let a = -beta;
                     let b = -alpha;
-                    let eval = self.negamax(castle_utils, remaining_depth - 1, a, b, moves_end_exclusive);
+                    let eval = self.negamax(remaining_depth - 1, a, b, moves_end_exclusive);
                     let _max_this = -eval;
                     if eval > a && eval < b {
                         // Only save exact evals

@@ -5,6 +5,8 @@ class Board {
     constructor() {
 
         this.draggedImage = null;
+        this.draggedSqX = 0;
+        this.draggedSqY = 0;
 
         this.main = wasm.Main.new();
         this.LEN = 85;
@@ -58,33 +60,28 @@ class Board {
     onBoardMouseDown(e) {
         e.preventDefault();
 
-        const r = this.board.getBoundingClientRect();
-        const boardX = e.clientX - r.left;
-        const boardY = e.clientY - r.top;
+        const sqCoords = this.getSquareCoordsFromMouseEvent(e);
 
-        const squareX = (boardX / this.LEN) >>> 0;
-        const squareY = (boardY / this.LEN) >>> 0;
-
-        const row = this.squareImages[squareY];
+        const row = this.squareImages[sqCoords.y];
         if (row === undefined) return;
-        const image = row[squareX];
+        const image = row[sqCoords.x];
         if (image === undefined || image.style.visibility === 'hidden') return;
 
         image.style.visibility = 'hidden';
         this.draggedImage = image;
         this.dragged.src = image.src;
         this.dragged.style.visibility = 'visible';
+        this.draggedSqY = sqCoords.y;
+        this.draggedSqX = sqCoords.x;
         this.trySyncDragged(e);
     }
 
     trySyncDragged(e) {
         if (this.draggedImage !== null) {
-            const r = this.board.getBoundingClientRect();
-            const boardX = e.clientX - r.left;
-            const boardY = e.clientY - r.top;
+            const clientCoords = this.getClientCoordsFromMouseEvent(e);
 
-            this.dragged.style.left = boardX - this.LEN / 2.0;
-            this.dragged.style.top = boardY - this.LEN / 2.0;
+            this.dragged.style.left = clientCoords.x - this.LEN / 2.0;
+            this.dragged.style.top = clientCoords.y - this.LEN / 2.0;
         }
     }
 
@@ -99,6 +96,16 @@ class Board {
         this.draggedImage.style.visibility = 'visible';
         this.draggedImage = null;
         this.dragged.style.visibility = 'hidden';
+
+        const sqCoords = this.getSquareCoordsFromMouseEvent(e);
+        if (!board.main.try_move(this.draggedSqX, this.draggedSqY, sqCoords.x, sqCoords.y)) return;
+
+        board.updateFromWasm();
+        setTimeout(() => {
+            board.main.make_ai_move();
+            board.updateFromWasm();
+            board.main.refresh_player_moves();
+        }, 500);
     }
 
     setSquareFromWasm(row, col) {
@@ -160,11 +167,30 @@ class Board {
             }
         }
     }
+
+    getClientCoordsFromMouseEvent(e) {
+        const r = this.board.getBoundingClientRect();
+        return {x: e.clientX - r.left, y: e.clientY - r.top};
+    }
+
+    getSquareCoordsFromMouseEvent(e) {
+        const r = this.getClientCoordsFromMouseEvent(e);
+        return {
+            x: (r.x / this.LEN) >>> 0,
+            y: (r.y / this.LEN) >>> 0
+        };
+    }
 }
 
 const board = new Board();
 board.updateFromWasm();
+board.main.refresh_player_moves();
+
+/*
 setInterval(() => {
     board.main.make_move();
     board.updateFromWasm();
+    board.main.refresh_player_moves();
+    board.main.is_valid_move
 }, 1000);
+*/

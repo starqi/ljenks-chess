@@ -66,7 +66,7 @@ impl <'a> BasicMoveTest<'a> {
         checked_player: Player
     ) -> bool {
         for j in start..end_exclusive {
-            let modified_sqs = moves.get_v()[j];
+            let modified_sqs = &moves.get_v()[j];
             for sq_holder in modified_sqs.iter() {
                 if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, before_player), Square::Occupied(_, after_player)))) = sq_holder {
                     if *before_piece == Piece::King && *before_player == checked_player && *after_player != checked_player {
@@ -104,8 +104,8 @@ impl <'a> BasicMoveTest<'a> {
             let cand_write_end_exclusive = candidates_and_buf.write_index;
 
             if !BasicMoveTest::has_king_capture_move(candidates_and_buf, candidates_end_exclusive, cand_write_end_exclusive, checked_player) {
-                let safe_move = candidates_and_buf.get_v()[i];
-                result.write(safe_move);
+                let safe_move = &candidates_and_buf.get_v()[i];
+                result.clone_and_write(safe_move);
             }
 
             real_board.undo_move(&candidates_and_buf.get_v()[i]);

@@ -4,8 +4,8 @@ use std::fmt::{Display, Formatter, self};
 use super::coords::*;
 use super::entities::*;
 use super::move_list::*;
-use super::castle_utils::*;
 use super::basic_move_test::*;
+use super::super::*;
 
 #[derive(Clone)]
 pub struct PlayerState {
@@ -170,7 +170,7 @@ impl Board {
     }
 
     /// Gets the final set of legal moves
-    pub fn get_moves(&mut self, castle_utils: &CastleUtils, temp_moves: &mut MoveList, result: &mut MoveList) {
+    pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
         temp_moves.write_index = 0;
         BasicMoveTest::fill_player(self.player_with_turn, self, false, temp_moves);
         BasicMoveTest::filter_check_threats(
@@ -189,8 +189,8 @@ impl Board {
 
         if !moved_oo_piece {
             self.try_push_castle(
-                &castle_utils.oo_king_traversal_sqs[self.player_with_turn as usize],
-                &castle_utils.oo_move_snapshots[self.player_with_turn as usize],
+                &CASTLE_UTILS.oo_king_traversal_sqs[self.player_with_turn as usize],
+                &CASTLE_UTILS.oo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
                 temp_moves,
                 result
@@ -199,8 +199,8 @@ impl Board {
 
         if !moved_ooo_piece {
             self.try_push_castle(
-                &castle_utils.ooo_king_traversal_sqs[self.player_with_turn as usize],
-                &castle_utils.ooo_move_snapshots[self.player_with_turn as usize],
+                &CASTLE_UTILS.ooo_king_traversal_sqs[self.player_with_turn as usize],
+                &CASTLE_UTILS.ooo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
                 temp_moves,
                 result
@@ -236,7 +236,7 @@ impl Board {
         }
 
         if can_castle {
-            result.copy_and_write(move_snapshot);
+            result.clone_and_write(move_snapshot);
         }
     }
 

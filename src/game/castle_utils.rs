@@ -2,6 +2,7 @@ use super::move_list::*;
 use super::entities::*;
 use super::coords::*;
 
+/// Invariant: Move snapshot order is by column
 /// Size 2 arrays are indexed by `Player` enum numbers
 pub struct CastleUtils {
     pub oo_move_snapshots: [MoveSnapshot; 2],
@@ -15,10 +16,10 @@ impl CastleUtils {
     fn get_oo_move_snapshot_for_row(player: Player) -> MoveSnapshot {
         let row = player.get_first_row();
         return MoveSnapshot([
-            Some((Coord(7, row), BeforeAfterSquares(Square::Occupied(Piece::Rook, player), Square::Blank))),
-            Some((Coord(6, row), BeforeAfterSquares(Square::Blank, Square::Occupied(Piece::King, player)))),
-            Some((Coord(5, row), BeforeAfterSquares(Square::Blank, Square::Occupied(Piece::Rook, player)))),
             Some((Coord(4, row), BeforeAfterSquares(Square::Occupied(Piece::King, player), Square::Blank))),
+            Some((Coord(5, row), BeforeAfterSquares(Square::Blank, Square::Occupied(Piece::Rook, player)))),
+            Some((Coord(6, row), BeforeAfterSquares(Square::Blank, Square::Occupied(Piece::King, player)))),
+            Some((Coord(7, row), BeforeAfterSquares(Square::Occupied(Piece::Rook, player), Square::Blank))),
             None
         ], 0., MoveDescription::Oo);
     }

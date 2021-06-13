@@ -23,9 +23,46 @@ pub type MoveSnapshotSquare = (Coord, BeforeAfterSquares);
 // Fairly small bounded size is useable for the most complex move which is castling
 pub type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
 
-// TODO Upgrade to inline methods
-#[derive(Copy, Clone)]
+// TODO Upgrade callers to inline methods
+#[derive(Clone)]
 pub struct MoveSnapshot(pub MoveSnapshotSquares, pub f32, pub MoveDescription);
+
+impl MoveSnapshot {
+
+    #[inline]
+    pub fn get_squares(&self) -> &MoveSnapshotSquares { &self.0 }
+    #[inline]
+    pub fn get_eval(&self) -> f32 { self.1 }
+    #[inline]
+    pub fn get_description(&self) -> &MoveDescription { &self.2 }
+
+    pub fn get_dest_sq(&self) -> Option<&MoveSnapshotSquare> {
+        if let MoveDescription::Capture(_, _, dest_sq_index) | MoveDescription::Move(_, _, dest_sq_index) = self.get_description() {
+            if let Some(ref x) = self.get_squares()[*dest_sq_index as usize] {
+                Some(x)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn get_src_sq(&self) -> Option<&MoveSnapshotSquare> {
+        if let MoveDescription::Capture(_, _, dest_sq_index) | MoveDescription::Move(_, _, dest_sq_index) = self.get_description() {
+            for i in 0..self.get_squares().len() {
+                if i != *dest_sq_index as usize {
+                    if let Some(ref x) = self.get_squares()[i] {
+                        return Some(x);
+                    }
+                }
+            }
+            None
+        } else {
+            None
+        }
+    }
+}
 
 impl Deref for MoveSnapshot {
     type Target = MoveSnapshotSquares;
@@ -92,14 +129,15 @@ impl MoveList {
         &mut self.v[i]
     }
 
+    // TODO Implement iterable
     #[inline]
     pub fn get_v(&self) -> &Vec<MoveSnapshot> {
         &self.v
     }
 
     #[inline]
-    pub fn copy_and_write(&mut self, board_subset: &MoveSnapshot) {
-        self.write(*board_subset);
+    pub fn clone_and_write(&mut self, board_subset: &MoveSnapshot) {
+        self.write(board_subset.clone());
     }
 
     pub fn write(&mut self, board_subset: MoveSnapshot) {
