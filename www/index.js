@@ -27,7 +27,7 @@ class Application {
         this.draggedSqY = 0;
 
         this.main = wasm.Main.new();
-        this.LEN = 85;
+        this.LEN = (0.9 * Math.min(window.innerWidth, window.innerHeight - document.getElementById('title').getBoundingClientRect().height) / 8) >>> 0;
 
         // Pawn = 0, Rook, Knight, Bishop, Queen, King
         this.numToLetter = [
