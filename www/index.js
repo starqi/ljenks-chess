@@ -1,5 +1,21 @@
-
 import * as wasm from './node_modules/chess_bs';
+
+import bb from './assets/bb.png';
+import bw from './assets/bw.png';
+import kb from './assets/kb.png';
+import kw from './assets/kw.png';
+import nb from './assets/nb.png';
+import nw from './assets/nw.png';
+import pb from './assets/pb.png';
+import pw from './assets/pw.png';
+import qb from './assets/qb.png';
+import qw from './assets/qw.png';
+import rb from './assets/rb.png';
+import rw from './assets/rw.png';
+
+const imageUrls = {
+    bb, bw, kb, kw, nb, nw, pb, pw, qb, qw, rb, rw
+};
 
 class Board {
     constructor() {
@@ -139,7 +155,7 @@ class Board {
     }
 
     setSquare(row, col, code, isWhite) {
-        const src = typeof code === 'string' ? 'assets/' + code.toLowerCase() + (isWhite ? 'w' : 'b') + '.png' : null;
+        const src = typeof code === 'string' ? imageUrls[code.toLowerCase() + (isWhite ? 'w' : 'b')] : null;
         return this._setSquare(row, col, src);
     }
 
