@@ -1,8 +1,5 @@
 TODO
 
-- Bugs
-    - Check not working
-    - Random crash
 - Disallow fake premoves
 - Space metric but only with acquiesce, "stable position"
 - Replace hash map coords

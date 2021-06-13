@@ -40,8 +40,8 @@ impl CastleUtils {
         let black_first_row = Player::get_first_row(Player::Black);
 
         return CastleUtils {
-            oo_move_snapshots: [CastleUtils::get_oo_move_snapshot_for_row(Player::White), CastleUtils::get_oo_move_snapshot_for_row(Player::White)],
-            ooo_move_snapshots: [CastleUtils::get_ooo_move_snapshot_for_row(Player::Black), CastleUtils::get_ooo_move_snapshot_for_row(Player::Black)],
+            oo_move_snapshots: [CastleUtils::get_oo_move_snapshot_for_row(Player::White), CastleUtils::get_oo_move_snapshot_for_row(Player::Black)],
+            ooo_move_snapshots: [CastleUtils::get_ooo_move_snapshot_for_row(Player::White), CastleUtils::get_ooo_move_snapshot_for_row(Player::Black)],
             oo_king_traversal_sqs: [
                 [Coord(6, white_first_row), Coord(5, white_first_row)],
                 [Coord(6, black_first_row), Coord(5, black_first_row)]

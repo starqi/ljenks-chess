@@ -101,11 +101,9 @@ class Board {
         if (!board.main.try_move(this.draggedSqX, this.draggedSqY, sqCoords.x, sqCoords.y)) return;
 
         board.updateFromWasm();
-        setTimeout(() => {
-            board.main.make_ai_move();
-            board.updateFromWasm();
-            board.main.refresh_player_moves();
-        }, 500);
+        board.main.make_ai_move();
+        board.updateFromWasm();
+        board.main.refresh_player_moves();
     }
 
     setSquareFromWasm(row, col) {

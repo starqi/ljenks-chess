@@ -60,7 +60,8 @@ impl Main {
     pub fn refresh_player_moves(&mut self) {
         self.move_list.write_index = 0;
         self.board.get_moves(&mut self.temp, &mut self.move_list);
-        self.searchable.reset(&mut self.move_list);
+        let end_exclusive = self.move_list.write_index;
+        self.searchable.reset(&mut self.move_list, 0, end_exclusive);
     }
 
     pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> bool {

@@ -16,11 +16,13 @@ impl SearchableMoves {
         SearchableMoves { map }
     }
 
-    pub fn reset(&mut self, move_list: &MoveList) {
+    pub fn reset(&mut self, move_list: &MoveList, start: usize, end_exclusive: usize) {
 
         self.map.clear();
 
-        for m in move_list.get_v() {
+        for i in start..end_exclusive {
+            let m = &move_list.get_v()[i];
+
             if let Some(capture_dest) = m.get_dest_sq() {
                 if let Some(capture_src) = m.get_src_sq() {
                     self.map.insert(SearchableMoveKey(capture_src.0, capture_dest.0), m.clone());
