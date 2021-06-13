@@ -17,8 +17,10 @@ const imageUrls = {
     bb, bw, kb, kw, nb, nw, pb, pw, qb, qw, rb, rw
 };
 
-class Board {
+class Application {
     constructor() {
+
+        this.boardLock = false;
 
         this.draggedImage = null;
         this.draggedSqX = 0;
@@ -71,10 +73,18 @@ class Board {
             this.board.append(rowElement);
             this.squareImages.push(imageRow);
         }
+
+        this.isPlayerWhite = Math.random() > 0.5;
+        if (!this.isPlayerWhite) {
+            this.main.make_ai_move();
+        }
+        this.main.refresh_player_moves();
+        this.updateFromWasm();
     }
 
     onBoardMouseDown(e) {
         e.preventDefault();
+        if (this.boardLock) return;
 
         const sqCoords = this.getSquareCoordsFromMouseEvent(e);
 
@@ -94,7 +104,7 @@ class Board {
 
     trySyncDragged(e) {
         if (this.draggedImage !== null) {
-            const clientCoords = this.getClientCoordsFromMouseEvent(e);
+            const clientCoords = this.getBoardCoordsFromMouseEvent(e);
 
             this.dragged.style.left = clientCoords.x - this.LEN / 2.0;
             this.dragged.style.top = clientCoords.y - this.LEN / 2.0;
@@ -109,22 +119,36 @@ class Board {
     onBoardMouseUp(e) {
         e.preventDefault();
 
+        if (this.draggedImage === null) return;
+
         this.draggedImage.style.visibility = 'visible';
         this.draggedImage = null;
         this.dragged.style.visibility = 'hidden';
 
         const sqCoords = this.getSquareCoordsFromMouseEvent(e);
-        if (!board.main.try_move(this.draggedSqX, this.draggedSqY, sqCoords.x, sqCoords.y)) return;
+        if (!this.main.try_move(
+                this.draggedSqX,
+                this.isPlayerWhite ? this.draggedSqY : 7 - this.draggedSqY,
+                sqCoords.x,
+                this.isPlayerWhite ? sqCoords.y : 7 - sqCoords.y
+            )) return;
 
-        board.updateFromWasm();
-        board.main.make_ai_move();
-        board.updateFromWasm();
-        board.main.refresh_player_moves();
+        this.updateFromWasm();
+
+        this.boardLock = true;
+        console.log('Locked board');
+        setTimeout(() => {
+            this.main.make_ai_move();
+            this.updateFromWasm();
+            this.main.refresh_player_moves();
+            this.boardLock = false;
+            console.log('Unlocked board');
+        }, 250);
     }
 
     setSquareFromWasm(row, col) {
         const existing = this.wasmData[row * 8 + col];
-        const num = board.main.get_piece(col, row);
+        const num = this.main.get_piece(col, this.isPlayerWhite ? row : 7 - row);
         if (existing === num) {
             this.colorSquare(row, col, false);
         } else {
@@ -182,13 +206,13 @@ class Board {
         }
     }
 
-    getClientCoordsFromMouseEvent(e) {
+    getBoardCoordsFromMouseEvent(e) {
         const r = this.board.getBoundingClientRect();
         return {x: e.clientX - r.left, y: e.clientY - r.top};
     }
 
     getSquareCoordsFromMouseEvent(e) {
-        const r = this.getClientCoordsFromMouseEvent(e);
+        const r = this.getBoardCoordsFromMouseEvent(e);
         return {
             x: (r.x / this.LEN) >>> 0,
             y: (r.y / this.LEN) >>> 0
@@ -196,15 +220,4 @@ class Board {
     }
 }
 
-const board = new Board();
-board.updateFromWasm();
-board.main.refresh_player_moves();
-
-/*
-setInterval(() => {
-    board.main.make_move();
-    board.updateFromWasm();
-    board.main.refresh_player_moves();
-    board.main.is_valid_move
-}, 1000);
-*/
+new Application();
