@@ -38,6 +38,9 @@ class Application {
         this.board.addEventListener('mousedown', this.onBoardMouseDown.bind(this));
         this.board.addEventListener('mousemove', this.onBoardMouseMove.bind(this));
         this.board.addEventListener('mouseup', this.onBoardMouseUp.bind(this));
+        this.board.addEventListener('touchstart', this.onTouchStart.bind(this));
+        this.board.addEventListener('touchmove', this.onTouchMove.bind(this));
+        this.board.addEventListener('touchend', this.onTouchEnd.bind(this));
 
         this.dragged = document.getElementById('dragged');
         this.dragged.width = this.LEN;
@@ -82,11 +85,18 @@ class Application {
         this.updateFromWasm();
     }
 
-    onBoardMouseDown(e) {
-        e.preventDefault();
+    //////////////////////////////////////////////////
+
+    onGenericDragStart(clientX, clientY) {
         if (this.boardLock) return;
 
-        const sqCoords = this.getSquareCoordsFromMouseEvent(e);
+        if (this.draggedImage !== null) {
+            // Contract = draggedImage is synced to null if mouse up
+            // But if any shenanigans with mouse/touch up not being called, then clean up the invisible piece
+            this.draggedImage.style.visibility = 'visible';
+        }
+
+        const sqCoords = this.getSquareCoordsFromClientCoords(clientX, clientY);
 
         const row = this.squareImages[sqCoords.y];
         if (row === undefined) return;
@@ -99,39 +109,31 @@ class Application {
         this.dragged.style.visibility = 'visible';
         this.draggedSqY = sqCoords.y;
         this.draggedSqX = sqCoords.x;
-        this.trySyncDragged(e);
+        this.trySyncDragged(clientX, clientY);
     }
 
-    trySyncDragged(e) {
+    trySyncDragged(clientX, clientY) {
+        const boardCoords = this.getBoardCoordsFromClientCoords(clientX, clientY);
         if (this.draggedImage !== null) {
-            const clientCoords = this.getBoardCoordsFromMouseEvent(e);
-
-            this.dragged.style.left = clientCoords.x - this.LEN / 2.0;
-            this.dragged.style.top = clientCoords.y - this.LEN / 2.0;
+            this.dragged.style.left = boardCoords.x - this.LEN / 2.0;
+            this.dragged.style.top = boardCoords.y - this.LEN / 2.0;
         }
     }
 
-    onBoardMouseMove(e) {
-        e.preventDefault();
-        this.trySyncDragged(e);
-    }
-
-    onBoardMouseUp(e) {
-        e.preventDefault();
-
+    onGenericDragEnd(clientX, clientY) {
         if (this.draggedImage === null) return;
 
         this.draggedImage.style.visibility = 'visible';
         this.draggedImage = null;
         this.dragged.style.visibility = 'hidden';
 
-        const sqCoords = this.getSquareCoordsFromMouseEvent(e);
+        const sqCoords = this.getSquareCoordsFromClientCoords(clientX, clientY);
         if (!this.main.try_move(
-                this.draggedSqX,
-                this.isPlayerWhite ? this.draggedSqY : 7 - this.draggedSqY,
-                sqCoords.x,
-                this.isPlayerWhite ? sqCoords.y : 7 - sqCoords.y
-            )) return;
+            this.draggedSqX,
+            this.isPlayerWhite ? this.draggedSqY : 7 - this.draggedSqY,
+            sqCoords.x,
+            this.isPlayerWhite ? sqCoords.y : 7 - sqCoords.y
+        )) return;
 
         this.updateFromWasm();
 
@@ -145,6 +147,47 @@ class Application {
             console.log('Unlocked board');
         }, 250);
     }
+
+    //////////////////////////////////////////////////
+
+    onBoardMouseDown(e) {
+        e.preventDefault();
+        this.onGenericDragStart(e.clientX, e.clientY);
+    }
+
+    onBoardMouseMove(e) {
+        e.preventDefault();
+        this.trySyncDragged(e.clientX, e.clientY);
+    }
+
+    onBoardMouseUp(e) {
+        e.preventDefault();
+        this.onGenericDragEnd(e.clientX, e.clientY);
+    }
+
+    //////////////////////////////////////////////////
+
+    onTouchStart(e) {
+        if (e.touches.length === 1) {
+            this.onGenericDragStart(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    }
+
+    onTouchMove(e) {
+        if (e.touches.length >= 1) {
+            this.trySyncDragged(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    }
+
+    onTouchEnd(e) {
+        if (e.touches.length === 0 && e.changedTouches.length === 1) {
+            this.onGenericDragEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        } else {
+            this.onGenericDragEnd(-1, -1);
+        }
+    }
+
+    //////////////////////////////////////////////////
 
     setSquareFromWasm(row, col) {
         const existing = this.wasmData[row * 8 + col];
@@ -206,17 +249,18 @@ class Application {
         }
     }
 
-    getBoardCoordsFromMouseEvent(e) {
+    //////////////////////////////////////////////////
+
+    getBoardCoordsFromClientCoords(clientX, clientY) {
         const r = this.board.getBoundingClientRect();
-        return {x: e.clientX - r.left, y: e.clientY - r.top};
+        return {x: clientX - r.left, y: clientY - r.top};
     }
 
-    getSquareCoordsFromMouseEvent(e) {
-        const r = this.getBoardCoordsFromMouseEvent(e);
-        return {
-            x: (r.x / this.LEN) >>> 0,
-            y: (r.y / this.LEN) >>> 0
-        };
+    getSquareCoordsFromClientCoords(clientX, clientY) {
+        const r = this.getBoardCoordsFromClientCoords(clientX, clientY);
+        r.x = (r.x / this.LEN) >>> 0;
+        r.y = (r.y / this.LEN) >>> 0;
+        return r;
     }
 }
 
