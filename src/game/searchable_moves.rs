@@ -30,14 +30,15 @@ impl SearchableMoves {
 
             if let MoveDescription::Oo = m.get_description() {
                 let sqs = m.get_squares();
-                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[sqs.len() - 1].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[sqs.len() - 2].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[sqs.len() - 1].unwrap().0, sqs[0].unwrap().0), m.clone());
-            } else if let MoveDescription::Oo = m.get_description() {
+                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[3].unwrap().0), m.clone());
+                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[2].unwrap().0), m.clone());
+                self.map.insert(SearchableMoveKey(sqs[3].unwrap().0, sqs[0].unwrap().0), m.clone());
+            } else if let MoveDescription::Ooo = m.get_description() {
                 let sqs = m.get_squares();
-                self.map.insert(SearchableMoveKey(sqs[sqs.len() - 1].unwrap().0, sqs[0].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[sqs.len() - 1].unwrap().0, sqs[1].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[sqs.len() - 1].unwrap().0), m.clone());
+                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[4].unwrap().0), m.clone());
+                self.map.insert(SearchableMoveKey(sqs[4].unwrap().0, sqs[0].unwrap().0), m.clone());
+                self.map.insert(SearchableMoveKey(sqs[4].unwrap().0, sqs[1].unwrap().0), m.clone());
+                self.map.insert(SearchableMoveKey(sqs[4].unwrap().0, sqs[2].unwrap().0), m.clone());
             }
         }
 

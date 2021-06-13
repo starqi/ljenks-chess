@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate lazy_static;
+extern crate console_error_panic_hook;
 
 mod extern_funcs;
 mod macros;
@@ -39,6 +40,8 @@ pub struct Main {
 impl Main {
 
     pub fn new() -> Main {
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
         let board = Board::new();
         Main {
             board, 
