@@ -174,7 +174,8 @@ class Application {
     }
 
     onTouchMove(e) {
-        if (e.touches.length >= 1) {
+        if (e.touches.length == 1) {
+            e.preventDefault(); // Prevent scroll/zoom while drag
             this.trySyncDragged(e.touches[0].clientX, e.touches[0].clientY);
         }
     }
