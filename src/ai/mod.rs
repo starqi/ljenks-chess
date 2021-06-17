@@ -9,6 +9,7 @@ pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
     temp_moves: MoveList,
+    eval_temp_arr: [i8; 64],
     memo: HashMap<i128, EvaluationAndDepth>,
     memo_hits: usize,
     fast_found_hits: usize
@@ -20,12 +21,13 @@ static MAX_EVAL: f32 = 9000.;
 
 impl Ai {
 
-    pub fn new() -> Ai {
+    pub fn new() -> Self {
         console_log!("AI init");
-        Ai {
+        Self {
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
             temp_moves: MoveList::new(50),
+            eval_temp_arr: [0; 64],
             memo: HashMap::new(),
             memo_hits: 0,
             fast_found_hits: 0
@@ -75,7 +77,7 @@ impl Ai {
             console_log!("Making move: {}", best_move);
             real_board.make_move(best_move);
             console_log!("\n{}\n", real_board);
-            console_log!("{}", evaluation::evaluate(real_board));
+            console_log!("{}", evaluation::evaluate(real_board, &mut self.eval_temp_arr));
             console_log!("{}", real_board.as_number());
             console_log!("Memo hits - {}, size - {}, fast found - {}", self.memo_hits, self.memo.len(), self.fast_found_hits);
             self.memo_hits = 0;
@@ -95,7 +97,7 @@ impl Ai {
     ) -> f32 {
 
         if remaining_depth <= 0 {
-            let eval = evaluation::evaluate(&self.test_board);
+            let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
             return self.test_board.get_player_with_turn().get_multiplier() * eval;
         }
 

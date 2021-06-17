@@ -117,8 +117,8 @@ pub struct MoveList {
 /// Writers are expected to assume `write_index` is set already to the correct location
 impl MoveList {
 
-    pub fn new(capacity: usize) -> MoveList {
-        MoveList {
+    pub fn new(capacity: usize) -> Self {
+        Self {
             v: Vec::with_capacity(capacity),
             write_index: 0
         }

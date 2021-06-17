@@ -13,15 +13,15 @@ fn evaluate_piece(piece: Piece) -> f32 {
     PIECE_VALUES[piece as usize]
 }
 
-fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_white_else_zero: f32, ps: &PlayerState) -> f32 {
+fn evaluate_player(board: &Board, temp_arr: &mut [i8; 64], neg_one_if_white_else_one: f32, seven_if_white_else_zero: f32, ps: &PlayerState) -> f32 {
     let mut value: f32 = 0.;
 
     for Coord(x, y) in ps.piece_locs.iter() {
         let fy = *y as f32;
 
         if let Square::Occupied(piece, _) = board.get_by_xy(*x, *y) {
-            value += evaluate_piece(piece);
-            if piece == Piece::Pawn {
+            value += evaluate_piece(*piece);
+            if *piece == Piece::Pawn {
                 value += 0.3 * (seven_if_white_else_zero + neg_one_if_white_else_one * fy);
             } else {
                 if fy > 0. && fy < 7. {
@@ -34,10 +34,10 @@ fn evaluate_player(board: &Board, neg_one_if_white_else_one: f32, seven_if_white
     value * neg_one_if_white_else_one as f32 * -1.
 }
 
-pub fn evaluate(board: &Board) -> f32 {
+pub fn evaluate(board: &Board, temp_arr: &mut [i8; 64]) -> f32 {
     let white_s = &board.get_player_state(Player::White);
     let black_s = &board.get_player_state(Player::Black);
-    evaluate_player(board, 1., 0., black_s) + evaluate_player(board, -1., 7., white_s)
+    evaluate_player(board, temp_arr, 1., 0., black_s) + evaluate_player(board, temp_arr, -1., 7., white_s)
 }
 
 pub fn sort_moves_by_aggression(board: &Board, m: &mut MoveList, start: usize, end_exclusive: usize, temp_ml: &mut MoveList) {
@@ -52,8 +52,21 @@ pub fn sort_moves_by_aggression(board: &Board, m: &mut MoveList, start: usize, e
 
         for sq_holder in m.0.iter() {
             if let Some((Coord(x, y), BeforeAfterSquares(_, Square::Occupied(after_piece, after_player)))) = sq_holder {
-                temp_ml.write_index = 0;
-                BasicMoveTest::fill_src(*x, *y, *after_piece, *after_player, board, true, temp_ml);
+
+                let params = BasicMoveTestParams {
+                    src_x: *x as i8,
+                    src_y: *y as i8,
+                    src_piece: *after_piece,
+                    src_player: *after_player,
+                    can_capture_king: true,
+                    board
+                };
+
+                let mut handler = PushToMoveListHandler { move_list: temp_ml };
+
+                handler.move_list.write_index = 0;
+                fill_src(&params, &mut handler);
+
                 for i in 0..temp_ml.write_index {
                     if let MoveSnapshot(sqs, _, MoveDescription::Capture(_, _, dest_sq_index)) = temp_ml.get_v()[i] {
                         if let Some((_, BeforeAfterSquares(Square::Occupied(attacked_piece, attacked_player), _))) = sqs[dest_sq_index as usize] {

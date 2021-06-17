@@ -79,7 +79,7 @@ impl Main {
 
     pub fn get_piece(&self, x: i32, y: i32) -> i8 {
         if let Ok(Square::Occupied(piece, player)) = self.board.get_by_xy_safe(x, y) {
-            ((piece as u8) + 1) as i8 * player.get_multiplier() as i8
+            ((*piece as u8) + 1) as i8 * player.get_multiplier() as i8
         } else if let Ok(Square::Blank) = self.board.get_by_xy_safe(x, y) {
             0
         } else {

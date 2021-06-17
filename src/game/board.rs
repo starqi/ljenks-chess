@@ -17,8 +17,8 @@ pub struct PlayerState {
 }
 
 impl PlayerState {
-    fn new() -> PlayerState {
-        PlayerState {
+    fn new() -> Self {
+        Self {
             piece_locs: HashSet::new(),
             moved_oo_piece: false,
             moved_ooo_piece: false,
@@ -47,8 +47,8 @@ impl Display for Board {
 }
 
 impl Board {
-    pub fn new() -> Board {
-        let mut board = Board {
+    pub fn new() -> Self {
+        let mut board = Self {
             d: [Square::Blank; 64],
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()]
@@ -87,23 +87,23 @@ impl Board {
     //////////////////////////////////////////////////
     // Get set squares
 
-    pub fn get_safe(&self, file: char, rank: u8) -> Result<Square, Error> {
+    pub fn get_safe(&self, file: char, rank: u8) -> Result<&Square, Error> {
         let Coord(x, y) = file_rank_to_xy_safe(file, rank)?;
         Ok(self.get_by_xy(x, y))
     }
 
-    pub fn get_by_xy_safe(&self, x: i32, y: i32) -> Result<Square, Error> {
+    pub fn get_by_xy_safe(&self, x: i32, y: i32) -> Result<&Square, Error> {
         check_i32_xy(x, y)?;
         Ok(self.get_by_xy(x as u8, y as u8))
     }
 
-    pub fn get_by_xy(&self, x: u8, y: u8) -> Square {
-        return self.d[y as usize * 8 + x as usize];
+    pub fn get_by_xy(&self, x: u8, y: u8) -> &Square {
+        return &self.d[y as usize * 8 + x as usize];
     }
 
     pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
         if let Square::Occupied(_, occupied_player) = self.get_by_xy(x, y) {
-            let piece_list = &mut self.get_player_state_mut(occupied_player).piece_locs;
+            let piece_list = &mut self.get_player_state_mut(*occupied_player).piece_locs;
             piece_list.remove(&Coord(x, y));
         }
 
@@ -171,14 +171,18 @@ impl Board {
 
     /// Gets the final set of legal moves
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
-        temp_moves.write_index = 0;
-        BasicMoveTest::fill_player(self.player_with_turn, self, false, temp_moves);
-        BasicMoveTest::filter_check_threats(
+
+        let mut handler = PushToMoveListHandler { move_list: temp_moves };
+
+        handler.move_list.write_index = 0;
+        fill_player(self.player_with_turn, false, self, &mut handler);
+
+        filter_check_threats(
             self,
             self.player_with_turn.get_other_player(), 
-            temp_moves,
+            handler.move_list,
             0,
-            temp_moves.write_index,
+            handler.move_list.write_index,
             result
         );
 
@@ -192,7 +196,7 @@ impl Board {
                 &CASTLE_UTILS.oo_king_traversal_sqs[self.player_with_turn as usize],
                 &CASTLE_UTILS.oo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
-                temp_moves,
+                handler.move_list,
                 result
             );
         }
@@ -202,7 +206,7 @@ impl Board {
                 &CASTLE_UTILS.ooo_king_traversal_sqs[self.player_with_turn as usize],
                 &CASTLE_UTILS.ooo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
-                temp_moves,
+                handler.move_list,
                 result
             );
         }
@@ -226,11 +230,13 @@ impl Board {
         for Coord(x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Occupied(Piece::King, player_with_turn));
         }
-        temp_moves.write_index = 0;
-        BasicMoveTest::fill_player(
-            player_with_turn.get_other_player(), self, true, temp_moves
-        );
-        let can_castle = !BasicMoveTest::has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn);
+
+        let mut handler = PushToMoveListHandler { move_list: temp_moves };
+
+        handler.move_list.write_index = 0;
+        fill_player(player_with_turn.get_other_player(), true, self, &mut handler);
+
+        let can_castle = !has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn);
         for Coord(x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Blank);
         }
@@ -241,7 +247,6 @@ impl Board {
     }
 
     //////////////////////////////////////////////////
-
 
     fn set_uniform_row(&mut self, rank: u8, player: Player, piece: Piece) {
         for i in 0..8 {

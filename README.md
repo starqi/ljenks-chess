@@ -8,4 +8,4 @@ TODO
 - En passant + old board state
 - Can only apply moves from an internal move list 
 - Investigate Webpack Wasm generation
-- Lazy static castle utils
+- Castle will spawn a rook if not normal setup, and no rook to begin with
