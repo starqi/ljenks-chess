@@ -128,12 +128,21 @@ class Application {
         this.dragged.style.visibility = 'hidden';
 
         const sqCoords = this.getSquareCoordsFromClientCoords(clientX, clientY);
-        if (!this.main.try_move(
-            this.draggedSqX,
-            this.isPlayerWhite ? this.draggedSqY : 7 - this.draggedSqY,
-            sqCoords.x,
-            this.isPlayerWhite ? sqCoords.y : 7 - sqCoords.y
-        )) return;
+        if (this.isPlayerWhite) {
+            if (!this.main.try_move(
+                this.draggedSqX,
+                this.draggedSqY,
+                sqCoords.x,
+                sqCoords.y
+            )) return;
+        } else {
+            if (!this.main.try_move(
+                7 - this.draggedSqX,
+                7 - this.draggedSqY,
+                7 - sqCoords.x,
+                7 - sqCoords.y
+            )) return;
+        }
 
         this.updateFromWasm();
 
@@ -192,7 +201,7 @@ class Application {
 
     setSquareFromWasm(row, col) {
         const existing = this.wasmData[row * 8 + col];
-        const num = this.main.get_piece(col, this.isPlayerWhite ? row : 7 - row);
+        const num = this.isPlayerWhite ? this.main.get_piece(col, row) : this.main.get_piece(7 - col, 7 - row);
         if (existing === num) {
             this.colorSquare(row, col, false);
         } else {

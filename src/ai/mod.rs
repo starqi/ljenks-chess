@@ -9,7 +9,7 @@ pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
     temp_moves: MoveList,
-    eval_temp_arr: [i8; 64],
+    eval_temp_arr: [f32; 64],
     memo: HashMap<i128, EvaluationAndDepth>,
     memo_hits: usize,
     fast_found_hits: usize
@@ -27,19 +27,19 @@ impl Ai {
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
             temp_moves: MoveList::new(50),
-            eval_temp_arr: [0; 64],
+            eval_temp_arr: [0.; 64],
             memo: HashMap::new(),
             memo_hits: 0,
             fast_found_hits: 0
         }
     }
 
-    pub fn make_move(&mut self, depth: u8, real_board: &mut Board) {
+    pub fn make_move(&mut self, mut depth: u8, real_board: &mut Board) {
 
         assert!(depth >= 1);
+        depth -= 1;
 
         self.test_board.clone_from(real_board);
-        let m = self.test_board.get_player_with_turn().get_multiplier();
 
         self.moves_buf.write_index = 0;
         self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
@@ -48,15 +48,19 @@ impl Ai {
             console_log!("No legal moves");
         } else {
 
-            /*
-            crate::console_log!("FIXME");
-            crate::console_log!("{}", self.test_board);
-            evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, 0, moves_end_exclusive, &mut self.temp_moves);
-            self.moves_buf.print(0, moves_end_exclusive);
-            */
+            console_log!("\n{}\n", real_board);
 
-            let real_depth = depth - 1;
-            for d in 0..real_depth {
+            crate::console_log!("\nMove ordering DEBUG");
+            evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, 0, moves_end_exclusive, &mut self.eval_temp_arr, &mut self.temp_moves);
+            self.moves_buf.print(0, moves_end_exclusive);
+
+            crate::console_log!("\nControl DEBUG");
+            for temp_arr_x in 0..8 {
+                let start = temp_arr_x * 8;
+                console_log!("{:?}", &self.eval_temp_arr[start..start + 8]);
+            }
+
+            for d in 0..=depth {
                 for i in (0..moves_end_exclusive).rev() {
                     self.test_board.make_move(&self.moves_buf.get_v()[i]);
                     let evaluation_as_maximizer = -self.negamax(
@@ -69,16 +73,17 @@ impl Ai {
                     self.test_board.undo_move(&self.moves_buf.get_v()[i]);
                 }
                 self.moves_buf.sort_subset_by_eval(0, moves_end_exclusive);
+
                 let leading_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
-                console_log!("Leading move: {}", leading_move);
+                console_log!("Depth {} - Best (real eval): {}", d + 1, leading_move);
             }
-            //self.moves_buf.print(0, moves_end_exclusive);
+            self.moves_buf.print(0, moves_end_exclusive);
             let best_move = &self.moves_buf.get_v()[moves_end_exclusive - 1];
             console_log!("Making move: {}", best_move);
             real_board.make_move(best_move);
             console_log!("\n{}\n", real_board);
             console_log!("{}", evaluation::evaluate(real_board, &mut self.eval_temp_arr));
-            console_log!("{}", real_board.as_number());
+
             console_log!("Memo hits - {}, size - {}, fast found - {}", self.memo_hits, self.memo.len(), self.fast_found_hits);
             self.memo_hits = 0;
             self.fast_found_hits = 0;
@@ -105,7 +110,7 @@ impl Ai {
         self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
 
-        evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
+        evaluation::sort_moves_by_aggression(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.eval_temp_arr, &mut self.temp_moves);
 
         let mut one_between_node_found = false;
         for i in (moves_start..moves_end_exclusive).rev() {

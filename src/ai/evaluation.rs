@@ -4,16 +4,101 @@ use super::super::game::board::*;
 use super::super::game::move_list::*;
 use super::super::game::basic_move_test::*;
 
+/// Must be bigger than all piece values
+const NO_CONTROL_VAL: f32 = 99.;
+
 /// Precondition: Pawn = 0, Rook, Knight, Bishop, Queen, King
-static PIECE_VALUES: [f32; 6] = [
-    1., 5., 3., 3., 9., 10.
+static PIECE_VALUES: [i8; 6] = [
+    1, 5, 3, 3, 9, 10
 ];
 
-fn evaluate_piece(piece: Piece) -> f32 {
-    PIECE_VALUES[piece as usize]
+static SOME_VALUES_1: [(f32, f32); 2] = [(7., -1.), (0., 1.)];
+
+struct SquareControlHandler<'a> {
+    temp_arr: &'a mut [f32; 64]
 }
 
-fn evaluate_player(board: &Board, temp_arr: &mut [i8; 64], neg_one_if_white_else_one: f32, seven_if_white_else_zero: f32, ps: &PlayerState) -> f32 {
+pub fn clear_square_control(a: &mut [f32; 64]) {
+    a.fill(NO_CONTROL_VAL);
+}
+
+#[inline]
+pub fn get_square_worth_white(x: usize, y: usize) -> f32 {
+    if y <= 0 { return 3.0; }
+    else if y >= 6 { return 0.25; }
+    else { return 3.5 - (3.5 - x as f32).abs(); }
+}
+
+#[inline]
+pub fn get_square_worth_black(x: usize, y: usize) -> f32 {
+    if y >= 7 { return 3.0; }
+    else if y <= 1 { return 0.25; }
+    else { return 3.5 - (3.5 - x as f32).abs(); }
+}
+
+pub fn get_white_square_control(a: &mut [f32; 64]) -> f32 {
+    let mut eval = 0.;
+    for y in 0..8 {
+        for x in 0..8 {
+            let v = a[y * 8 + x];
+            if v != NO_CONTROL_VAL && v.round() == v {
+                if v < 0. {
+                    eval -= get_square_worth_black(x, y);
+                } else if v > 0. {
+                    eval += get_square_worth_white(x, y);
+                }
+            }
+        }
+    }
+    eval
+}
+
+/// Precondition: `temp_arr` is cleared to a number > the highest piece value before move tests
+impl <'a> MoveTestHandler for SquareControlHandler<'a> {
+    fn push(
+        &mut self,
+        moveable: bool,
+        can_capture: bool,
+        params: &BasicMoveTestParams,
+        dest_x: u8,
+        dest_y: u8,
+        _: &Square,
+        _: Option<Piece>
+    ) {
+        if !can_capture { return; }
+
+        let index = dest_y as usize * 8 + dest_x as usize;
+
+        let mut lowest_controller_value_negpos = self.temp_arr[index];
+        {
+            let r = lowest_controller_value_negpos.round();
+            if r != lowest_controller_value_negpos {
+                lowest_controller_value_negpos = r;
+            }
+        }
+        let lowest_controller_value = lowest_controller_value_negpos.abs();
+
+        let candidate_value = evaluate_piece(params.src_piece);
+        let candidate_value_negpos = candidate_value * params.src_player.get_multiplier();
+
+        if candidate_value < lowest_controller_value {
+            self.temp_arr[index] = candidate_value_negpos;
+        } else if candidate_value == lowest_controller_value && candidate_value_negpos != lowest_controller_value_negpos {
+            self.temp_arr[index] = candidate_value_negpos + 0.3333;
+        }
+    }
+}
+
+#[inline]
+fn evaluate_piece(piece: Piece) -> f32 {
+    PIECE_VALUES[piece as usize] as f32
+}
+
+fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Player) -> f32 {
+
+    let ps = board.get_player_state(player);
+    let some_values_1 = SOME_VALUES_1[player as usize];
+
     let mut value: f32 = 0.;
 
     for Coord(x, y) in ps.piece_locs.iter() {
@@ -22,36 +107,73 @@ fn evaluate_player(board: &Board, temp_arr: &mut [i8; 64], neg_one_if_white_else
         if let Square::Occupied(piece, _) = board.get_by_xy(*x, *y) {
             value += evaluate_piece(*piece);
             if *piece == Piece::Pawn {
-                value += 0.3 * (seven_if_white_else_zero + neg_one_if_white_else_one * fy);
+                value += 0.3 * (some_values_1.0 + some_values_1.1 * fy);
             } else {
                 if fy > 0. && fy < 7. {
                     value += 0.75;
                 }
             }
+
+            fill_src(&BasicMoveTestParams {
+                src_x: *x as i8,
+                src_y: *y as i8,
+                src_piece: *piece,
+                src_player: player,
+                can_capture_king: true,
+                board: &board
+            }, handler);
         }
     }
     if ps.castled_somewhere { value += 3.0; }
-    value * neg_one_if_white_else_one as f32 * -1.
+    value * player.get_multiplier()
 }
 
-pub fn evaluate(board: &Board, temp_arr: &mut [i8; 64]) -> f32 {
-    let white_s = &board.get_player_state(Player::White);
-    let black_s = &board.get_player_state(Player::Black);
-    evaluate_player(board, temp_arr, 1., 0., black_s) + evaluate_player(board, temp_arr, -1., 7., white_s)
+fn round_eval(v: f32) -> f32 {
+    (v * 10.).round() / 10.
 }
 
-pub fn sort_moves_by_aggression(board: &Board, m: &mut MoveList, start: usize, end_exclusive: usize, temp_ml: &mut MoveList) {
+pub fn evaluate(board: &Board, temp_arr: &mut [f32; 64]) -> f32 {
+    clear_square_control(temp_arr);
+
+    let mut handler = SquareControlHandler { temp_arr };
+    let white_eval = evaluate_player(board, &mut handler, Player::White);
+    let black_eval = evaluate_player(board, &mut handler, Player::Black);
+    round_eval(0.05 * get_white_square_control(handler.temp_arr) + white_eval + black_eval)
+}
+
+pub fn sort_moves_by_aggression(
+    board: &Board,
+    m: &mut MoveList,
+    start: usize,
+    end_exclusive: usize,
+    temp_arr: &mut [f32; 64],
+    temp_ml: &mut MoveList
+) {
+    evaluate(board, temp_arr);
+
     m.write_evals(start, end_exclusive, |m| {
         let mut score = 0.0f32;
 
         if let MoveDescription::Capture(_, _, dest_sq_index) = m.2 {
-            if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(_, _)))) = m.0[dest_sq_index as usize] {
-                score += evaluate_piece(before_piece)
+            if let Some((Coord(x, y), BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(_, after_player)))) = m.0[dest_sq_index as usize] {
+                let min_controlling_value_negpos = temp_arr[y as usize * 8 + x as usize];
+
+                if min_controlling_value_negpos != NO_CONTROL_VAL &&
+                   min_controlling_value_negpos.signum() == after_player.get_multiplier() { 
+
+                    score += evaluate_piece(before_piece)
+                }
             }
         };
 
+        let mut handler = PushToMoveListHandler { move_list: temp_ml };
         for sq_holder in m.0.iter() {
             if let Some((Coord(x, y), BeforeAfterSquares(_, Square::Occupied(after_piece, after_player)))) = sq_holder {
+
+                let min_controlling_value_negpos = temp_arr[*y as usize * 8 + *x as usize];
+
+                if min_controlling_value_negpos != NO_CONTROL_VAL &&
+                   min_controlling_value_negpos.signum() != after_player.get_multiplier() { continue; } 
 
                 let params = BasicMoveTestParams {
                     src_x: *x as i8,
@@ -62,13 +184,11 @@ pub fn sort_moves_by_aggression(board: &Board, m: &mut MoveList, start: usize, e
                     board
                 };
 
-                let mut handler = PushToMoveListHandler { move_list: temp_ml };
-
                 handler.move_list.write_index = 0;
                 fill_src(&params, &mut handler);
 
-                for i in 0..temp_ml.write_index {
-                    if let MoveSnapshot(sqs, _, MoveDescription::Capture(_, _, dest_sq_index)) = temp_ml.get_v()[i] {
+                for i in 0..handler.move_list.write_index {
+                    if let MoveSnapshot(sqs, _, MoveDescription::Capture(_, _, dest_sq_index)) = handler.move_list.get_v()[i] {
                         if let Some((_, BeforeAfterSquares(Square::Occupied(attacked_piece, attacked_player), _))) = sqs[dest_sq_index as usize] {
                             if attacked_player != *after_player {
                                 score += evaluate_piece(attacked_piece) * 0.5;

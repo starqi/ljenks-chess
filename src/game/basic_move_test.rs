@@ -9,6 +9,8 @@ use super::coords::*;
 pub trait MoveTestHandler {
     fn push(
         &mut self,
+        moveable: bool,
+        can_capture: bool,
         params: &BasicMoveTestParams,
         dest_x: u8,
         dest_y: u8,
@@ -25,12 +27,16 @@ impl <'a> MoveTestHandler for PushToMoveListHandler<'a> {
 
     fn push(
         &mut self,
+        moveable: bool,
+        can_capture: bool,
         params: &BasicMoveTestParams,
         dest_x: u8,
         dest_y: u8,
         existing_dest_square: &Square,
         replacement_piece: Option<Piece>
     ) {
+        if !moveable { return; }
+
         let mut m = MoveSnapshot::default();
 
         m.0[0] = Some((Coord(params.src_x as u8, params.src_y as u8), BeforeAfterSquares(
@@ -54,6 +60,7 @@ impl <'a> MoveTestHandler for PushToMoveListHandler<'a> {
             first_prevented_ooo = !player_state.moved_ooo_piece;
         }
 
+        // Since we are dealing with "basic" moves, there are only captures and moves
         m.2 = if let Square::Occupied(_, _) = existing_dest_square {
             MoveDescription::Capture(first_prevented_oo, first_prevented_ooo, 1)
         } else {
@@ -66,7 +73,7 @@ impl <'a> MoveTestHandler for PushToMoveListHandler<'a> {
 
 //////////////////////////////////////////////////
 
-pub struct Pusher<'a, T : MoveTestHandler> {
+struct Pusher<'a, T : MoveTestHandler> {
     /// eg. Pawn cannot capture forwards
     can_capture: bool,
     /// eg. Pawn can't move to empty at a diagonal
@@ -107,10 +114,7 @@ impl <'a, T : MoveTestHandler> Pusher<'a, T> {
         };
 
         //crate::console_log!("{},{} moveable={} terminate={}", dest_x, dest_y, moveable, terminate);
-        if moveable {
-            self.handler.push(params, x as u8, y as u8, existing_dest_sq, self.replacement_piece);
-        }
-
+        self.handler.push(moveable, self.can_capture, params, x as u8, y as u8, existing_dest_sq, self.replacement_piece);
         return (moveable, terminate);
     }
 }
@@ -118,7 +122,7 @@ impl <'a, T : MoveTestHandler> Pusher<'a, T> {
 //////////////////////////////////////////////////
 
 // Sets up a piece for some player at some square, replacing the one on the board,
-// so we can get callbacks of the "physical" moves, eg. not involving checks, so that this functionality
+// so we can get callbacks of the "basic" moves, eg. not involving checks, so that this functionality
 // can support calculating checks.
 pub struct BasicMoveTestParams<'a> {
     pub src_x: i8,

@@ -1,5 +1,6 @@
 TODO
 
+- Castle will spawn a rook if no castle and rook is gone...
 - Disallow fake premoves
 - Space metric but only with acquiesce, "stable position"
 - Replace hash map coords
@@ -8,4 +9,3 @@ TODO
 - En passant + old board state
 - Can only apply moves from an internal move list 
 - Investigate Webpack Wasm generation
-- Castle will spawn a rook if not normal setup, and no rook to begin with
