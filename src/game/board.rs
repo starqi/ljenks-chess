@@ -9,10 +9,14 @@ use super::super::*;
 
 #[derive(Clone)]
 pub struct PlayerState {
+
     // TODO First thing to switch into bitboards
     pub piece_locs: HashSet<Coord>,
+
     pub moved_oo_piece: bool,
     pub moved_ooo_piece: bool,
+
+    /// Redundant
     pub castled_somewhere: bool
 }
 
@@ -31,6 +35,7 @@ impl PlayerState {
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
+    hash: u64,
     player_state: [PlayerState; 2]
 }
 
@@ -50,36 +55,61 @@ impl Board {
     pub fn new() -> Self {
         let mut board = Self {
             d: [Square::Blank; 64],
+            hash: 0,
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()]
         };
         board.set_standard_rows();
+        board.hash = board.calculate_hash();
         board
     }
 
-    pub fn as_number(&self) -> i128 {
-        let mut h: i128 = 0;
+    pub fn get_square_hash(i: usize, piece: Piece, player: Player) -> u64 {
+        RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
+    }
+
+    pub fn calculate_hash(&self) -> u64 {
+        let mut h: u64 = 0;
+
+        let mut i = 0usize;
         for sq in self.d.iter() {
-            h *= 13;
-            h += 6 + match sq {
-                Square::Blank => 0,
-                Square::Occupied(piece, player) => (*piece as i8 + 1) * (player.get_multiplier() as i8)
-            } as i128;
+            if let Square::Occupied(piece, player) = sq {
+                h ^= Self::get_square_hash(i, *piece, *player);
+            }
+            i += 1;
         }
-        h * self.get_player_with_turn().get_multiplier() as i128
+
+        let ws = self.get_player_state(Player::White);
+        let bs = self.get_player_state(Player::Black);
+        if ws.moved_oo_piece { h ^= RANDOM_NUMBER_KEYS.moved_oo_piece[0]; }
+        if ws.moved_ooo_piece { h ^= RANDOM_NUMBER_KEYS.moved_ooo_piece[0]; }
+        if bs.moved_oo_piece { h ^= RANDOM_NUMBER_KEYS.moved_oo_piece[1]; }
+        if bs.moved_ooo_piece { h ^= RANDOM_NUMBER_KEYS.moved_ooo_piece[1]; }
+
+        if self.get_player_with_turn() == Player::White { h ^= RANDOM_NUMBER_KEYS.is_white_to_play; }
+        
+        h
+    }
+
+    #[inline]
+    pub fn get_hash(&self) -> u64 {
+        self.hash
     }
 
     //////////////////////////////////////////////////
     // Player state
 
+    #[inline]
     pub fn get_player_with_turn(&self) -> Player {
         self.player_with_turn
     }
 
+    #[inline]
     pub fn get_player_state(&self, player: Player) -> &PlayerState {
         &self.player_state[player as usize]
     }
 
+    #[inline]
     fn get_player_state_mut(&mut self, player: Player) -> &mut PlayerState {
         &mut self.player_state[player as usize]
     }
@@ -97,6 +127,7 @@ impl Board {
         Ok(self.get_by_xy(x as u8, y as u8))
     }
 
+    #[inline]
     pub fn get_by_xy(&self, x: u8, y: u8) -> &Square {
         return &self.d[y as usize * 8 + x as usize];
     }
@@ -123,50 +154,63 @@ impl Board {
     //////////////////////////////////////////////////
     // Moves
 
-    pub fn undo_move(&mut self, m: &MoveSnapshot) {
-        for sq in m.iter() {
-            if let Some((Coord(x, y), before_after)) = sq {
-                self.set_by_xy(*x, *y, before_after.0);
+    pub fn handle_move(&mut self, m: &MoveSnapshot, apply_or_undo: bool) {
+        for sq_holder in m.iter() {
+            if let Some((Coord(x, y), BeforeAfterSquares(before, after))) = sq_holder {
+                self.set_by_xy(*x, *y, if apply_or_undo { *after } else { *before });
+
+                if let Square::Occupied(before_piece, before_player) = before {
+                    self.hash ^= Self::get_square_hash(*y as usize * 8 + *x as usize, *before_piece, *before_player);
+                }
+                if let Square::Occupied(after_piece, after_player) = after {
+                    self.hash ^= Self::get_square_hash(*y as usize * 8 + *x as usize, *after_piece, *after_player);
+                }
             }
         }
-        let player_state = self.get_player_state_mut(self.player_with_turn.get_other_player());
-        Self::update_castle_state_based_on_move(m, player_state, false);
-        self.player_with_turn = self.player_with_turn.get_other_player();
-    }
 
-    pub fn make_move(&mut self, m: &MoveSnapshot) {
-        for sq in m.iter() {
-            if let Some((Coord(x, y), before_after)) = sq {
-                self.set_by_xy(*x, *y, before_after.1);
-            }
+        {
+            let mut hash = self.get_hash();
+            let old_player = self.get_player_with_turn().get_other_player();
+            let old_player_state = self.get_player_state_mut(old_player);
+
+            let oo_key = RANDOM_NUMBER_KEYS.moved_oo_piece[old_player as usize];
+            let ooo_key = RANDOM_NUMBER_KEYS.moved_ooo_piece[old_player as usize];
+
+            // Undo hash state so that neither flags are true
+            if old_player_state.moved_oo_piece { hash ^= oo_key; }
+            if old_player_state.moved_ooo_piece { hash ^= ooo_key; }
+
+            // Change the actual flags to whatever they should be
+            match m.2 {
+                MoveDescription::Ooo | MoveDescription::Oo => {
+                    old_player_state.castled_somewhere = apply_or_undo;
+                    old_player_state.moved_oo_piece = apply_or_undo;
+                    old_player_state.moved_ooo_piece = apply_or_undo;
+                },
+                _ => {
+                    match m.2 {
+                        MoveDescription::Capture(true, _, _) | MoveDescription::Move(true, _, _) => {
+                            old_player_state.moved_oo_piece = apply_or_undo;
+                        },
+                        _ => ()
+                    };
+                    match m.2 {
+                        MoveDescription::Capture(_, true, _) | MoveDescription::Move(_, true, _) => {
+                            old_player_state.moved_ooo_piece = apply_or_undo;
+                        },
+                        _ => ()
+                    };
+                }
+            };
+
+            // Sync hash state with actual flags 
+            if old_player_state.moved_oo_piece { hash ^= oo_key; }
+            if old_player_state.moved_ooo_piece { hash ^= ooo_key; }
+            self.hash = hash;
         }
-        let player_state = self.get_player_state_mut(self.player_with_turn);
-        Self::update_castle_state_based_on_move(m, player_state, true);
-        self.player_with_turn = self.player_with_turn.get_other_player();
-    }
 
-    fn update_castle_state_based_on_move(m: &MoveSnapshot, player_state: &mut PlayerState, b: bool) {
-        match m.2 {
-            MoveDescription::Ooo | MoveDescription::Oo => {
-                player_state.castled_somewhere = b;
-                player_state.moved_oo_piece = b;
-                player_state.moved_ooo_piece = b;
-            },
-            _ => {
-                match m.2 {
-                    MoveDescription::Capture(true, _, _) | MoveDescription::Move(true, _, _) => {
-                        player_state.moved_oo_piece = b;
-                    },
-                    _ => ()
-                };
-                match m.2 {
-                    MoveDescription::Capture(_, true, _) | MoveDescription::Move(_, true, _) => {
-                        player_state.moved_ooo_piece = b;
-                    },
-                    _ => ()
-                };
-            }
-        };
+        self.hash ^= RANDOM_NUMBER_KEYS.is_white_to_play;
+        self.player_with_turn = self.player_with_turn.get_other_player();
     }
 
     /// Gets the final set of legal moves
@@ -179,7 +223,6 @@ impl Board {
 
         filter_check_threats(
             self,
-            self.player_with_turn.get_other_player(), 
             handler.move_list,
             0,
             handler.move_list.write_index,
@@ -212,7 +255,7 @@ impl Board {
         }
     }
 
-    /// Only does piece checks, not state checks
+    /// Only does piece checks, not state checks, ie. does it visually look like we can castle (but maybe the rook is not the original rook)
     fn try_push_castle(
         &mut self,
         king_travel_squares: &[Coord],
@@ -221,10 +264,12 @@ impl Board {
         temp_moves: &mut MoveList,
         result: &mut MoveList
     ) {
-        for Coord(x, y) in king_travel_squares.iter() {
-            if let Square::Occupied(_, _) = self.get_by_xy(*x, *y) {
-                return;
-            } 
+        for sq_holder in move_snapshot.get_squares() {
+            if let Some((Coord(x, y), BeforeAfterSquares(before_sq, _))) = sq_holder {
+                if *self.get_by_xy(*x, *y) != *before_sq {
+                    return;
+                }
+            }
         }
 
         for Coord(x, y) in king_travel_squares.iter() {

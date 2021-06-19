@@ -1,3 +1,4 @@
+pub mod memo;
 pub mod board;
 pub mod coords;
 pub mod move_list;

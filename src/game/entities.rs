@@ -1,13 +1,13 @@
-use std::fmt::{Error as FmtError, Display, Formatter, self};
+use std::fmt::{Error as FmtError, Display, Formatter};
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Piece {
     Pawn = 0, Rook, Knight, Bishop, Queen, King
 }
 
 impl Piece {
-    fn custom_fmt(&self, f: &mut Formatter<'_>, is_lower: bool) -> Result<(), fmt::Error> {
+    fn custom_fmt(&self, f: &mut Formatter<'_>, is_lower: bool) -> Result<(), FmtError> {
         let s = match self {
             Piece::Pawn => "P",
             Piece::Rook => "R",
@@ -32,7 +32,7 @@ impl Display for Piece {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Player { 
     White = 0, Black
 }
@@ -59,7 +59,7 @@ impl Player {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Square {
     Occupied(Piece, Player), Blank
 }
@@ -71,7 +71,7 @@ impl Default for Square {
 }
 
 impl Display for Square {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
         match self {
             Square::Blank => {
                 write!(f, ". ")

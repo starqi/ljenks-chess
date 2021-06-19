@@ -7,13 +7,14 @@ mod macros;
 mod game;
 mod ai;
 
-use ai::{Ai};
+use ai::*;
+use game::memo::*;
+use game::coords::*;
+use game::entities::*;
 use game::board::*;
 use game::castle_utils::*;
-use game::entities::*;
 use game::searchable_moves::*;
 use game::move_list::*;
-use game::coords::*;
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -24,6 +25,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 lazy_static! {
     pub static ref CASTLE_UTILS: CastleUtils = CastleUtils::new();
+    pub static ref RANDOM_NUMBER_KEYS: RandomNumberKeys = RandomNumberKeys::new();
 }
 
 #[wasm_bindgen]
@@ -41,6 +43,10 @@ impl Main {
 
     pub fn new() -> Main {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
+        // Initialize lazy
+        &CASTLE_UTILS.oo_move_snapshots;
+        &RANDOM_NUMBER_KEYS.squares;
 
         let board = Board::new();
         Main {
@@ -70,7 +76,7 @@ impl Main {
 
         let _m = self.searchable.get_move(Coord(from_x as u8, from_y as u8), Coord(to_x as u8, to_y as u8));
         if let Some(m) = _m {
-            self.board.make_move(m);
+            self.board.handle_move(m, true);
             true
         } else {
             false

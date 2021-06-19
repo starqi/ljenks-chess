@@ -1,11 +1,9 @@
 TODO
 
-- Castle will spawn a rook if no castle and rook is gone...
-- Disallow fake premoves
-- Space metric but only with acquiesce, "stable position"
-- Replace hash map coords
-- Extra run to print PV, delete
+- Fix failure to find move if mate is close
 - Devalue forced mate based on # of moves to do it
+- Disallow fake premoves
+- Acquiesce
+- Replace hash map coords
 - En passant + old board state
-- Can only apply moves from an internal move list 
 - Investigate Webpack Wasm generation

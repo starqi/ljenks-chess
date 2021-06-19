@@ -81,29 +81,29 @@ impl Default for MoveSnapshot {
 
 impl Display for MoveSnapshot {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        match self.2 {
+        match self.get_description() {
             MoveDescription::Capture(p_oo, p_ooo, dest_sq_index) | MoveDescription::Move(p_oo, p_ooo, dest_sq_index) => {
-                if let Some((arrival_coord, BeforeAfterSquares(_, after))) = self.0[dest_sq_index as usize] {
-                    write!(f, "{}{} ({})", after, arrival_coord, self.1)?;
-                    if p_oo {
+                if let Some((arrival_coord, BeforeAfterSquares(_, after))) = self.get_squares()[*dest_sq_index as usize] {
+                    write!(f, "{}{} ({})", after, arrival_coord, self.get_eval())?;
+                    if *p_oo {
                         write!(f, " [p_oo]")?;
                     }
-                    if p_ooo {
+                    if *p_ooo {
                         write!(f, " [p_ooo]")?;
                     }
                     return Ok(());
                 }
 
-                write!(f, "Error... ({})", self.1)
+                write!(f, "Error... ({})", self.get_eval())
             },
             MoveDescription::Oo => {
-                write!(f, "oo ({})", self.1)
+                write!(f, "oo ({})", self.get_eval())
             },
             MoveDescription::Ooo => {
-                write!(f, "ooo ({})", self.1)
+                write!(f, "ooo ({})", self.get_eval())
             },
             _ => {
-                write!(f, "Special move?... ({})", self.1)
+                write!(f, "Special move?... ({})", self.get_eval())
             }
         }
     }
@@ -129,7 +129,6 @@ impl MoveList {
         &mut self.v[i]
     }
 
-    // TODO Implement iterable
     #[inline]
     pub fn get_v(&self) -> &Vec<MoveSnapshot> {
         &self.v

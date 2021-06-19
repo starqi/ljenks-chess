@@ -36,6 +36,8 @@ impl CastleUtils {
     }
 
     pub fn new() -> CastleUtils {
+        crate::console_log!("Generating castle constants");
+
         let white_first_row = Player::get_first_row(Player::White);
         let black_first_row = Player::get_first_row(Player::Black);
 

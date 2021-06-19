@@ -51,6 +51,7 @@ impl <'a> MoveTestHandler for PushToMoveListHandler<'a> {
 
         let mut first_prevented_oo = false; 
         let mut first_prevented_ooo = false;
+
         let player_state = params.board.get_player_state(params.src_player);
         if params.src_piece == Piece::Rook {
             first_prevented_oo = params.src_x == 7 && !player_state.moved_oo_piece;
@@ -189,10 +190,11 @@ pub fn has_king_capture_move(
     return false;
 }
 
-/// Filters out input moves which cannot be made because king will be captured
+/// Filters out input moves which cannot be made because king will be captured.
+/// Given move list will contain candidate moves, but beyond that, will be used as a temp buffer.
+/// Precondition: `real_board` is ready to make the moves in the input move list.
 pub fn filter_check_threats(
     real_board: &mut Board,
-    checking_player: Player,
 
     candidates_and_buf: &mut MoveList,
     candidates_start: usize,
@@ -200,22 +202,22 @@ pub fn filter_check_threats(
 
     result: &mut MoveList
 ) {
-    let checked_player = checking_player.get_other_player();
     let mut handler = PushToMoveListHandler { move_list: candidates_and_buf };
+    let checked_player = real_board.get_player_with_turn();
+    let checking_player = checked_player.get_other_player();
 
     for i in candidates_start..candidates_end_exclusive {
-        real_board.make_move(&handler.move_list.get_v()[i]);
+        let m_clone = handler.move_list.get_v()[i].clone();
+        real_board.handle_move(&m_clone, true);
 
         handler.move_list.write_index = candidates_end_exclusive;
         fill_player(checking_player, true, real_board, &mut handler); 
-        let cand_write_end_exclusive = handler.move_list.write_index;
+        let second_end_exclusive = handler.move_list.write_index;
 
-        if !has_king_capture_move(handler.move_list, candidates_end_exclusive, cand_write_end_exclusive, checked_player) {
-            let safe_move = &handler.move_list.get_v()[i];
-            result.clone_and_write(safe_move);
-        }
+        let can_write = !has_king_capture_move(handler.move_list, candidates_end_exclusive, second_end_exclusive, checked_player);
+        real_board.handle_move(&m_clone, false);
 
-        real_board.undo_move(&handler.move_list.get_v()[i]);
+        if can_write { result.write(m_clone); }
     }
 }
 

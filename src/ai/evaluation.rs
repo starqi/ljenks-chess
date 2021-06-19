@@ -7,7 +7,6 @@ use super::super::game::basic_move_test::*;
 /// Must be bigger than all piece values
 const NO_CONTROL_VAL: f32 = 99.;
 
-/// Precondition: Pawn = 0, Rook, Knight, Bishop, Queen, King
 static PIECE_VALUES: [i8; 6] = [
     1, 5, 3, 3, 9, 10
 ];
@@ -151,23 +150,20 @@ pub fn sort_moves_by_aggression(
 ) {
     evaluate(board, temp_arr);
 
+    let mut handler = PushToMoveListHandler { move_list: temp_ml };
     m.write_evals(start, end_exclusive, |m| {
-        let mut score = 0.0f32;
+        let mut score = m.get_eval();
 
-        if let MoveDescription::Capture(_, _, dest_sq_index) = m.2 {
-            if let Some((Coord(x, y), BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(_, after_player)))) = m.0[dest_sq_index as usize] {
+        if let MoveDescription::Capture(_, _, dest_sq_index) = m.get_description() {
+            if let Some((Coord(x, y), BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(_, after_player)))) = m.0[*dest_sq_index as usize] {
                 let min_controlling_value_negpos = temp_arr[y as usize * 8 + x as usize];
-
-                if min_controlling_value_negpos != NO_CONTROL_VAL &&
-                   min_controlling_value_negpos.signum() == after_player.get_multiplier() { 
-
+                if min_controlling_value_negpos != NO_CONTROL_VAL && min_controlling_value_negpos.signum() == after_player.get_multiplier() { 
                     score += evaluate_piece(before_piece)
                 }
             }
         };
 
-        let mut handler = PushToMoveListHandler { move_list: temp_ml };
-        for sq_holder in m.0.iter() {
+        for sq_holder in m.get_squares().iter() {
             if let Some((Coord(x, y), BeforeAfterSquares(_, Square::Occupied(after_piece, after_player)))) = sq_holder {
 
                 let min_controlling_value_negpos = temp_arr[*y as usize * 8 + *x as usize];
