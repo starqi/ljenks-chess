@@ -123,7 +123,6 @@ fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Pl
             }, handler);
         }
     }
-    if ps.castled_somewhere { value += 3.0; }
     value * player.get_multiplier()
 }
 
