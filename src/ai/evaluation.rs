@@ -23,18 +23,19 @@ pub fn clear_square_control(a: &mut [f32; 64]) {
 
 #[inline]
 pub fn get_square_worth_white(x: usize, y: usize) -> f32 {
-    if y <= 1 { return 3.0; }
-    else if y >= 6 { return 0.5; }
-    else { return 1.5 * (3.5 - (3.5 - x as f32).abs()); }
+    if y <= 1 { 1.0 }
+    else if y >= 6 { 0.1 }
+    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4. }
 }
 
 #[inline]
 pub fn get_square_worth_black(x: usize, y: usize) -> f32 {
-    if y >= 6 { return 3.0; }
-    else if y <= 1 { return 0.5; }
-    else { return 1.5 * (3.5 - (3.5 - x as f32).abs()); }
+    if y >= 6 { 1.0 }
+    else if y <= 1 { 0.1 }
+    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4. }
 }
 
+/// Currently, returns at 4 for a center square, 3 for opponent side square
 pub fn get_white_square_control(a: &mut [f32; 64]) -> f32 {
     let mut eval = 0.;
     for y in 0..8 {
@@ -136,10 +137,27 @@ pub fn evaluate(board: &Board, temp_arr: &mut [f32; 64]) -> f32 {
     let mut handler = SquareControlHandler { temp_arr };
     let white_eval = evaluate_player(board, &mut handler, Player::White);
     let black_eval = evaluate_player(board, &mut handler, Player::Black);
-    round_eval(0.05 * get_white_square_control(handler.temp_arr) + white_eval + black_eval)
+    
+    round_eval(0.2 * get_white_square_control(handler.temp_arr) + white_eval + black_eval)
 }
 
-pub fn sort_moves_by_aggression(
+pub fn add_captures_to_evals(
+    m: &mut MoveList,
+    start: usize,
+    end_exclusive: usize,
+) {
+    m.write_evals(start, end_exclusive, |m| {
+        let mut score = m.get_eval();
+        if let MoveDescription::Capture(_, _, dest_sq_index) = m.get_description() {
+            if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(after_piece, _)))) = m.0[*dest_sq_index as usize] {
+                score += evaluate_piece(before_piece) - evaluate_piece(after_piece);
+            }
+        }
+        score
+    });
+}
+
+pub fn add_aggression_to_evals(
     board: &Board,
     m: &mut MoveList,
     start: usize,
@@ -147,28 +165,14 @@ pub fn sort_moves_by_aggression(
     temp_arr: &mut [f32; 64],
     temp_ml: &mut MoveList
 ) {
-    evaluate(board, temp_arr);
-
     let mut handler = PushToMoveListHandler { move_list: temp_ml };
+    evaluate(board, temp_arr);
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.get_eval();
-
-        if let MoveDescription::Capture(_, _, dest_sq_index) = m.get_description() {
-            if let Some((Coord(x, y), BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(_, after_player)))) = m.0[*dest_sq_index as usize] {
-                let min_controlling_value_negpos = temp_arr[y as usize * 8 + x as usize];
-                if min_controlling_value_negpos != NO_CONTROL_VAL && min_controlling_value_negpos.signum() == after_player.get_multiplier() { 
-                    score += evaluate_piece(before_piece)
-                }
-            }
-        };
-
         for sq_holder in m.get_squares().iter() {
             if let Some((Coord(x, y), BeforeAfterSquares(_, Square::Occupied(after_piece, after_player)))) = sq_holder {
-
                 let min_controlling_value_negpos = temp_arr[*y as usize * 8 + *x as usize];
-
-                if min_controlling_value_negpos != NO_CONTROL_VAL &&
-                   min_controlling_value_negpos.signum() != after_player.get_multiplier() { continue; } 
+                if min_controlling_value_negpos != NO_CONTROL_VAL && min_controlling_value_negpos.signum() != after_player.get_multiplier() { continue; } 
 
                 let params = BasicMoveTestParams {
                     src_x: *x as i8,
@@ -186,16 +190,14 @@ pub fn sort_moves_by_aggression(
                     if let MoveSnapshot(sqs, _, MoveDescription::Capture(_, _, dest_sq_index)) = handler.move_list.get_v()[i] {
                         if let Some((_, BeforeAfterSquares(Square::Occupied(attacked_piece, attacked_player), _))) = sqs[dest_sq_index as usize] {
                             if attacked_player != *after_player {
-                                score += evaluate_piece(attacked_piece) * 0.5;
+                                score += evaluate_piece(attacked_piece) * 0.33;
                             }
                         }
                     }
                 }
             }
         }
-
         score
     });
-    m.sort_subset_by_eval(start, end_exclusive);
 }
 

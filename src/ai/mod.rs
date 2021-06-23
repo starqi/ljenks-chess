@@ -253,10 +253,10 @@ impl Ai {
                 self.show_tree_left_side = false;
                 return self.get_no_moves_eval(alpha, beta);
             }
-            evaluation::sort_moves_by_aggression(
-                &self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.eval_temp_arr, &mut self.temp_moves
-            );
+            evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.eval_temp_arr, &mut self.temp_moves);
         }
+        evaluation::add_captures_to_evals(&mut self.moves_buf, moves_start, moves_end_exclusive);
+        self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
 
         if self.show_tree_left_side {
             if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
