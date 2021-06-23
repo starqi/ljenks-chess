@@ -23,16 +23,16 @@ pub fn clear_square_control(a: &mut [f32; 64]) {
 
 #[inline]
 pub fn get_square_worth_white(x: usize, y: usize) -> f32 {
-    if y <= 0 { return 3.0; }
-    else if y >= 6 { return 0.25; }
-    else { return 3.5 - (3.5 - x as f32).abs(); }
+    if y <= 1 { return 3.0; }
+    else if y >= 6 { return 0.5; }
+    else { return 1.5 * (3.5 - (3.5 - x as f32).abs()); }
 }
 
 #[inline]
 pub fn get_square_worth_black(x: usize, y: usize) -> f32 {
-    if y >= 7 { return 3.0; }
-    else if y <= 1 { return 0.25; }
-    else { return 3.5 - (3.5 - x as f32).abs(); }
+    if y >= 6 { return 3.0; }
+    else if y <= 1 { return 0.5; }
+    else { return 1.5 * (3.5 - (3.5 - x as f32).abs()); }
 }
 
 pub fn get_white_square_control(a: &mut [f32; 64]) -> f32 {
@@ -89,7 +89,7 @@ impl <'a> MoveTestHandler for SquareControlHandler<'a> {
 }
 
 #[inline]
-fn evaluate_piece(piece: Piece) -> f32 {
+pub fn evaluate_piece(piece: Piece) -> f32 {
     PIECE_VALUES[piece as usize] as f32
 }
 

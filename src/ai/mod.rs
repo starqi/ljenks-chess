@@ -3,6 +3,8 @@ mod evaluation;
 use std::collections::HashMap;
 use super::game::move_list::*;
 use super::game::board::*;
+use super::game::entities::*;
+use super::game::basic_move_test::*;
 use crate::{console_log};
 
 pub struct Ai {
@@ -11,6 +13,7 @@ pub struct Ai {
     temp_moves: MoveList,
     eval_temp_arr: [f32; 64],
     memo: HashMap<u64, MemoData>,
+    q_memo: HashMap<u64, MemoData>,
     memo_hits: usize,
     fast_found_hits: usize,
     show_tree_left_side: bool
@@ -36,6 +39,7 @@ impl Ai {
             temp_moves: MoveList::new(50),
             eval_temp_arr: [0.; 64],
             memo: HashMap::new(),
+            q_memo: HashMap::new(),
             memo_hits: 0,
             fast_found_hits: 0,
             show_tree_left_side: false
@@ -44,7 +48,8 @@ impl Ai {
 
     fn get_leading_move(&self) -> Option<(&MoveSnapshot, f32)> {
         match self.memo.get(&self.test_board.get_hash()) {
-            Some(MemoData(eval, _, MemoType::Exact(best_move))) => {
+            // In this context, fail high means checkmate
+            Some(MemoData(eval, _, MemoType::High(best_move) | MemoType::Exact(best_move))) => {
                 Some((best_move, *eval))
             },
             _ => {
@@ -60,7 +65,9 @@ impl Ai {
         for d in (1..=depth).step_by(2) {
             console_log!("\nBegin depth {}", d);
             self.show_tree_left_side = true;
-            self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
+            unsafe {
+                self.negamax(d, false, -MAX_EVAL, MAX_EVAL, 0);
+            }
 
             let leading_move = self.get_leading_move();
             if let Some((m, e)) = leading_move {
@@ -80,27 +87,42 @@ impl Ai {
         } else {
             console_log!("No move");
         }
-        console_log!("Memo hits - {}, size - {}, fast found - {}", self.memo_hits, self.memo.len(), self.fast_found_hits);
+        console_log!("Memo hits - {}, size - {} / q - {}, fast found - {}", self.memo_hits, self.memo.len(), self.q_memo.len(), self.fast_found_hits);
         self.memo_hits = 0;
         self.fast_found_hits = 0;
         self.memo.clear();
+        self.q_memo.clear();
     }
 
     /// Will assume ownership over all move list elements from `moves_start`
     /// Only calculates score
-    fn negamax(
+    unsafe fn negamax(
         &mut self,
         remaining_depth: u8,
+        quiescence: bool,
         mut alpha: f32,
         beta: f32,
         moves_start: usize
     ) -> f32 {
 
         if remaining_depth <= 0 {
-            self.show_tree_left_side = false;
-            let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
-            return self.test_board.get_player_with_turn().get_multiplier() * eval;
+            if quiescence {
+                self.show_tree_left_side = false;
+                let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
+                return Self::cap(self.test_board.get_player_with_turn().get_multiplier() * eval, alpha, beta);
+            } else {
+                let mut eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
+                eval = self.test_board.get_player_with_turn().get_multiplier() * eval;
+
+                // Typical quiescence pruning (TODO review)
+                if eval >= beta { return beta; }
+                if eval > alpha { alpha = eval; }
+
+                return self.negamax(5, true, alpha, beta, moves_start);
+            }
         }
+
+        let resolved_memo: *mut HashMap<u64, MemoData> = if quiescence { &mut self.q_memo } else { &mut self.memo };
 
         const NEW_ALPHA_I_NEVER_SET: i32 = -1;
         const NEW_ALPHA_I_HASH_MOVE: i32 = -2;
@@ -110,7 +132,7 @@ impl Ai {
 
         {
             let memo = {
-                let _memo: Option<&MemoData> = self.memo.get(&self.test_board.get_hash());
+                let _memo: Option<&MemoData> = (*resolved_memo).get(&self.test_board.get_hash());
                 _memo.map(|x| x.clone())
             };
 
@@ -155,38 +177,48 @@ impl Ai {
 
                 if let Some(m) = best_move {
 
-                    if self.show_tree_left_side {
-                        crate::console_log!("L = {} (Hash)", m);
-                    }
-
-                    let r = unsafe { self.negamax_try_move(
-                        remaining_depth, 
-                        alpha,
-                        false,
-                        beta,
-                        &m,
-                        moves_start
-                    ) };
-                    match r {
-                        SingleMoveResult::BetaCutOff(max_this) => {
-                            self.memo.insert(
-                                self.test_board.get_hash(),
-                                MemoData(max_this, remaining_depth, MemoType::High(m))
-                            );
-                            self.show_tree_left_side = false;
-                            return beta;
-                        },
-                        SingleMoveResult::NewAlpha(max_this) => {
-                            // The move loop below will begin not with the alpha provided from caller,
-                            // but with the proven better alpha re-examined at full depth from the memo, which is also an exact score
-                            alpha = max_this;
-                            new_alpha_i = NEW_ALPHA_I_HASH_MOVE;
-                            hash_move = Some(m);
-                        },
-                        SingleMoveResult::NoEffect => {
-                            // The memoized move was not very good after examining it full depth
-                        }
+                    let run = if quiescence {
+                        Self::is_unstable_move(&m)
+                    } else {
+                        true
                     };
+
+                    if run {
+                        if self.show_tree_left_side {
+                            crate::console_log!("L = {} (Hash) {}", m, if quiescence { "(Q)" } else { "" });
+                        }
+
+                        let r = self.negamax_try_move(
+                            remaining_depth, 
+                            quiescence,
+                            alpha,
+                            false,
+                            beta,
+                            &m,
+                            moves_start
+                        );
+
+                        match r {
+                            SingleMoveResult::BetaCutOff(max_this) => {
+                                (*resolved_memo).insert(
+                                    self.test_board.get_hash(),
+                                    MemoData(max_this, remaining_depth, MemoType::High(m))
+                                );
+                                self.show_tree_left_side = false;
+                                return beta;
+                            },
+                            SingleMoveResult::NewAlpha(max_this) => {
+                                // The move loop below will begin not with the alpha provided from caller,
+                                // but with the proven better alpha re-examined at full depth from the memo, which is also an exact score
+                                alpha = max_this;
+                                new_alpha_i = NEW_ALPHA_I_HASH_MOVE;
+                                hash_move = Some(m);
+                            },
+                            SingleMoveResult::NoEffect => {
+                                // The memoized move was not very good after examining it full depth
+                            }
+                        };
+                    }
                 }
             }
         }
@@ -198,11 +230,10 @@ impl Ai {
 
         // Order by memoized evaluations, then by aggression heuristic
         for i in moves_start..moves_end_exclusive {
+
             let m = self.moves_buf.get_mutable_snapshot(i);
-
             self.test_board.handle_move(&m, true);
-
-            let memo: Option<&MemoData> = self.memo.get(&self.test_board.get_hash());
+            let memo: Option<&MemoData> = (*resolved_memo).get(&self.test_board.get_hash());
 
             const BIG_NUMBER: f32 = 100.;
             const EVAL_UPPER_BOUND: f32 = 999.;
@@ -215,52 +246,81 @@ impl Ai {
             self.test_board.handle_move(&m, false);
             (*m).1 = r;
         }
-        evaluation::sort_moves_by_aggression(
-            &self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.eval_temp_arr, &mut self.temp_moves
-        );
+
+        if !quiescence {
+            // No moves for non-quiescence
+            if moves_start == moves_end_exclusive {
+                self.show_tree_left_side = false;
+                return self.get_no_moves_eval(alpha, beta);
+            }
+            evaluation::sort_moves_by_aggression(
+                &self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.eval_temp_arr, &mut self.temp_moves
+            );
+        }
 
         if self.show_tree_left_side {
             if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
-                crate::console_log!("L = {}", self.moves_buf.get_v()[moves_end_exclusive - 1]);
+                if !quiescence {
+                    crate::console_log!("L = {}", self.moves_buf.get_v()[moves_end_exclusive - 1]);
+                }
             }
         }
 
+        let mut has_quiescence_move = false;
         for i in (moves_start..moves_end_exclusive).rev() {
+            let m: *const MoveSnapshot = &self.moves_buf.get_v()[i];
 
-            let r = unsafe { self.negamax_try_move(
+            if quiescence {
+                if !Self::is_unstable_move(&*m) { continue; }
+                if !has_quiescence_move && self.show_tree_left_side {
+                    if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
+                        crate::console_log!("L = {} (Quiescence)", *m);
+                        crate::console_log!("{}", self.test_board);
+                    }
+                }
+                has_quiescence_move = true;
+            }
+
+            let r = self.negamax_try_move(
                 remaining_depth, 
+                quiescence,
                 alpha,
                 new_alpha_i != NEW_ALPHA_I_NEVER_SET,
                 beta,
-                &self.moves_buf.get_v()[i],
+                m,
                 moves_end_exclusive
-            )};
+            );
 
             if let SingleMoveResult::NewAlpha(max_this) = r {
                 alpha = max_this;
                 new_alpha_i = i as i32;
             } else if let SingleMoveResult::BetaCutOff(max_this) = r {
-                self.memo.insert(
+                (*resolved_memo).insert(
                     self.test_board.get_hash(),
-                    MemoData(max_this, remaining_depth, MemoType::High(self.moves_buf.get_v()[i].clone()))
+                    MemoData(max_this, remaining_depth, MemoType::High((*m).clone()))
                 );
                 self.show_tree_left_side = false;
                 return beta;
             }
         }
+        if quiescence && !has_quiescence_move {
+            // No moves for quiescence
+            self.show_tree_left_side = false;
+            return alpha;
+        }
 
         if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
-            self.memo.insert(
+            (*resolved_memo).insert(
                 self.test_board.get_hash(),
                 MemoData(alpha, remaining_depth, MemoType::Exact(hash_move.unwrap()))
             );
         } else if new_alpha_i >= 0 {
-            self.memo.insert(
+            (*resolved_memo).insert(
                 self.test_board.get_hash(),
                 MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.get_v()[new_alpha_i as usize].clone()))
             );
         } else {
-            self.memo.insert(self.test_board.get_hash(), MemoData(alpha, remaining_depth, MemoType::Low));
+            (*resolved_memo).insert(self.test_board.get_hash(), MemoData(alpha, remaining_depth, MemoType::Low));
         }
         alpha
     }
@@ -269,6 +329,7 @@ impl Ai {
         // Unsafe to allow `m` and `self` be aliases
         &mut self,
         remaining_depth: u8,
+        quiescence: bool,
         alpha: f32,
         is_alpha_exact_eval: bool,
         beta: f32,
@@ -280,10 +341,10 @@ impl Ai {
         let mut fast_found_max_this = 0.0f32;
         let mut fast_found = false;
 
-        if is_alpha_exact_eval {
+        if !quiescence && is_alpha_exact_eval {
             // PVS idea - Do a fast boolean check that the current best move with score alpha is really the best.
             // If we always bet correctly, then the second more expensive negamax below is always avoided.
-            fast_found_max_this = -self.negamax(remaining_depth - 1, -alpha - 0.01, -alpha, moves_start);
+            fast_found_max_this = -self.negamax(remaining_depth - 1, false, -alpha - 0.01, -alpha, moves_start);
             if fast_found_max_this <= alpha {
                 fast_found = true;
                 self.fast_found_hits += 1;
@@ -293,7 +354,7 @@ impl Ai {
         let max_this = if fast_found {
             fast_found_max_this
         } else {
-            -self.negamax(remaining_depth - 1, -beta, -alpha, moves_start)
+            -self.negamax(remaining_depth - 1, quiescence, -beta, -alpha, moves_start)
         };
 
         self.test_board.handle_move(&*m, false);
@@ -304,6 +365,39 @@ impl Ai {
             SingleMoveResult::NewAlpha(max_this)
         } else {
             SingleMoveResult::NoEffect
+        }
+    }
+
+    fn is_unstable_move(m: &MoveSnapshot) -> bool {
+        return if let MoveDescription::Capture(_, _, _) = m.get_description() {
+            if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(after_piece, _)))) = m.get_dest_sq() {
+                evaluation::evaluate_piece(*before_piece) > 1.
+            } else {
+                panic!("Unexpected capture move without proper before/after");
+            }
+        } else { 
+            false
+        }
+    }
+
+    fn is_king_checked(&mut self) -> bool {
+        self.temp_moves.write_index = 0;
+        let mut handler = PushToMoveListHandler { move_list: &mut self.temp_moves };
+        fill_player(self.test_board.get_player_with_turn().get_other_player(), true, &self.test_board, &mut handler);
+        has_king_capture_move(handler.move_list, 0, handler.move_list.write_index, self.test_board.get_player_with_turn())
+    }
+
+    fn cap(r: f32, alpha: f32, beta: f32) -> f32 {
+        if r <= alpha { return alpha; }
+        else if r >= beta { return beta; }
+        else { return r; }
+    }
+
+    fn get_no_moves_eval(&mut self, alpha: f32, beta: f32) -> f32 {
+        if self.is_king_checked() {
+            return alpha;
+        } else {
+            return Self::cap(0.0, alpha, beta);
         }
     }
 }

@@ -7,7 +7,7 @@ pub enum Error {
     XyOutOfBounds(i32, i32)
 }
 
-#[derive(Hash, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
 pub struct Coord(pub u8, pub u8);
 
 impl Display for Coord {
