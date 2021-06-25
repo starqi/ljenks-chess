@@ -1,9 +1,18 @@
 use super::super::extern_funcs::random;
 
 fn get_random_u64() -> u64 {
-    let a = ((std::u32::MAX as f64) * random()) as u64;
-    let b = ((std::u32::MAX as f64) * random()) as u64;
-    a << 32 + b
+    let mut a = ((u16::MAX as f64) * random()) as u64;
+
+    a <<= 16;
+    a += ((u16::MAX as f64) * random()) as u64;
+
+    a <<= 16;
+    a += ((u16::MAX as f64) * random()) as u64;
+
+    a <<= 16;
+    a += ((u16::MAX as f64) * random()) as u64;
+    
+    a
 }
 
 pub const PIECE_LEN: usize = 6;

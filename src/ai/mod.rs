@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::game::entities::*;
-use super::game::basic_move_test::*;
+use super::game::check_handler::*;
 use crate::{console_log};
 
 pub struct Ai {
@@ -78,7 +78,7 @@ impl Ai {
         }
 
         let c_hash = self.test_board.calculate_hash();
-        console_log!("DEBUG Hash {} vs. {}? {}", self.test_board.get_hash(), c_hash, c_hash == self.test_board.get_hash());
+        debug_assert_eq!(c_hash, self.test_board.get_hash());
 
         let leading_move = self.get_leading_move();
         if let Some((m, e)) = leading_move {
@@ -168,7 +168,7 @@ impl Ai {
                 }
 
                 // At this point, cannot simply use memoized result.
-                // Get PV or refutation move from memo, try it out at full depth before using time on move generation,
+                // Get PV or refutation move from memo, try it out at full depth before computing move generation,
                 // and either beta cut off or use as candidate-to-beat among rest of moves after move generation.
                 let best_move: Option<MoveSnapshot> = match t {
                     MemoType::Exact(m) | MemoType::High(m) => Some(m),
@@ -380,13 +380,6 @@ impl Ai {
         }
     }
 
-    fn is_king_checked(&mut self) -> bool {
-        self.temp_moves.write_index = 0;
-        let mut handler = PushToMoveListHandler { move_list: &mut self.temp_moves };
-        fill_player(self.test_board.get_player_with_turn().get_other_player(), true, &self.test_board, &mut handler);
-        has_king_capture_move(handler.move_list, 0, handler.move_list.write_index, self.test_board.get_player_with_turn())
-    }
-
     fn cap(r: f32, alpha: f32, beta: f32) -> f32 {
         if r <= alpha { return alpha; }
         else if r >= beta { return beta; }
@@ -394,7 +387,8 @@ impl Ai {
     }
 
     fn get_no_moves_eval(&mut self, alpha: f32, beta: f32) -> f32 {
-        if self.is_king_checked() {
+        let checking_player = self.test_board.get_player_with_turn().get_other_player();
+        if is_checking(&mut self.test_board, checking_player) {
             return alpha;
         } else {
             return Self::cap(0.0, alpha, beta);

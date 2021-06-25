@@ -4,7 +4,9 @@ use std::fmt::{Display, Formatter, self};
 use super::coords::*;
 use super::entities::*;
 use super::move_list::*;
-use super::basic_move_test::*;
+use super::move_test::*;
+use super::check_handler::*;
+use super::push_moves_handler::*;
 use super::super::*;
 
 #[derive(Clone)]
@@ -163,6 +165,7 @@ impl Board {
                     self.hash ^= Self::get_square_hash(*y as usize * 8 + *x as usize, *before_piece, *before_player);
                 }
                 if let Square::Occupied(after_piece, after_player) = after {
+                    debug_assert!(apply_or_undo == (*after_player == self.get_player_with_turn()), "Applying move for wrong player - {}", m);
                     self.hash ^= Self::get_square_hash(*y as usize * 8 + *x as usize, *after_piece, *after_player);
                 }
             }
@@ -216,18 +219,23 @@ impl Board {
     /// Gets the final set of legal moves
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
 
-        let mut handler = PushToMoveListHandler { move_list: temp_moves };
+        let opponent = self.get_player_with_turn().get_other_player();
+        let mut moves_handler = PushToMoveListHandler { move_list: temp_moves };
+        moves_handler.move_list.write_index = 0;
 
-        handler.move_list.write_index = 0;
-        fill_player(self.player_with_turn, false, self, &mut handler);
+        fill_player(self.get_player_with_turn(), false, self, &mut moves_handler);
 
-        filter_check_threats(
-            self,
-            handler.move_list,
-            0,
-            handler.move_list.write_index,
-            result
-        );
+        let mut check_handler = CheckDetectionHandler::new();
+        for i in 0..moves_handler.move_list.write_index {
+            let m = &moves_handler.move_list.get_v()[i];
+            self.handle_move(&m, true);
+
+            check_handler.has_king_capture = false;
+            fill_player(opponent, true, self, &mut check_handler); 
+
+            self.handle_move(&m, false);
+            if !check_handler.has_king_capture { result.write(m.clone()); }
+        }
 
         let (moved_oo_piece, moved_ooo_piece) = {
             let ps = self.get_player_state(self.player_with_turn);
@@ -239,7 +247,6 @@ impl Board {
                 &CASTLE_UTILS.oo_king_traversal_sqs[self.player_with_turn as usize],
                 &CASTLE_UTILS.oo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
-                handler.move_list,
                 result
             );
         }
@@ -249,7 +256,6 @@ impl Board {
                 &CASTLE_UTILS.ooo_king_traversal_sqs[self.player_with_turn as usize],
                 &CASTLE_UTILS.ooo_move_snapshots[self.player_with_turn as usize],
                 self.player_with_turn,
-                handler.move_list,
                 result
             );
         }
@@ -261,7 +267,6 @@ impl Board {
         king_travel_squares: &[Coord],
         move_snapshot: &MoveSnapshot,
         player_with_turn: Player,
-        temp_moves: &mut MoveList,
         result: &mut MoveList
     ) {
         for sq_holder in move_snapshot.get_squares() {
@@ -275,13 +280,7 @@ impl Board {
         for Coord(x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Occupied(Piece::King, player_with_turn));
         }
-
-        let mut handler = PushToMoveListHandler { move_list: temp_moves };
-
-        handler.move_list.write_index = 0;
-        fill_player(player_with_turn.get_other_player(), true, self, &mut handler);
-
-        let can_castle = !has_king_capture_move(temp_moves, 0, temp_moves.write_index, player_with_turn);
+        let can_castle = !is_checking(self, player_with_turn.get_other_player());
         for Coord(x, y) in king_travel_squares.iter() {
             self.set_by_xy(*x, *y, Square::Blank);
         }

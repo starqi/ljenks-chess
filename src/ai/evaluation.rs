@@ -2,7 +2,8 @@ use super::super::game::entities::*;
 use super::super::game::coords::*;
 use super::super::game::board::*;
 use super::super::game::move_list::*;
-use super::super::game::basic_move_test::*;
+use super::super::game::move_test::*;
+use super::super::game::push_moves_handler::*;
 
 /// Must be bigger than all piece values
 const NO_CONTROL_VAL: f32 = 99.;
@@ -59,13 +60,13 @@ impl <'a> MoveTestHandler for SquareControlHandler<'a> {
         &mut self,
         moveable: bool,
         can_capture: bool,
-        params: &BasicMoveTestParams,
+        params: &MoveTestParams,
         dest_x: u8,
         dest_y: u8,
         _: &Square,
         _: Option<Piece>
-    ) {
-        if !can_capture { return; }
+    ) -> bool {
+        if !can_capture { return false; }
 
         let index = dest_y as usize * 8 + dest_x as usize;
 
@@ -86,6 +87,8 @@ impl <'a> MoveTestHandler for SquareControlHandler<'a> {
         } else if candidate_value == lowest_controller_value && candidate_value_negpos != lowest_controller_value_negpos {
             self.temp_arr[index] = candidate_value_negpos + 0.3333;
         }
+
+        return false;
     }
 }
 
@@ -114,7 +117,7 @@ fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Pl
                 }
             }
 
-            fill_src(&BasicMoveTestParams {
+            fill_src(&MoveTestParams {
                 src_x: *x as i8,
                 src_y: *y as i8,
                 src_piece: *piece,
@@ -128,7 +131,7 @@ fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Pl
 }
 
 fn round_eval(v: f32) -> f32 {
-    (v * 10.).round() / 10.
+    (v * 100.).round() / 100.
 }
 
 pub fn evaluate(board: &Board, temp_arr: &mut [f32; 64]) -> f32 {
@@ -165,8 +168,10 @@ pub fn add_aggression_to_evals(
     temp_arr: &mut [f32; 64],
     temp_ml: &mut MoveList
 ) {
+    clear_square_control(temp_arr);
+    get_white_square_control(temp_arr);
+
     let mut handler = PushToMoveListHandler { move_list: temp_ml };
-    evaluate(board, temp_arr);
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.get_eval();
         for sq_holder in m.get_squares().iter() {
@@ -174,7 +179,7 @@ pub fn add_aggression_to_evals(
                 let min_controlling_value_negpos = temp_arr[*y as usize * 8 + *x as usize];
                 if min_controlling_value_negpos != NO_CONTROL_VAL && min_controlling_value_negpos.signum() != after_player.get_multiplier() { continue; } 
 
-                let params = BasicMoveTestParams {
+                let params = MoveTestParams {
                     src_x: *x as i8,
                     src_y: *y as i8,
                     src_piece: *after_piece,
@@ -200,4 +205,3 @@ pub fn add_aggression_to_evals(
         score
     });
 }
-

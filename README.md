@@ -1,8 +1,8 @@
 TODO
 
-- Mates... including devaluing forced mate based on # of moves to do it
-- Disallow fake premoves
-- Acquiesce
+- Can replace aggression eval with handler as well, saving move allocation
+- Promotions and checks should be marked - not quiet!
+- UI: Disallow fake premoves
 - Replace hash map coords
 - En passant + old board state
 - Investigate Webpack Wasm generation
