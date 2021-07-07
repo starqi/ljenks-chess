@@ -58,6 +58,12 @@
 /******/ 					"__wbg_log_94a921ad2284be4b": function(p0i32,p1i32) {
 /******/ 						return installedModules["../pkg/chess_bs_bg.js"].exports["__wbg_log_94a921ad2284be4b"](p0i32,p1i32);
 /******/ 					},
+/******/ 					"__wbg_random_13a3ac28331bfb33": function() {
+/******/ 						return installedModules["../pkg/chess_bs_bg.js"].exports["__wbg_random_13a3ac28331bfb33"]();
+/******/ 					},
+/******/ 					"__wbg_now_9ba562fb897aa544": function() {
+/******/ 						return installedModules["../pkg/chess_bs_bg.js"].exports["__wbg_now_9ba562fb897aa544"]();
+/******/ 					},
 /******/ 					"__wbg_new_59cb74e423758ede": function() {
 /******/ 						return installedModules["../pkg/chess_bs_bg.js"].exports["__wbg_new_59cb74e423758ede"]();
 /******/ 					},
@@ -174,7 +180,7 @@
 /******/ 				promises.push(installedWasmModuleData);
 /******/ 			else {
 /******/ 				var importObject = wasmImportObjects[wasmModuleId]();
-/******/ 				var req = fetch(__webpack_require__.p + "" + {"../pkg/chess_bs_bg.wasm":"1b5820075a77f7b01f29"}[wasmModuleId] + ".module.wasm");
+/******/ 				var req = fetch(__webpack_require__.p + "" + {"../pkg/chess_bs_bg.wasm":"f643f8b88593ade7ab6b"}[wasmModuleId] + ".module.wasm");
 /******/ 				var promise;
 /******/ 				if(importObject instanceof Promise && typeof WebAssembly.compileStreaming === 'function') {
 /******/ 					promise = Promise.all([WebAssembly.compileStreaming(req), importObject]).then(function(items) {
