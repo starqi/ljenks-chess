@@ -5,6 +5,7 @@ use super::game::move_list::*;
 use super::game::board::*;
 use super::game::entities::*;
 use super::game::check_handler::*;
+use super::extern_funcs::now;
 use crate::{console_log};
 
 pub struct Ai {
@@ -16,7 +17,8 @@ pub struct Ai {
     q_memo: HashMap<u64, MemoData>,
     memo_hits: usize,
     fast_found_hits: usize,
-    show_tree_left_side: bool
+    show_tree_left_side: bool,
+    node_counter: u32
 }
 
 enum SingleMoveResult { NewAlpha(f32), BetaCutOff(f32), NoEffect }
@@ -42,7 +44,8 @@ impl Ai {
             q_memo: HashMap::new(),
             memo_hits: 0,
             fast_found_hits: 0,
-            show_tree_left_side: false
+            show_tree_left_side: false,
+            node_counter: 0
         }
     }
 
@@ -62,6 +65,7 @@ impl Ai {
 
         self.test_board.clone_from(real_board);
 
+        let start_ms = now();
         for d in (1..=depth).step_by(2) {
             console_log!("\nBegin depth {}", d);
             self.show_tree_left_side = true;
@@ -88,6 +92,9 @@ impl Ai {
             console_log!("No move");
         }
         console_log!("Memo hits - {}, size - {} / q - {}, fast found - {}", self.memo_hits, self.memo.len(), self.q_memo.len(), self.fast_found_hits);
+        console_log!("NPS - {}", (self.node_counter as f64 / ((now() - start_ms) as f64 / 1000.)).round());
+
+        self.node_counter = 0;
         self.memo_hits = 0;
         self.fast_found_hits = 0;
         self.memo.clear();
@@ -104,6 +111,7 @@ impl Ai {
         beta: f32,
         moves_start: usize
     ) -> f32 {
+        self.node_counter += 1;
 
         if remaining_depth <= 0 {
             if quiescence {
@@ -118,7 +126,7 @@ impl Ai {
                 if eval >= beta { return beta; }
                 if eval > alpha { alpha = eval; }
 
-                return self.negamax(5, true, alpha, beta, moves_start);
+                return self.negamax(3, true, alpha, beta, moves_start);
             }
         }
 

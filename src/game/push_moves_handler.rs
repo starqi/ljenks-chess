@@ -56,5 +56,3 @@ impl <'a> MoveTestHandler for PushToMoveListHandler<'a> {
         return false;
     }
 }
-
-//////////////////////////////////////////////////

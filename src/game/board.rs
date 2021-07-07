@@ -66,6 +66,7 @@ impl Board {
         board
     }
 
+    #[inline]
     pub fn get_square_hash(i: usize, piece: Piece, player: Player) -> u64 {
         RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
     }

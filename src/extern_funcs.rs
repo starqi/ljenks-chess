@@ -12,4 +12,7 @@ extern "C" {
 
     #[wasm_bindgen(js_namespace = Math)]
     pub fn random() -> f64;
+
+    #[wasm_bindgen(js_namespace = Date)]
+    pub fn now() -> u32;
 }
