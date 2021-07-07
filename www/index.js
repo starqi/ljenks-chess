@@ -59,7 +59,7 @@ class Application {
                 square.style.width = this.LEN;
                 square.style.height = this.LEN;
                 square.style.display = 'inline-block';
-                square.style.backgroundColor = (i + delta) % 2 === 0 ? '#eeeeee' : '#539164';
+                square.style.backgroundColor = (i + delta) % 2 === 0 ? '#eeeeee' : '#915355';
                 square.dataset.backgroundColor = square.style.backgroundColor;
 
                 const image = new Image();
