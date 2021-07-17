@@ -1,5 +1,22 @@
 use std::fmt::{Display, Formatter, self};
 
+#[derive(Copy, Clone)]
+pub struct FastCoord(u8);
+
+impl FastCoord {
+    pub fn to_coord(&self) -> Coord {
+        let row = (self.0 / 8) as u8;
+        let col = self.0 % 8;
+        Coord(col, row)
+    }
+}
+
+impl Display for FastCoord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        self.to_coord().fmt(f)
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum Error {
     RankOutOfBounds(u8),

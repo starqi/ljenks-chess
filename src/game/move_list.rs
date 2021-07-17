@@ -1,116 +1,106 @@
 use std::cmp::Ordering;
 use std::fmt::{Error as FmtError, Display, Formatter};
-use std::ops::Deref;
 use super::coords::*;
 use super::entities::*;
 use crate::{console_log};
 
-/// (bool, bool, u8) = (first to prevent oo, first to prevent ooo, dest sq index)
-#[derive(Copy, Clone)]
+#[derive(Clone)]
+pub struct BeforeAfterSquares(pub FastCoord, pub Square, pub Square);
+
+pub type PreventOo = bool;
+pub type PreventOoo = bool;
+
+#[derive(Clone)]
 pub enum MoveDescription {
-    Capture(bool, bool, u8),
-    Move(bool, bool, u8),
+    Capture([BeforeAfterSquares; 2]),
+    Move([BeforeAfterSquares; 2]),
+    CastleRelatedCapture([BeforeAfterSquares; 2], PreventOo, PreventOoo),
+    CastleRelatedMove([BeforeAfterSquares; 2], PreventOo, PreventOoo),
     Oo,
     Ooo,
-    Special
+    SkipMove
 }
 
-#[derive(Default, Copy, Clone)]
-pub struct BeforeAfterSquares(pub Square, pub Square);
+impl Default for MoveDescription {
+    fn default() -> MoveDescription {
+        MoveDescription::SkipMove
+    }
+}
 
-pub type MoveSnapshotSquare = (Coord, BeforeAfterSquares);
-
-// Fairly small bounded size is useable for the most complex move which is castling
-pub type MoveSnapshotSquares = [Option<MoveSnapshotSquare>; 5];
-
-// TODO Upgrade callers to inline methods
-#[derive(Clone)]
-pub struct MoveSnapshot(pub MoveSnapshotSquares, pub f32, pub MoveDescription);
-
-impl MoveSnapshot {
+impl MoveDescription {
 
     #[inline]
-    pub fn get_squares(&self) -> &MoveSnapshotSquares { &self.0 }
+    fn get_sq(&self, i: usize) -> Option<&BeforeAfterSquares> {
+        match self {
+            MoveDescription::Capture(s) |
+            MoveDescription::Move(s) |
+            MoveDescription::CastleRelatedMove(s, _, _) |
+            MoveDescription::CastleRelatedCapture(s, _, _) => {
+                Some(&s[i])
+            },
+            _ => None
+        }
+    }
+
+    pub fn get_dest_sq(&self) -> Option<&BeforeAfterSquares> {
+        self.get_sq(0)
+    }
+
+    pub fn get_src_sq(&self) -> Option<&BeforeAfterSquares> {
+        self.get_sq(1)
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct MoveWithEval(MoveDescription, f32);
+
+impl MoveWithEval {
+    #[inline]
+    pub fn get_description(&self) -> &MoveDescription { &self.0 }
     #[inline]
     pub fn get_eval(&self) -> f32 { self.1 }
-    #[inline]
-    pub fn get_description(&self) -> &MoveDescription { &self.2 }
-
-    pub fn get_dest_sq(&self) -> Option<&MoveSnapshotSquare> {
-        if let MoveDescription::Capture(_, _, dest_sq_index) | MoveDescription::Move(_, _, dest_sq_index) = self.get_description() {
-            if let Some(ref x) = self.get_squares()[*dest_sq_index as usize] {
-                Some(x)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-
-    pub fn get_src_sq(&self) -> Option<&MoveSnapshotSquare> {
-        if let MoveDescription::Capture(_, _, dest_sq_index) | MoveDescription::Move(_, _, dest_sq_index) = self.get_description() {
-            for i in 0..self.get_squares().len() {
-                if i != *dest_sq_index as usize {
-                    if let Some(ref x) = self.get_squares()[i] {
-                        return Some(x);
-                    }
-                }
-            }
-            None
-        } else {
-            None
-        }
-    }
 }
 
-impl Deref for MoveSnapshot {
-    type Target = MoveSnapshotSquares;
-
-    #[inline]
-    fn deref(&self) -> &MoveSnapshotSquares {
-        return &self.0;
-    }
-}
-
-impl Default for MoveSnapshot {
-    fn default() -> MoveSnapshot {
-        MoveSnapshot([None; 5], 0., MoveDescription::Special)
-    }
-}
-
-impl Display for MoveSnapshot {
+impl Display for MoveWithEval {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
         match self.get_description() {
-            MoveDescription::Capture(p_oo, p_ooo, dest_sq_index) | MoveDescription::Move(p_oo, p_ooo, dest_sq_index) => {
-                if let Some((arrival_coord, BeforeAfterSquares(_, after))) = self.get_squares()[*dest_sq_index as usize] {
-                    write!(f, "{}{} ({})", after, arrival_coord, self.get_eval())?;
-                    if *p_oo {
-                        write!(f, " [p_oo]")?;
-                    }
-                    if *p_ooo {
-                        write!(f, " [p_ooo]")?;
-                    }
-                    return Ok(());
-                }
 
-                write!(f, "Error... ({})", self.get_eval())
+            MoveDescription::Capture(sqs) |
+            MoveDescription::Move(sqs) |
+            MoveDescription::CastleRelatedCapture(sqs, _, _) | 
+            MoveDescription::CastleRelatedMove(sqs, _, _) => {
+
+                let BeforeAfterSquares(fast_coord, _, after_sq) = sqs[1];
+                // Since a piece is on the after square, after_sq will stringify to eg. k, K, p, P, then it becomes eg. Ke2
+                write!(f, "{}{} ({})", after_sq, fast_coord, self.get_eval())?;
             },
+
             MoveDescription::Oo => {
-                write!(f, "oo ({})", self.get_eval())
+                write!(f, "oo ({})", self.get_eval())?;
             },
             MoveDescription::Ooo => {
-                write!(f, "ooo ({})", self.get_eval())
+                write!(f, "ooo ({})", self.get_eval())?;
             },
-            _ => {
-                write!(f, "Special move?... ({})", self.get_eval())
+            MoveDescription::SkipMove => {
+                write!(f, "skip ({})", self.get_eval())?;
             }
         }
+
+        match self.get_description() {
+            MoveDescription::CastleRelatedCapture(sqs, p_oo, p_ooo) | 
+            MoveDescription::CastleRelatedMove(sqs, p_oo, p_ooo) => {
+                if *p_oo { write!(f, " [p_oo]")?; }
+                if *p_ooo { write!(f, " [p_ooo]")?; }
+            },
+            _ => {}
+        }
+
+        Ok(())
     }
 }
 
 pub struct MoveList {
-    v: Vec<MoveSnapshot>,
+    v: Vec<MoveWithEval>,
     pub write_index: usize
 }
 
@@ -125,21 +115,21 @@ impl MoveList {
     }
 
     #[inline]
-    pub fn get_mutable_snapshot(&mut self, i: usize) -> &mut MoveSnapshot {
+    pub fn get_mutable_snapshot(&mut self, i: usize) -> &mut MoveWithEval {
         &mut self.v[i]
     }
 
     #[inline]
-    pub fn get_v(&self) -> &Vec<MoveSnapshot> {
+    pub fn get_v(&self) -> &Vec<MoveWithEval> {
         &self.v
     }
 
     #[inline]
-    pub fn clone_and_write(&mut self, board_subset: &MoveSnapshot) {
-        self.write(board_subset.clone());
+    pub fn clone_and_write(&mut self, m: &MoveWithEval) {
+        self.write(m.clone());
     }
 
-    pub fn write(&mut self, board_subset: MoveSnapshot) {
+    pub fn write(&mut self, board_subset: MoveWithEval) {
         self.grow_with_access(self.write_index);
         self.v[self.write_index] = board_subset;
         self.write_index += 1;
@@ -148,7 +138,7 @@ impl MoveList {
     fn grow_with_access(&mut self, requested_index: usize) {
         if requested_index >= self.v.len() {
             for _ in 0..requested_index - self.v.len() + 1 {
-                self.v.push(MoveSnapshot::default());
+                self.v.push(MoveWithEval::default());
             }
         }
     }
@@ -158,7 +148,7 @@ impl MoveList {
         s.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
     }
 
-    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, mut to_eval: impl FnMut(&MoveSnapshot) -> f32) {
+    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, mut to_eval: impl FnMut(&MoveWithEval) -> f32) {
         for i in start..end_exclusive {
             let m = &mut self.v[i];
             m.1 = to_eval(m);
