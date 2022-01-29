@@ -1,4 +1,3 @@
-
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
 use super::coords::*;
@@ -11,24 +10,17 @@ use super::super::*;
 
 #[derive(Clone)]
 pub struct PlayerState {
-
     // TODO First thing to switch into bitboards
     pub piece_locs: HashSet<Coord>,
-
-    pub moved_oo_piece: bool,
-    pub moved_ooo_piece: bool,
-
-    /// Redundant
-    pub castled_somewhere: bool
+    /// Order: oo, ooo
+    pub moved_castle_piece: [bool; 2]
 }
 
 impl PlayerState {
     fn new() -> Self {
         Self {
             piece_locs: HashSet::new(),
-            moved_oo_piece: false,
-            moved_ooo_piece: false,
-            castled_somewhere: false
+            moved_castle_piece: [false, false]
         }
     }
 }
@@ -84,10 +76,20 @@ impl Board {
 
         let ws = self.get_player_state(Player::White);
         let bs = self.get_player_state(Player::Black);
-        if ws.moved_oo_piece { h ^= RANDOM_NUMBER_KEYS.moved_oo_piece[0]; }
-        if ws.moved_ooo_piece { h ^= RANDOM_NUMBER_KEYS.moved_ooo_piece[0]; }
-        if bs.moved_oo_piece { h ^= RANDOM_NUMBER_KEYS.moved_oo_piece[1]; }
-        if bs.moved_ooo_piece { h ^= RANDOM_NUMBER_KEYS.moved_ooo_piece[1]; }
+
+        if ws.moved_castle_piece[CastleType::Oo as usize] {
+            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Oo as usize][Player::White as usize]; 
+        }
+        if ws.moved_castle_piece[CastleType::Ooo as usize] {
+            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Ooo as usize][Player::White as usize]; 
+        }
+
+        if bs.moved_castle_piece[CastleType::Oo as usize] {
+            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Oo as usize][Player::Black as usize]; 
+        }
+        if bs.moved_castle_piece[CastleType::Ooo as usize] {
+            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Ooo as usize][Player::Black as usize]; 
+        } 
 
         if self.get_player_with_turn() == Player::White { h ^= RANDOM_NUMBER_KEYS.is_white_to_play; }
         
@@ -157,60 +159,73 @@ impl Board {
     //////////////////////////////////////////////////
     // Moves
 
-    pub fn handle_move(&mut self, m: &MoveSnapshot, apply_or_undo: bool) {
-        for sq_holder in m.iter() {
-            if let Some((Coord(x, y), BeforeAfterSquares(before, after))) = sq_holder {
-                self.set_by_xy(*x, *y, if apply_or_undo { *after } else { *before });
-
-                if let Square::Occupied(before_piece, before_player) = before {
-                    self.hash ^= Self::get_square_hash(*y as usize * 8 + *x as usize, *before_piece, *before_player);
-                }
-                if let Square::Occupied(after_piece, after_player) = after {
-                    debug_assert!(apply_or_undo == (*after_player == self.get_player_with_turn()), "Applying move for wrong player - {}", m);
-                    self.hash ^= Self::get_square_hash(*y as usize * 8 + *x as usize, *after_piece, *after_player);
-                }
+    fn apply_before_after_sqs(&mut self, sqs: &[BeforeAfterSquare], apply_or_undo: bool) {
+        if apply_or_undo {
+            for BeforeAfterSquare(fast_coord, _, after) in sqs.iter() {
+                let coord = fast_coord.to_coord();
+                self.set_by_xy(coord.0, coord.1, *after);
+            }
+        } else {
+            for BeforeAfterSquare(fast_coord, before, _) in sqs.iter() {
+                let coord = fast_coord.to_coord();
+                self.set_by_xy(coord.0, coord.1, *before);
             }
         }
+    }
 
-        {
-            let mut hash = self.get_hash();
-            let old_player = self.get_player_with_turn().get_other_player();
-            let old_player_state = self.get_player_state_mut(old_player);
+    pub fn handle_move(&mut self, m: &MoveWithEval, apply_or_undo: bool) {
 
-            let oo_key = RANDOM_NUMBER_KEYS.moved_oo_piece[old_player as usize];
-            let ooo_key = RANDOM_NUMBER_KEYS.moved_ooo_piece[old_player as usize];
+        let curr_player = self.get_player_with_turn();
+        let curr_player_state = self.get_player_state_mut(curr_player);
 
-            // Undo hash state so that neither flags are true
-            if old_player_state.moved_oo_piece { hash ^= oo_key; }
-            if old_player_state.moved_ooo_piece { hash ^= ooo_key; }
+        let old_player = curr_player.get_other_player();
+        let old_player_state = self.get_player_state_mut(old_player);
 
-            // Change the actual flags to whatever they should be
-            match m.2 {
-                MoveDescription::Ooo | MoveDescription::Oo => {
-                    old_player_state.castled_somewhere = apply_or_undo;
-                    old_player_state.moved_oo_piece = apply_or_undo;
-                    old_player_state.moved_ooo_piece = apply_or_undo;
-                },
-                _ => {
-                    match m.2 {
-                        MoveDescription::Capture(true, _, _) | MoveDescription::Move(true, _, _) => {
-                            old_player_state.moved_oo_piece = apply_or_undo;
-                        },
-                        _ => ()
-                    };
-                    match m.2 {
-                        MoveDescription::Capture(_, true, _) | MoveDescription::Move(_, true, _) => {
-                            old_player_state.moved_ooo_piece = apply_or_undo;
-                        },
-                        _ => ()
-                    };
+        match m.get_description() {
+            MoveDescription::Capture(sqs) |
+            MoveDescription::Move(sqs) |
+            MoveDescription::CastleRelatedMove(sqs, _, _) |
+            MoveDescription::CastleRelatedCapture(sqs, _, _) => {
+
+                self.apply_before_after_sqs(sqs, apply_or_undo);
+
+                for BeforeAfterSquare(fast_coord, before, after) in sqs.iter() {
+                    let coord = fast_coord.to_coord();
+                    if let Square::Occupied(before_piece, before_player) = before {
+                        self.hash ^= Self::get_square_hash(coord.1 as usize * 8 + coord.0 as usize, *before_piece, *before_player);
+                    }
+                    if let Square::Occupied(after_piece, after_player) = after {
+                        debug_assert!(apply_or_undo == (*after_player == self.get_player_with_turn()), "Applying move for wrong player - {}", m);
+                        self.hash ^= Self::get_square_hash(coord.1 as usize * 8 + coord.0 as usize, *after_piece, *after_player);
+                    }
                 }
-            };
+            }
+            MoveDescription::Castle(castle_type) => {
 
-            // Sync hash state with actual flags 
-            if old_player_state.moved_oo_piece { hash ^= oo_key; }
-            if old_player_state.moved_ooo_piece { hash ^= ooo_key; }
-            self.hash = hash;
+                let (player_num, expected_castle_bool) = if apply_or_undo {
+                    (curr_player as usize, false)
+                } else {
+                    (old_player as usize, true)
+                };
+
+                let sqs: &[BeforeAfterSquare] = if *castle_type == CastleType::Oo {
+                    &CASTLE_UTILS.oo_sqs[player_num]
+                } else {
+                    &CASTLE_UTILS.ooo_sqs[player_num]
+                };
+                self.apply_before_after_sqs(sqs, apply_or_undo);
+
+                let castle_type_num = *castle_type as usize;
+                let castle_key = RANDOM_NUMBER_KEYS.moved_castle_piece[castle_type_num][player_num];
+                if curr_player_state.moved_castle_piece[castle_type_num] != expected_castle_bool {
+                    panic!("Illegal ooo state");
+                } else {
+                    curr_player_state.moved_castle_piece[castle_type_num] = !expected_castle_bool;
+                    self.hash ^= castle_key;
+                }
+            },
+            MoveDescription::SkipMove => {
+            }
         }
 
         self.hash ^= RANDOM_NUMBER_KEYS.is_white_to_play;
@@ -238,56 +253,14 @@ impl Board {
             if !check_handler.has_king_capture { result.write(m.clone()); }
         }
 
-        let (moved_oo_piece, moved_ooo_piece) = {
-            let ps = self.get_player_state(self.player_with_turn);
-            (ps.moved_oo_piece, ps.moved_ooo_piece)
-        };
+        let ps = self.get_player_state(self.player_with_turn);
 
-        if !moved_oo_piece {
-            self.try_push_castle(
-                &CASTLE_UTILS.oo_king_traversal_sqs[self.player_with_turn as usize],
-                &CASTLE_UTILS.oo_move_snapshots[self.player_with_turn as usize],
-                self.player_with_turn,
-                result
-            );
+        if !ps.moved_castle_piece[CastleType::Oo as usize] {
+            result.write(MoveWithEval(MoveDescription::Castle(CastleType::Oo), 0.0));
         }
 
-        if !moved_ooo_piece {
-            self.try_push_castle(
-                &CASTLE_UTILS.ooo_king_traversal_sqs[self.player_with_turn as usize],
-                &CASTLE_UTILS.ooo_move_snapshots[self.player_with_turn as usize],
-                self.player_with_turn,
-                result
-            );
-        }
-    }
-
-    /// Only does piece checks, not state checks, ie. does it visually look like we can castle (but maybe the rook is not the original rook)
-    fn try_push_castle(
-        &mut self,
-        king_travel_squares: &[Coord],
-        move_snapshot: &MoveSnapshot,
-        player_with_turn: Player,
-        result: &mut MoveList
-    ) {
-        for sq_holder in move_snapshot.get_squares() {
-            if let Some((Coord(x, y), BeforeAfterSquares(before_sq, _))) = sq_holder {
-                if *self.get_by_xy(*x, *y) != *before_sq {
-                    return;
-                }
-            }
-        }
-
-        for Coord(x, y) in king_travel_squares.iter() {
-            self.set_by_xy(*x, *y, Square::Occupied(Piece::King, player_with_turn));
-        }
-        let can_castle = !is_checking(self, player_with_turn.get_other_player());
-        for Coord(x, y) in king_travel_squares.iter() {
-            self.set_by_xy(*x, *y, Square::Blank);
-        }
-
-        if can_castle {
-            result.clone_and_write(move_snapshot);
+        if !ps.moved_castle_piece[CastleType::Ooo as usize] {
+            result.write(MoveWithEval(MoveDescription::Castle(CastleType::Ooo), 0.0));
         }
     }
 

@@ -21,8 +21,8 @@ pub const SQUARES_LEN: usize = 64 * PER_SQUARE_LEN;
 
 pub struct RandomNumberKeys {
     pub squares: [u64; SQUARES_LEN],
-    pub moved_oo_piece: [u64; 2],
-    pub moved_ooo_piece: [u64; 2],
+    /// First index: `CastleType` enum number. Second index: `Player` enum number.
+    pub moved_castle_piece: [[u64; 2]; 2],
     pub is_white_to_play: u64
 }
 
@@ -35,8 +35,7 @@ impl RandomNumberKeys {
         }
         RandomNumberKeys {
             squares,
-            moved_oo_piece: [get_random_u64(), get_random_u64()],
-            moved_ooo_piece: [get_random_u64(), get_random_u64()],
+            moved_castle_piece: [[get_random_u64(), get_random_u64()], [get_random_u64(), get_random_u64()]],
             is_white_to_play: get_random_u64()
         }
     }

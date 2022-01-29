@@ -5,19 +5,24 @@ use super::entities::*;
 use crate::{console_log};
 
 #[derive(Clone)]
-pub struct BeforeAfterSquares(pub FastCoord, pub Square, pub Square);
+pub struct BeforeAfterSquare(pub FastCoord, pub Square, pub Square);
 
 pub type PreventOo = bool;
 pub type PreventOoo = bool;
 
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum CastleType {
+    Oo = 0, Ooo = 1
+}
+
 #[derive(Clone)]
 pub enum MoveDescription {
-    Capture([BeforeAfterSquares; 2]),
-    Move([BeforeAfterSquares; 2]),
-    CastleRelatedCapture([BeforeAfterSquares; 2], PreventOo, PreventOoo),
-    CastleRelatedMove([BeforeAfterSquares; 2], PreventOo, PreventOoo),
-    Oo,
-    Ooo,
+    Capture([BeforeAfterSquare; 2]),
+    Move([BeforeAfterSquare; 2]),
+    CastleRelatedCapture([BeforeAfterSquare; 2], PreventOo, PreventOoo),
+    CastleRelatedMove([BeforeAfterSquare; 2], PreventOo, PreventOoo),
+    Castle(CastleType),
     SkipMove
 }
 
@@ -30,7 +35,7 @@ impl Default for MoveDescription {
 impl MoveDescription {
 
     #[inline]
-    fn get_sq(&self, i: usize) -> Option<&BeforeAfterSquares> {
+    fn get_sq(&self, i: usize) -> Option<&BeforeAfterSquare> {
         match self {
             MoveDescription::Capture(s) |
             MoveDescription::Move(s) |
@@ -42,17 +47,17 @@ impl MoveDescription {
         }
     }
 
-    pub fn get_dest_sq(&self) -> Option<&BeforeAfterSquares> {
+    pub fn get_dest_sq(&self) -> Option<&BeforeAfterSquare> {
         self.get_sq(0)
     }
 
-    pub fn get_src_sq(&self) -> Option<&BeforeAfterSquares> {
+    pub fn get_src_sq(&self) -> Option<&BeforeAfterSquare> {
         self.get_sq(1)
     }
 }
 
 #[derive(Clone, Default)]
-pub struct MoveWithEval(MoveDescription, f32);
+pub struct MoveWithEval(pub MoveDescription, pub f32);
 
 impl MoveWithEval {
     #[inline]
@@ -70,16 +75,17 @@ impl Display for MoveWithEval {
             MoveDescription::CastleRelatedCapture(sqs, _, _) | 
             MoveDescription::CastleRelatedMove(sqs, _, _) => {
 
-                let BeforeAfterSquares(fast_coord, _, after_sq) = sqs[1];
+                let BeforeAfterSquare(fast_coord, _, after_sq) = sqs[1];
                 // Since a piece is on the after square, after_sq will stringify to eg. k, K, p, P, then it becomes eg. Ke2
                 write!(f, "{}{} ({})", after_sq, fast_coord, self.get_eval())?;
             },
 
-            MoveDescription::Oo => {
-                write!(f, "oo ({})", self.get_eval())?;
-            },
-            MoveDescription::Ooo => {
-                write!(f, "ooo ({})", self.get_eval())?;
+            MoveDescription::Castle(castle_type) => {
+                if *castle_type == CastleType::Oo {
+                    write!(f, "oo ({})", self.get_eval())?;
+                } else {
+                    write!(f, "ooo ({})", self.get_eval())?;
+                }
             },
             MoveDescription::SkipMove => {
                 write!(f, "skip ({})", self.get_eval())?;
@@ -125,13 +131,13 @@ impl MoveList {
     }
 
     #[inline]
-    pub fn clone_and_write(&mut self, m: &MoveWithEval) {
+    pub fn write_clone(&mut self, m: &MoveWithEval) {
         self.write(m.clone());
     }
 
-    pub fn write(&mut self, board_subset: MoveWithEval) {
+    pub fn write(&mut self, m: MoveWithEval) {
         self.grow_with_access(self.write_index);
-        self.v[self.write_index] = board_subset;
+        self.v[self.write_index] = m;
         self.write_index += 1;
     }
 

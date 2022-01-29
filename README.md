@@ -1,5 +1,10 @@
 TODO
 
+- Redo again, and make moves 2 u8s
+- Then MoveWithEval is the AI version, including eval + metadata (mostly, isCapture)
+
+--------------------------------------------------
+
 - Can replace aggression eval with handler as well, saving move allocation
 - Promotions and checks should be marked - not quiet!
 - UI: Disallow fake premoves

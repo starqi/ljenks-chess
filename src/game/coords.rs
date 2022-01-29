@@ -5,9 +5,13 @@ pub struct FastCoord(u8);
 
 impl FastCoord {
     pub fn to_coord(&self) -> Coord {
-        let row = (self.0 / 8) as u8;
-        let col = self.0 % 8;
-        Coord(col, row)
+        let y = (self.0 / 8) as u8;
+        let x = self.0 % 8;
+        Coord(x, y)
+    }
+
+    pub fn from_coords(x: u8, y: u8) -> FastCoord {
+        FastCoord(y * 8 + x)
     }
 }
 
@@ -24,6 +28,7 @@ pub enum Error {
     XyOutOfBounds(i32, i32)
 }
 
+/// x, y
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
 pub struct Coord(pub u8, pub u8);
 
