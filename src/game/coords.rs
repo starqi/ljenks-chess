@@ -16,8 +16,12 @@ impl FastCoord {
         Coord(x, y)
     }
 
-    pub fn from_coords(x: u8, y: u8) -> FastCoord {
+    pub fn from_xy(x: u8, y: u8) -> FastCoord {
         FastCoord(y * 8 + x)
+    }
+
+    pub fn from_coord(coord: &Coord) -> FastCoord {
+        FastCoord(coord.1 * 8 + coord.0)
     }
 }
 

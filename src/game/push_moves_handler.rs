@@ -22,8 +22,8 @@ impl <'a> MoveTestHandler for PushToMoveListHandler<'a> {
         if !moveable { return false; }
 
         let move_desc = MoveDescription::NormalMove(
-            FastCoord::from_coords(params.src_x as u8, params.src_y as u8),
-            FastCoord::from_coords(dest_x, dest_y)
+            FastCoord::from_xy(params.src_x as u8, params.src_y as u8),
+            FastCoord::from_xy(dest_x, dest_y)
         );
 
         let m = MoveWithEval(move_desc, 0.0);

@@ -31,41 +31,25 @@ impl SearchableMoves {
                 MoveDescription::Castle(castle_type) => {
                     match castle_type {
                         CastleType::Oo => {
-                            for x in (CASTLE_UTILS.oo_sqs[curr_player as usize]).iter() {
+                            for (from, to) in (CASTLE_UTILS.oo_draggable_coords[curr_player as usize]).iter() {
+                                self.map.insert(SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to)), *m);
                             }
                         },
                         CastleType::Ooo => {
+                            for (from, to) in (CASTLE_UTILS.ooo_draggable_coords[curr_player as usize]).iter() {
+                                self.map.insert(SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to)), *m);
+                            }
                         }
                     }
                 }
-            }
-
-            if let Some(capture_dest) = m.get_dest_sq() {
-                if let Some(capture_src) = m.get_src_sq() {
-                    self.map.insert(SearchableMoveKey(capture_src.0, capture_dest.0), m.clone());
-                    continue;
-                }
-            }
-
-            if let MoveDescription::Oo = m.get_description() {
-                let sqs = m.get_squares();
-                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[3].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[2].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[3].unwrap().0, sqs[0].unwrap().0), m.clone());
-            } else if let MoveDescription::Ooo = m.get_description() {
-                let sqs = m.get_squares();
-                self.map.insert(SearchableMoveKey(sqs[0].unwrap().0, sqs[4].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[4].unwrap().0, sqs[0].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[4].unwrap().0, sqs[1].unwrap().0), m.clone());
-                self.map.insert(SearchableMoveKey(sqs[4].unwrap().0, sqs[2].unwrap().0), m.clone());
             }
         }
 
         crate::console_log!("Searchable size - {}", self.map.len());
     }
 
-    pub fn get_move(&self, from: Coord, to: Coord) -> Option<&MoveSnapshot> {
-        match self.map.get(&SearchableMoveKey(from, to)) {
+    pub fn get_move(&self, from: &Coord, to: &Coord) -> Option<&MoveWithEval> {
+        match self.map.get(&SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to))) {
             Some(x) => Some(x),
             None => None
         }

@@ -25,7 +25,7 @@ impl MoveTestHandler for CheckDetectionHandler {
     ) -> bool {
         if moveable && can_capture {
             if let Square::Occupied(Piece::King, player) = existing_dest_square {
-                if *player == params.src_player.get_other_player() {
+                if *player == params.src_player.other_player() {
                     self.has_king_capture = true;
                     return true;
                 }

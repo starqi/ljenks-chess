@@ -80,7 +80,7 @@ impl <'a> MoveTestHandler for SquareControlHandler<'a> {
         let lowest_controller_value = lowest_controller_value_negpos.abs();
 
         let candidate_value = evaluate_piece(params.src_piece);
-        let candidate_value_negpos = candidate_value * params.src_player.get_multiplier();
+        let candidate_value_negpos = candidate_value * params.src_player.multiplier();
 
         if candidate_value < lowest_controller_value {
             self.temp_arr[index] = candidate_value_negpos;
@@ -127,7 +127,7 @@ fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Pl
             }, handler);
         }
     }
-    value * player.get_multiplier()
+    value * player.multiplier()
 }
 
 fn round_eval(v: f32) -> f32 {
@@ -150,8 +150,8 @@ pub fn add_captures_to_evals(
     end_exclusive: usize,
 ) {
     m.write_evals(start, end_exclusive, |m| {
-        let mut score = m.get_eval();
-        if let MoveDescription::Capture(_, _, dest_sq_index) = m.get_description() {
+        let mut score = m.eval();
+        if let MoveDescription::Capture(_, _, dest_sq_index) = m.description() {
             if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(after_piece, _)))) = m.0[*dest_sq_index as usize] {
                 score += evaluate_piece(before_piece) - evaluate_piece(after_piece);
             }
