@@ -1,6 +1,7 @@
 TODO
 
 - Tests for evaluation
+- Printing with board reference
 
 --------------------------------------------------
 

@@ -26,26 +26,28 @@ impl SearchableMoves {
 
             match m.description() {
                 MoveDescription::NormalMove(from, to) => {
-                    self.map.insert(SearchableMoveKey(*from, *to), *m);
+                    self.map.insert(SearchableMoveKey(*from, *to), m.clone());
                 }
                 MoveDescription::Castle(castle_type) => {
                     match castle_type {
                         CastleType::Oo => {
                             for (from, to) in (CASTLE_UTILS.oo_draggable_coords[curr_player as usize]).iter() {
-                                self.map.insert(SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to)), *m);
+                                self.map.insert(SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to)), m.clone());
                             }
                         },
                         CastleType::Ooo => {
                             for (from, to) in (CASTLE_UTILS.ooo_draggable_coords[curr_player as usize]).iter() {
-                                self.map.insert(SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to)), *m);
+                                self.map.insert(SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to)), m.clone());
                             }
                         }
                     }
                 }
+                _ => {
+                }
             }
         }
 
-        crate::console_log!("Searchable size - {}", self.map.len());
+        console_log!("Searchable size - {}", self.map.len());
     }
 
     pub fn get_move(&self, from: &Coord, to: &Coord) -> Option<&MoveWithEval> {

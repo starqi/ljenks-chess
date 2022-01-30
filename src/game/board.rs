@@ -65,6 +65,41 @@ impl Board {
         board
     }
 
+    pub fn stringify_move(&self, m: &MoveWithEval) -> String {
+        match m.description() {
+            MoveDescription::NormalMove(_from_coord, _to_coord) => {
+                let square = self.get_by_num(_from_coord.value());
+                // Since a piece should be on the after square,
+                // the square will stringify to eg. k, K, p, P, then it becomes eg. Ke2
+                format!("{}{} ({})", square, _to_coord, m.eval())
+            },
+            MoveDescription::Castle(castle_type) => {
+                if *castle_type == CastleType::Oo {
+                    format!("oo ({})", m.eval())
+                } else {
+                    format!("ooo ({})", m.eval())
+                }
+            },
+            MoveDescription::SkipMove => {
+                format!("skip ({})", m.eval())
+            }
+        }
+    }
+
+    pub fn print_move_list(&self, ml: &MoveList, start: usize, _end_exclusive: usize) {
+        let end_exclusive = if _end_exclusive < ml.v().len() {
+            _end_exclusive
+        } else {
+            ml.v().len()
+        };
+
+        console_log!("[Moves, {}-{}]", start, end_exclusive);
+        for i in start..end_exclusive {
+            console_log!("{}", self.stringify_move(&ml.v()[i]));
+        }
+        console_log!("");
+    }
+
     #[inline]
     pub fn get_square_hash(i: usize, piece: Piece, player: Player) -> u64 {
         RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
@@ -150,8 +185,8 @@ impl Board {
     }
 
     pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
-        if let Square::Occupied(_, occupied_player) = self.get_by_xy(x, y) {
-            let piece_list = &mut self.get_player_state_mut(*occupied_player).piece_locs;
+        if let Square::Occupied(_, occupied_player) = *self.get_by_xy(x, y) {
+            let piece_list = &mut self.get_player_state_mut(occupied_player).piece_locs;
             piece_list.remove(&Coord(x, y));
         }
 
@@ -191,15 +226,11 @@ impl Board {
     fn apply_castle(&mut self, castle_type: CastleType, apply_or_undo: bool) {
 
         let curr_player = self.get_player_with_turn();
-        let curr_player_state = self.get_player_state_mut(curr_player);
-
-        let old_player = curr_player.other_player();
-        let old_player_state = self.get_player_state_mut(old_player);
 
         let (player_num, expected_castle_bool) = if apply_or_undo {
             (curr_player as usize, false)
         } else {
-            (old_player as usize, true)
+            (curr_player.other_player() as usize, true)
         };
 
         let sqs: &[BeforeAfterSquare] = if castle_type == CastleType::Oo {
@@ -211,6 +242,7 @@ impl Board {
 
         let castle_type_num = castle_type as usize;
         let castle_key = RANDOM_NUMBER_KEYS.moved_castle_piece[castle_type_num][player_num];
+        let curr_player_state = self.get_player_state_mut(curr_player);
         if curr_player_state.moved_castle_piece[castle_type_num] != expected_castle_bool {
             panic!("Illegal ooo state");
         } else {
@@ -234,6 +266,10 @@ impl Board {
                 self.hash ^= RANDOM_NUMBER_KEYS.is_white_to_play;
                 self.player_with_turn = self.player_with_turn.other_player();
             }
+            _ => {
+                self.hash ^= RANDOM_NUMBER_KEYS.is_white_to_play;
+                self.player_with_turn = self.player_with_turn.other_player();
+            }
         }
     }
 
@@ -250,14 +286,11 @@ impl Board {
     /// Then updates hash, and switches turn.
     /// All correctness checks will be move generation's responsibility.
     pub fn handle_move(&mut self, m: &MoveWithEval) -> RevertableMove {
-        let mut result: RevertableMove = RevertableMove::NoOp;
+        let result: RevertableMove;
 
         match m.description() {
             MoveDescription::NormalMove(_from_coord, _to_coord) => {
                 let old_hash = self.hash;
-
-                let curr_player = self.get_player_with_turn();
-                let curr_state = self.get_player_state(curr_player);
 
                 let from_coord = _from_coord.to_coord();
                 let to_coord = _to_coord.to_coord();
@@ -269,6 +302,9 @@ impl Board {
                 self.set_by_xy(to_coord.0, to_coord.1, initial_from_sq);
 
                 if let Square::Occupied(dragged_piece, dragged_piece_player) = initial_from_sq {
+
+                    let curr_player = self.get_player_with_turn();
+                    let curr_state = self.get_player_state_mut(curr_player);
 
                     debug_assert!(dragged_piece_player == curr_player, "Tried to move for the wrong current player");
 
@@ -297,6 +333,9 @@ impl Board {
             MoveDescription::Castle(castle_type) => {
                 self.apply_castle(*castle_type, true);
                 result = RevertableMove::Castle(*castle_type);
+            }
+            _ => {
+                result = RevertableMove::NoOp;
             }
         }
 
@@ -343,11 +382,9 @@ impl Board {
             if !check_handler.has_king_capture { result.write(m.clone()); }
         }
 
-        let curr_state = self.get_player_state(curr_player);
-
-        let can_castle = false;
-        let wrote_can_castle = false;
-        if !curr_state.moved_castle_piece[CastleType::Oo as usize] {
+        let mut can_castle = false;
+        let mut wrote_can_castle = false;
+        if !self.get_player_state(curr_player).moved_castle_piece[CastleType::Oo as usize] {
             can_castle = self.can_castle(&CASTLE_UTILS.oo_king_traversal_coords[curr_player as usize], curr_player);
             wrote_can_castle = true;
             if can_castle {
@@ -355,7 +392,7 @@ impl Board {
             }
         }
 
-        if !curr_state.moved_castle_piece[CastleType::Ooo as usize] {
+        if !self.get_player_state(curr_player).moved_castle_piece[CastleType::Ooo as usize] {
             if !wrote_can_castle {
                 can_castle = self.can_castle(&CASTLE_UTILS.ooo_king_traversal_coords[curr_player as usize], curr_player);
             }

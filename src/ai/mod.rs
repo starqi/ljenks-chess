@@ -75,7 +75,7 @@ impl Ai {
 
             let leading_move = self.get_leading_move();
             if let Some((m, e)) = leading_move {
-                console_log!("{}, {}", m, e);
+                console_log!("{}, {}", self.test_board.stringify_move(m), e);
             } else {
                 console_log!("No leading move");
             }
@@ -86,7 +86,7 @@ impl Ai {
 
         let leading_move = self.get_leading_move();
         if let Some((m, e)) = leading_move {
-            console_log!("Making move: {} ({})", m, e);
+            console_log!("Making move: {} ({})", self.test_board.stringify_move(m), e);
             real_board.handle_move(m);
         } else {
             console_log!("No move");
@@ -193,7 +193,7 @@ impl Ai {
 
                     if run {
                         if self.show_tree_left_side {
-                            crate::console_log!("L = {} (Hash) {}", m, if quiescence { "(Q)" } else { "" });
+                            crate::console_log!("L = {} (Hash) {}", self.test_board.stringify_move(&m), if quiescence { "(Q)" } else { "" });
                         }
 
                         let r = self.negamax_try_move(
@@ -269,7 +269,7 @@ impl Ai {
         if self.show_tree_left_side {
             if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
                 if !quiescence {
-                    crate::console_log!("L = {}", self.moves_buf.v()[moves_end_exclusive - 1]);
+                    crate::console_log!("L = {}", self.test_board.stringify_move(&self.moves_buf.v()[moves_end_exclusive - 1]));
                 }
             }
         }
@@ -279,10 +279,10 @@ impl Ai {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
             if quiescence {
-                if !Self::is_unstable_move(&*m) { continue; }
+                if !self.is_unstable_move(&*m) { continue; }
                 if !has_quiescence_move && self.show_tree_left_side {
                     if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
-                        crate::console_log!("L = {} (Quiescence)", *m);
+                        crate::console_log!("L = {} (Quiescence)", self.test_board.stringify_move(&*m));
                         crate::console_log!("{}", self.test_board);
                     }
                 }

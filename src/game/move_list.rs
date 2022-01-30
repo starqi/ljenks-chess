@@ -13,7 +13,7 @@ pub struct BeforeAfterSquare(pub FastCoord, pub Square, pub Square);
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum CastleType {
-    Oo = 0, Ooo = 1
+    Oo = 0, Ooo
 }
 
 /// Keep minimal in size, to make move generation fast, and move execution slower
@@ -40,42 +40,6 @@ impl MoveWithEval {
     #[inline]
     pub fn eval(&self) -> f32 { self.1 }
 }
-
-// FIXME Display now requires board
-/*
-impl Display for MoveWithEval {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        match self.description() {
-            MoveDescription::NormalMove(start, end) |
-                // Since a piece is on the after square, after_sq will stringify to eg. k, K, p, P, then it becomes eg. Ke2
-                write!(f, "{}{} ({})", after_sq, fast_coord, self.eval())?;
-            },
-
-            MoveDescription::Castle(castle_type) => {
-                if *castle_type == CastleType::Oo {
-                    write!(f, "oo ({})", self.eval())?;
-                } else {
-                    write!(f, "ooo ({})", self.eval())?;
-                }
-            },
-            MoveDescription::SkipMove => {
-                write!(f, "skip ({})", self.eval())?;
-            }
-        }
-
-        match self.description() {
-            MoveDescription::CastleRelatedCapture(sqs, p_oo, p_ooo) | 
-            MoveDescription::CastleRelatedMove(sqs, p_oo, p_ooo) => {
-                if *p_oo { write!(f, " [p_oo]")?; }
-                if *p_ooo { write!(f, " [p_ooo]")?; }
-            },
-            _ => {}
-        }
-
-        Ok(())
-    }
-}
-*/
 
 pub struct MoveList {
     v: Vec<MoveWithEval>,
@@ -131,24 +95,6 @@ impl MoveList {
             let m = &mut self.v[i];
             m.1 = to_eval(m);
         }
-    }
-
-    pub fn print(&self, start: usize, _end_exclusive: usize) {
-        console_log!("FIXME");
-
-        /*
-        let end_exclusive = if _end_exclusive < self.v.len() {
-            _end_exclusive
-        } else {
-            self.v.len()
-        };
-
-        console_log!("[Moves, {}-{}]", start, end_exclusive);
-        for i in start..end_exclusive {
-            console_log!("{}", self.v[i]);
-        }
-        console_log!("");
-        */
     }
 }
 

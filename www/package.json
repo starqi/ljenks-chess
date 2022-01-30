@@ -6,7 +6,8 @@
     "license": "ISC",
     "scripts": {
         "build": "webpack --config webpack.config.js",
-        "start": "webpack-dev-server"
+        "start": "webpack-dev-server",
+        "build-rust": "cd .. && wasm-pack build --target web && cd www && npm update chess_bs"
     },
     "dependencies": {
         "chess_bs": "file:../pkg",
