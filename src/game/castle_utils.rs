@@ -13,7 +13,7 @@ pub struct CastleUtils {
 impl CastleUtils {
 
     fn get_oo_squares_for_row(player: Player) -> [BeforeAfterSquare; 4] {
-        let y = player.get_first_row();
+        let y = player.first_row();
         [
             BeforeAfterSquare(FastCoord::from_coords(4, y), Square::Occupied(Piece::King, player), Square::Blank),
             BeforeAfterSquare(FastCoord::from_coords(5, y), Square::Blank, Square::Occupied(Piece::Rook, player)),
@@ -23,7 +23,7 @@ impl CastleUtils {
     }
 
     fn get_ooo_squares_for_row(player: Player) -> [BeforeAfterSquare; 5] {
-        let y = player.get_first_row();
+        let y = player.first_row();
         [
             BeforeAfterSquare(FastCoord::from_coords(0, y), Square::Occupied(Piece::Rook, player), Square::Blank),
             BeforeAfterSquare(FastCoord::from_coords(1, y), Square::Blank, Square::Blank),
@@ -36,8 +36,8 @@ impl CastleUtils {
     pub fn new() -> CastleUtils {
         crate::console_log!("Generating castle constants");
 
-        let white_first_row = Player::get_first_row(Player::White);
-        let black_first_row = Player::get_first_row(Player::Black);
+        let white_first_row = Player::first_row(Player::White);
+        let black_first_row = Player::first_row(Player::Black);
 
         return CastleUtils {
             oo_sqs: [

@@ -44,17 +44,17 @@ static PLAYER_TO_FIRST_ROW: [u8; 2] = [7, 0];
 impl Player {
 
     #[inline]
-    pub fn get_other_player(self) -> Player {
+    pub fn other_player(self) -> Player {
         PLAYER_TO_OTHER_PLAYER[self as usize]
     }
 
     #[inline]
-    pub fn get_first_row(self) -> u8 {
+    pub fn first_row(self) -> u8 {
         PLAYER_TO_FIRST_ROW[self as usize]
     }
 
     #[inline]
-    pub fn get_multiplier(self) -> f32 {
+    pub fn multiplier(self) -> f32 {
         PLAYER_TO_MULTIPLIER[self as usize]
     }
 }

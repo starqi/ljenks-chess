@@ -2,6 +2,7 @@ TODO
 
 - Redo again, and make moves 2 u8s
 - Then MoveWithEval is the AI version, including eval + metadata (mostly, isCapture)
+    - Making a move returns a revertable move
 
 --------------------------------------------------
 

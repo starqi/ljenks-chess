@@ -103,7 +103,7 @@ pub fn fill_player<T : MoveTestHandler>(
 ) {
     for Coord(x, y) in &board.get_player_state(player_with_turn).piece_locs {
         if let Square::Occupied(piece, player) = board.get_by_xy(*x, *y) {
-            debug_assert!(*player == player_with_turn);
+            debug_assert!(*player == player_with_turn, "Player owns a wrong colored piece");
             fill_src(&MoveTestParams {
                 src_x: *x as i8,
                 src_y: *y as i8,

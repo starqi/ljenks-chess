@@ -1,9 +1,15 @@
 use std::fmt::{Display, Formatter, self};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FastCoord(u8);
 
 impl FastCoord {
+
+    #[inline]
+    pub fn value(&self) -> u8 {
+        self.0
+    }
+
     pub fn to_coord(&self) -> Coord {
         let y = (self.0 / 8) as u8;
         let x = self.0 % 8;

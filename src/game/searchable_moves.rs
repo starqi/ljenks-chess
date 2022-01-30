@@ -1,27 +1,44 @@
 use std::collections::HashMap;
 use super::coords::*;
 use super::move_list::*;
+use super::super::*;
 
 /// (src, dest)
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-struct SearchableMoveKey(Coord, Coord);
+struct SearchableMoveKey(FastCoord, FastCoord);
 
 pub struct SearchableMoves {
-    map: HashMap<SearchableMoveKey, MoveSnapshot>
+    map: HashMap<SearchableMoveKey, MoveWithEval>
 }
 
 impl SearchableMoves {
     pub fn new() -> SearchableMoves {
-        let map: HashMap<SearchableMoveKey, MoveSnapshot> = HashMap::new();
+        let map: HashMap<SearchableMoveKey, MoveWithEval> = HashMap::new();
         SearchableMoves { map }
     }
 
-    pub fn reset(&mut self, move_list: &MoveList, start: usize, end_exclusive: usize) {
+    pub fn reset(&mut self, curr_player: Player, move_list: &MoveList, start: usize, end_exclusive: usize) {
 
         self.map.clear();
 
         for i in start..end_exclusive {
-            let m = &move_list.get_v()[i];
+            let m = &move_list.v()[i];
+
+            match m.description() {
+                MoveDescription::NormalMove(from, to) => {
+                    self.map.insert(SearchableMoveKey(*from, *to), *m);
+                }
+                MoveDescription::Castle(castle_type) => {
+                    match castle_type {
+                        CastleType::Oo => {
+                            for x in (CASTLE_UTILS.oo_sqs[curr_player as usize]).iter() {
+                            }
+                        },
+                        CastleType::Ooo => {
+                        }
+                    }
+                }
+            }
 
             if let Some(capture_dest) = m.get_dest_sq() {
                 if let Some(capture_src) = m.get_src_sq() {

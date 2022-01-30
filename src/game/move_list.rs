@@ -5,10 +5,10 @@ use super::entities::*;
 use crate::{console_log};
 
 #[derive(Clone)]
-pub struct BeforeAfterSquare(pub FastCoord, pub Square, pub Square);
+pub struct BeforeSquare(pub FastCoord, pub Square);
 
-pub type PreventOo = bool;
-pub type PreventOoo = bool;
+#[derive(Clone)]
+pub struct BeforeAfterSquare(pub FastCoord, pub Square, pub Square);
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -16,12 +16,10 @@ pub enum CastleType {
     Oo = 0, Ooo = 1
 }
 
+/// Keep minimal in size, to make move generation fast, and move execution slower
 #[derive(Clone)]
 pub enum MoveDescription {
-    Capture([BeforeAfterSquare; 2]),
-    Move([BeforeAfterSquare; 2]),
-    CastleRelatedCapture([BeforeAfterSquare; 2], PreventOo, PreventOoo),
-    CastleRelatedMove([BeforeAfterSquare; 2], PreventOo, PreventOoo),
+    NormalMove(FastCoord, FastCoord),
     Castle(CastleType),
     SkipMove
 }
@@ -32,67 +30,40 @@ impl Default for MoveDescription {
     }
 }
 
-impl MoveDescription {
-
-    #[inline]
-    fn get_sq(&self, i: usize) -> Option<&BeforeAfterSquare> {
-        match self {
-            MoveDescription::Capture(s) |
-            MoveDescription::Move(s) |
-            MoveDescription::CastleRelatedMove(s, _, _) |
-            MoveDescription::CastleRelatedCapture(s, _, _) => {
-                Some(&s[i])
-            },
-            _ => None
-        }
-    }
-
-    pub fn get_dest_sq(&self) -> Option<&BeforeAfterSquare> {
-        self.get_sq(0)
-    }
-
-    pub fn get_src_sq(&self) -> Option<&BeforeAfterSquare> {
-        self.get_sq(1)
-    }
-}
-
+/// Put all AI info here, such as eval and metadata (is capture or not)
 #[derive(Clone, Default)]
 pub struct MoveWithEval(pub MoveDescription, pub f32);
 
 impl MoveWithEval {
     #[inline]
-    pub fn get_description(&self) -> &MoveDescription { &self.0 }
+    pub fn description(&self) -> &MoveDescription { &self.0 }
     #[inline]
-    pub fn get_eval(&self) -> f32 { self.1 }
+    pub fn eval(&self) -> f32 { self.1 }
 }
 
+// FIXME Display now requires board
+/*
 impl Display for MoveWithEval {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        match self.get_description() {
-
-            MoveDescription::Capture(sqs) |
-            MoveDescription::Move(sqs) |
-            MoveDescription::CastleRelatedCapture(sqs, _, _) | 
-            MoveDescription::CastleRelatedMove(sqs, _, _) => {
-
-                let BeforeAfterSquare(fast_coord, _, after_sq) = sqs[1];
+        match self.description() {
+            MoveDescription::NormalMove(start, end) |
                 // Since a piece is on the after square, after_sq will stringify to eg. k, K, p, P, then it becomes eg. Ke2
-                write!(f, "{}{} ({})", after_sq, fast_coord, self.get_eval())?;
+                write!(f, "{}{} ({})", after_sq, fast_coord, self.eval())?;
             },
 
             MoveDescription::Castle(castle_type) => {
                 if *castle_type == CastleType::Oo {
-                    write!(f, "oo ({})", self.get_eval())?;
+                    write!(f, "oo ({})", self.eval())?;
                 } else {
-                    write!(f, "ooo ({})", self.get_eval())?;
+                    write!(f, "ooo ({})", self.eval())?;
                 }
             },
             MoveDescription::SkipMove => {
-                write!(f, "skip ({})", self.get_eval())?;
+                write!(f, "skip ({})", self.eval())?;
             }
         }
 
-        match self.get_description() {
+        match self.description() {
             MoveDescription::CastleRelatedCapture(sqs, p_oo, p_ooo) | 
             MoveDescription::CastleRelatedMove(sqs, p_oo, p_ooo) => {
                 if *p_oo { write!(f, " [p_oo]")?; }
@@ -104,6 +75,7 @@ impl Display for MoveWithEval {
         Ok(())
     }
 }
+*/
 
 pub struct MoveList {
     v: Vec<MoveWithEval>,
@@ -126,7 +98,7 @@ impl MoveList {
     }
 
     #[inline]
-    pub fn get_v(&self) -> &Vec<MoveWithEval> {
+    pub fn v(&self) -> &Vec<MoveWithEval> {
         &self.v
     }
 
@@ -162,6 +134,9 @@ impl MoveList {
     }
 
     pub fn print(&self, start: usize, _end_exclusive: usize) {
+        console_log!("FIXME");
+
+        /*
         let end_exclusive = if _end_exclusive < self.v.len() {
             _end_exclusive
         } else {
@@ -173,6 +148,7 @@ impl MoveList {
             console_log!("{}", self.v[i]);
         }
         console_log!("");
+        */
     }
 }
 

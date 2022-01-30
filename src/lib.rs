@@ -45,7 +45,10 @@ impl Main {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
         // Initialize lazy
-        &CASTLE_UTILS.oo_move_snapshots;
+        &CASTLE_UTILS.oo_sqs;
+        &CASTLE_UTILS.ooo_sqs;
+        &CASTLE_UTILS.oo_king_traversal_coords;
+        &CASTLE_UTILS.ooo_king_traversal_coords;
         &RANDOM_NUMBER_KEYS.squares;
 
         let board = Board::new();
@@ -76,7 +79,7 @@ impl Main {
 
         let _m = self.searchable.get_move(Coord(from_x as u8, from_y as u8), Coord(to_x as u8, to_y as u8));
         if let Some(m) = _m {
-            self.board.handle_move(m, true);
+            self.board.handle_move(m);
             true
         } else {
             false
