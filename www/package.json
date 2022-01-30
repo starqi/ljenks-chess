@@ -6,11 +6,11 @@
     "license": "ISC",
     "scripts": {
         "build": "webpack",
-        "serve": "webpack serve",
-        "build-rust": "cd .. && wasm-pack build --target web && cd www && npm update ljenks-chess"
+        "serve": "webpack serve"
     },
     "devDependencies": {
         "@wasm-tool/wasm-pack-plugin": "1.5.0",
+        "copy-webpack-plugin": "^10.2.3",
         "file-loader": "^6.2.0",
         "html-webpack-plugin": "^5.3.2",
         "ljenks-chess": "file:../pkg",

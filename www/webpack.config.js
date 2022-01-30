@@ -1,5 +1,5 @@
 const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 const webpack = require('webpack');
 const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 
@@ -10,11 +10,17 @@ module.exports = {
         filename: 'index.js',
     },
     plugins: [
-        new HtmlWebpackPlugin(),
-        /*
+        new CopyWebpackPlugin({
+            patterns: [
+                {
+                    from: path.resolve(__dirname, 'index.html'),
+                },
+            ],
+        }),
         new WasmPackPlugin({
             crateDirectory: path.resolve(__dirname, "..")
         }),
+        /*
         new webpack.ProvidePlugin({
             TextDecoder: ['text-encoding', 'TextDecoder'],
             TextEncoder: ['text-encoding', 'TextEncoder']
@@ -23,7 +29,7 @@ module.exports = {
     ],
     mode: 'development',
     experiments: {
-        asyncWebAssembly: true
+        syncWebAssembly: true
     },
     module: {
         rules: [
