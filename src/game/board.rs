@@ -144,6 +144,11 @@ impl Board {
         return &self.d[y as usize * 8 + x as usize];
     }
 
+    #[inline]
+    pub fn get_by_num(&self, num: u8) -> &Square {
+        return &self.d[num as usize];
+    }
+
     pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
         if let Square::Occupied(_, occupied_player) = self.get_by_xy(x, y) {
             let piece_list = &mut self.get_player_state_mut(*occupied_player).piece_locs;
@@ -170,6 +175,7 @@ impl Board {
     fn apply_before_after_sqs(&mut self, sqs: &[BeforeAfterSquare], apply_or_undo: bool) {
         if apply_or_undo {
             for BeforeAfterSquare(fast_coord, _, after) in sqs.iter() {
+                // FIXME set_by_num after bitboard switch
                 let coord = fast_coord.to_coord();
                 self.set_by_xy(coord.0, coord.1, *after);
             }
@@ -229,6 +235,15 @@ impl Board {
                 self.player_with_turn = self.player_with_turn.other_player();
             }
         }
+    }
+
+    pub fn is_capture(&self, m: &MoveWithEval) -> bool {
+        if let MoveDescription::NormalMove(_, _to_coord) = m.description() {
+            if let Square::Occupied(_, _) = self.get_by_num(_to_coord.value()) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Drags whatever is on the source square to the dest square, or applies a castle snapshot.

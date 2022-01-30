@@ -70,14 +70,14 @@ impl Main {
         self.move_list.write_index = 0;
         self.board.get_moves(&mut self.temp, &mut self.move_list);
         let end_exclusive = self.move_list.write_index;
-        self.searchable.reset(&mut self.move_list, 0, end_exclusive);
+        self.searchable.reset(self.board.get_player_with_turn(), &mut self.move_list, 0, end_exclusive);
     }
 
     pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> bool {
         if check_i32_xy(from_x, from_y).is_err() { return false; }
         if check_i32_xy(to_x, to_y).is_err() { return false; }
 
-        let _m = self.searchable.get_move(Coord(from_x as u8, from_y as u8), Coord(to_x as u8, to_y as u8));
+        let _m = self.searchable.get_move(&Coord(from_x as u8, from_y as u8), &Coord(to_x as u8, to_y as u8));
         if let Some(m) = _m {
             self.board.handle_move(m);
             true
@@ -88,7 +88,7 @@ impl Main {
 
     pub fn get_piece(&self, x: i32, y: i32) -> i8 {
         if let Ok(Square::Occupied(piece, player)) = self.board.get_by_xy_safe(x, y) {
-            ((*piece as u8) + 1) as i8 * player.get_multiplier() as i8
+            ((*piece as u8) + 1) as i8 * player.multiplier() as i8
         } else if let Ok(Square::Blank) = self.board.get_by_xy_safe(x, y) {
             0
         } else {

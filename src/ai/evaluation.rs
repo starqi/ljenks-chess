@@ -6,13 +6,13 @@ use super::super::game::move_test::*;
 use super::super::game::push_moves_handler::*;
 
 /// Must be bigger than all piece values
-const NO_CONTROL_VAL: f32 = 99.;
+const NO_CONTROL_VAL: f32 = 99.0;
 
 static PIECE_VALUES: [i8; 6] = [
     1, 5, 3, 3, 9, 10
 ];
 
-static SOME_VALUES_1: [(f32, f32); 2] = [(7., -1.), (0., 1.)];
+static SOME_VALUES_1: [(f32, f32); 2] = [(7., -1.0), (0.0, 1.0)];
 
 struct SquareControlHandler<'a> {
     temp_arr: &'a mut [f32; 64]
@@ -26,14 +26,14 @@ pub fn clear_square_control(a: &mut [f32; 64]) {
 pub fn get_square_worth_white(x: usize, y: usize) -> f32 {
     if y <= 1 { 1.0 }
     else if y >= 6 { 0.1 }
-    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4. }
+    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4.0 }
 }
 
 #[inline]
 pub fn get_square_worth_black(x: usize, y: usize) -> f32 {
     if y >= 6 { 1.0 }
     else if y <= 1 { 0.1 }
-    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4. }
+    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4.0 }
 }
 
 /// Currently, returns at 4 for a center square, 3 for opponent side square
@@ -145,15 +145,18 @@ pub fn evaluate(board: &Board, temp_arr: &mut [f32; 64]) -> f32 {
 }
 
 pub fn add_captures_to_evals(
+    board: &Board,
     m: &mut MoveList,
     start: usize,
     end_exclusive: usize,
 ) {
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.eval();
-        if let MoveDescription::Capture(_, _, dest_sq_index) = m.description() {
-            if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(after_piece, _)))) = m.0[*dest_sq_index as usize] {
-                score += evaluate_piece(before_piece) - evaluate_piece(after_piece);
+        if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
+            if let Square::Occupied(curr_dest_piece, _) = board.get_by_num(_to_coord.value()) {
+                if let Square::Occupied(dragged_piece, _) = board.get_by_num(_from_coord.value()) {
+                    score += evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece);
+                }
             }
         }
         score
@@ -165,25 +168,21 @@ pub fn add_aggression_to_evals(
     m: &mut MoveList,
     start: usize,
     end_exclusive: usize,
-    temp_arr: &mut [f32; 64],
     temp_ml: &mut MoveList
 ) {
-    clear_square_control(temp_arr);
-    get_white_square_control(temp_arr);
-
+    let curr_player = board.get_player_with_turn();
     let mut handler = PushToMoveListHandler { move_list: temp_ml };
     m.write_evals(start, end_exclusive, |m| {
-        let mut score = m.get_eval();
-        for sq_holder in m.get_squares().iter() {
-            if let Some((Coord(x, y), BeforeAfterSquares(_, Square::Occupied(after_piece, after_player)))) = sq_holder {
-                let min_controlling_value_negpos = temp_arr[*y as usize * 8 + *x as usize];
-                if min_controlling_value_negpos != NO_CONTROL_VAL && min_controlling_value_negpos.signum() != after_player.get_multiplier() { continue; } 
+        let mut score = m.eval();
+        if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
+            if let Square::Occupied(dragged_piece, _) = board.get_by_num(_from_coord.value()) {
 
+                let to_coord = _to_coord.to_coord();
                 let params = MoveTestParams {
-                    src_x: *x as i8,
-                    src_y: *y as i8,
-                    src_piece: *after_piece,
-                    src_player: *after_player,
+                    src_x: to_coord.0 as i8,
+                    src_y: to_coord.1 as i8,
+                    src_piece: *dragged_piece,
+                    src_player: curr_player,
                     can_capture_king: true,
                     board
                 };
@@ -192,10 +191,10 @@ pub fn add_aggression_to_evals(
                 fill_src(&params, &mut handler);
 
                 for i in 0..handler.move_list.write_index {
-                    if let MoveSnapshot(sqs, _, MoveDescription::Capture(_, _, dest_sq_index)) = handler.move_list.get_v()[i] {
-                        if let Some((_, BeforeAfterSquares(Square::Occupied(attacked_piece, attacked_player), _))) = sqs[dest_sq_index as usize] {
-                            if attacked_player != *after_player {
-                                score += evaluate_piece(attacked_piece) * 0.33;
+                    if let MoveWithEval(MoveDescription::NormalMove(_from_coord2, _to_coord2), _) = handler.move_list.v()[i] {
+                        if let Square::Occupied(target_piece, target_player) = board.get_by_num(_to_coord2.value()) {
+                            if *target_player != curr_player {
+                                score += evaluate_piece(*target_piece) * 0.33;
                             }
                         }
                     }

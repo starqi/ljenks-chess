@@ -30,7 +30,7 @@ impl Default for MoveDescription {
     }
 }
 
-/// Put all AI info here, such as eval and metadata (is capture or not)
+/// Put all AI info here, such as eval and metadata (is capture or not), but lazily when AI needs it
 #[derive(Clone, Default)]
 pub struct MoveWithEval(pub MoveDescription, pub f32);
 

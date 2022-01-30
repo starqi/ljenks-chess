@@ -24,7 +24,7 @@ pub struct Ai {
 enum SingleMoveResult { NewAlpha(f32), BetaCutOff(f32), NoEffect }
 
 #[derive(Clone)]
-enum MemoType { Low, Exact(MoveSnapshot), High(MoveSnapshot) }
+enum MemoType { Low, Exact(MoveWithEval), High(MoveWithEval) }
 
 #[derive(Clone)]
 struct MemoData(f32, u8, MemoType);
@@ -49,7 +49,7 @@ impl Ai {
         }
     }
 
-    fn get_leading_move(&self) -> Option<(&MoveSnapshot, f32)> {
+    fn get_leading_move(&self) -> Option<(&MoveWithEval, f32)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
             Some(MemoData(eval, _, MemoType::High(best_move) | MemoType::Exact(best_move))) => {
@@ -87,7 +87,7 @@ impl Ai {
         let leading_move = self.get_leading_move();
         if let Some((m, e)) = leading_move {
             console_log!("Making move: {} ({})", m, e);
-            real_board.handle_move(m, true);
+            real_board.handle_move(m);
         } else {
             console_log!("No move");
         }
@@ -117,10 +117,10 @@ impl Ai {
             if quiescence {
                 self.show_tree_left_side = false;
                 let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
-                return Self::cap(self.test_board.get_player_with_turn().get_multiplier() * eval, alpha, beta);
+                return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
             } else {
                 let mut eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
-                eval = self.test_board.get_player_with_turn().get_multiplier() * eval;
+                eval = self.test_board.get_player_with_turn().multiplier() * eval;
 
                 // Typical quiescence pruning (TODO review)
                 if eval >= beta { return beta; }
@@ -136,7 +136,7 @@ impl Ai {
         const NEW_ALPHA_I_HASH_MOVE: i32 = -2;
         let mut new_alpha_i: i32 = NEW_ALPHA_I_NEVER_SET;
         // When `new_alpha_i` is `NEW_ALPHA_I_HASH_MOVE`, the hash move can be found here
-        let mut hash_move: Option<MoveSnapshot> = None;
+        let mut hash_move: Option<MoveWithEval> = None;
 
         {
             let memo = {
@@ -178,7 +178,7 @@ impl Ai {
                 // At this point, cannot simply use memoized result.
                 // Get PV or refutation move from memo, try it out at full depth before computing move generation,
                 // and either beta cut off or use as candidate-to-beat among rest of moves after move generation.
-                let best_move: Option<MoveSnapshot> = match t {
+                let best_move: Option<MoveWithEval> = match t {
                     MemoType::Exact(m) | MemoType::High(m) => Some(m),
                     _ => None
                 };
@@ -186,7 +186,7 @@ impl Ai {
                 if let Some(m) = best_move {
 
                     let run = if quiescence {
-                        Self::is_unstable_move(&m)
+                        self.is_unstable_move(&m)
                     } else {
                         true
                     };
@@ -240,7 +240,7 @@ impl Ai {
         for i in moves_start..moves_end_exclusive {
 
             let m = self.moves_buf.get_mutable_snapshot(i);
-            self.test_board.handle_move(&m, true);
+            let revertable = self.test_board.handle_move(&m);
             let memo: Option<&MemoData> = (*resolved_memo).get(&self.test_board.get_hash());
 
             const BIG_NUMBER: f32 = 100.;
@@ -251,7 +251,7 @@ impl Ai {
                 -EVAL_UPPER_BOUND * BIG_NUMBER
             };
 
-            self.test_board.handle_move(&m, false);
+            self.test_board.revert_move(&revertable);
             (*m).1 = r;
         }
 
@@ -261,22 +261,22 @@ impl Ai {
                 self.show_tree_left_side = false;
                 return self.get_no_moves_eval(alpha, beta);
             }
-            evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.eval_temp_arr, &mut self.temp_moves);
+            evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
         }
-        evaluation::add_captures_to_evals(&mut self.moves_buf, moves_start, moves_end_exclusive);
+        evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
 
         if self.show_tree_left_side {
             if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
                 if !quiescence {
-                    crate::console_log!("L = {}", self.moves_buf.get_v()[moves_end_exclusive - 1]);
+                    crate::console_log!("L = {}", self.moves_buf.v()[moves_end_exclusive - 1]);
                 }
             }
         }
 
         let mut has_quiescence_move = false;
         for i in (moves_start..moves_end_exclusive).rev() {
-            let m: *const MoveSnapshot = &self.moves_buf.get_v()[i];
+            let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
             if quiescence {
                 if !Self::is_unstable_move(&*m) { continue; }
@@ -325,7 +325,7 @@ impl Ai {
         } else if new_alpha_i >= 0 {
             (*resolved_memo).insert(
                 self.test_board.get_hash(),
-                MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.get_v()[new_alpha_i as usize].clone()))
+                MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()))
             );
         } else {
             (*resolved_memo).insert(self.test_board.get_hash(), MemoData(alpha, remaining_depth, MemoType::Low));
@@ -341,10 +341,10 @@ impl Ai {
         alpha: f32,
         is_alpha_exact_eval: bool,
         beta: f32,
-        m: *const MoveSnapshot,
+        m: *const MoveWithEval,
         moves_start: usize
     ) -> SingleMoveResult {
-        self.test_board.handle_move(&*m, true);
+        let revertable = self.test_board.handle_move(&*m);
 
         let mut fast_found_max_this = 0.0f32;
         let mut fast_found = false;
@@ -365,7 +365,7 @@ impl Ai {
             -self.negamax(remaining_depth - 1, quiescence, -beta, -alpha, moves_start)
         };
 
-        self.test_board.handle_move(&*m, false);
+        self.test_board.revert_move(&revertable);
 
         if max_this >= beta {
             SingleMoveResult::BetaCutOff(max_this)
@@ -376,16 +376,8 @@ impl Ai {
         }
     }
 
-    fn is_unstable_move(m: &MoveSnapshot) -> bool {
-        return if let MoveDescription::Capture(_, _, _) = m.get_description() {
-            if let Some((_, BeforeAfterSquares(Square::Occupied(before_piece, _), Square::Occupied(after_piece, _)))) = m.get_dest_sq() {
-                evaluation::evaluate_piece(*before_piece) > 1.
-            } else {
-                panic!("Unexpected capture move without proper before/after");
-            }
-        } else { 
-            false
-        }
+    fn is_unstable_move(&self, m: &MoveWithEval) -> bool {
+        self.test_board.is_capture(m)
     }
 
     fn cap(r: f32, alpha: f32, beta: f32) -> f32 {
@@ -395,7 +387,7 @@ impl Ai {
     }
 
     fn get_no_moves_eval(&mut self, alpha: f32, beta: f32) -> f32 {
-        let checking_player = self.test_board.get_player_with_turn().get_other_player();
+        let checking_player = self.test_board.get_player_with_turn().other_player();
         if is_checking(&mut self.test_board, checking_player) {
             return alpha;
         } else {
