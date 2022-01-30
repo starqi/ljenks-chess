@@ -18,7 +18,9 @@ module.exports = {
             ],
         }),
         new WasmPackPlugin({
-            crateDirectory: path.resolve(__dirname, "..")
+            crateDirectory: path.resolve(__dirname, ".."),
+            forceMode: "production",
+            //forceMode: "development",
         }),
         /*
         new webpack.ProvidePlugin({
@@ -27,7 +29,8 @@ module.exports = {
         })
         */
     ],
-    mode: 'development',
+    //mode: 'development',
+    mode: 'production',
     experiments: {
         syncWebAssembly: true
     },

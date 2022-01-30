@@ -47,8 +47,8 @@ impl Main {
         // Initialize lazy
         &CASTLE_UTILS.oo_sqs;
         &CASTLE_UTILS.ooo_sqs;
-        &CASTLE_UTILS.oo_king_traversal_coords;
-        &CASTLE_UTILS.ooo_king_traversal_coords;
+        &CASTLE_UTILS.king_traversal_coords;
+        &CASTLE_UTILS.draggable_coords;
         &RANDOM_NUMBER_KEYS.squares;
 
         let board = Board::new();
@@ -63,7 +63,7 @@ impl Main {
     }
 
     pub fn make_ai_move(&mut self) {
-        self.ai.make_move(5, &mut self.board);
+        self.ai.make_move(3, &mut self.board);
     }
 
     pub fn refresh_player_moves(&mut self) {

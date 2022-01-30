@@ -3,7 +3,6 @@ mod evaluation;
 use std::collections::HashMap;
 use super::game::move_list::*;
 use super::game::board::*;
-use super::game::entities::*;
 use super::game::check_handler::*;
 use super::extern_funcs::now;
 use crate::{console_log};

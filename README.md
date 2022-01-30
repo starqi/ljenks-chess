@@ -15,3 +15,11 @@ TODO
 - Lazy evaluation with incremental material heuristic, maybe also with control squares?
 - Personal musings - recursive null-move-ish evaluations  
 - Unit tests
+
+--------------------------------------------------
+
+Usage
+
+- "npm run serve" is enough to compile everything: Rust and JS
+    - Doesn't work without if not serving from web server
+- Need syncWebAssembly
