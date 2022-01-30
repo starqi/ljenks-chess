@@ -193,7 +193,7 @@ impl Ai {
 
                     if run {
                         if self.show_tree_left_side {
-                            crate::console_log!("L = {} (Hash) {}", self.test_board.stringify_move(&m), if quiescence { "(Q)" } else { "" });
+                            console_log!("L = {} (Hash) {}", self.test_board.stringify_move(&m), if quiescence { "(Q)" } else { "" });
                         }
 
                         let r = self.negamax_try_move(
@@ -269,7 +269,7 @@ impl Ai {
         if self.show_tree_left_side {
             if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
                 if !quiescence {
-                    crate::console_log!("L = {}", self.test_board.stringify_move(&self.moves_buf.v()[moves_end_exclusive - 1]));
+                    console_log!("L = {}", self.test_board.stringify_move(&self.moves_buf.v()[moves_end_exclusive - 1]));
                 }
             }
         }
@@ -282,8 +282,8 @@ impl Ai {
                 if !self.is_unstable_move(&*m) { continue; }
                 if !has_quiescence_move && self.show_tree_left_side {
                     if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
-                        crate::console_log!("L = {} (Quiescence)", self.test_board.stringify_move(&*m));
-                        crate::console_log!("{}", self.test_board);
+                        console_log!("L = {} (Quiescence)", self.test_board.stringify_move(&*m));
+                        console_log!("{}", self.test_board);
                     }
                 }
                 has_quiescence_move = true;

@@ -1,4 +1,4 @@
-import * as wasm from './node_modules/chess_bs';
+import * as wasm from './node_modules/ljenks-chess';
 
 import bb from './assets/bb.png';
 import bw from './assets/bw.png';
