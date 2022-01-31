@@ -1,7 +1,11 @@
 TODO
 
 - Tests for evaluation
-- Printing with board reference
+- Bitboards
+- If checked, don't do second round of move tests
+- Castling on one side needs to prevent other side...
+- Promotions
+- En passant
 
 --------------------------------------------------
 
