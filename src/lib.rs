@@ -63,7 +63,7 @@ impl Main {
     }
 
     pub fn make_ai_move(&mut self) {
-        self.ai.make_move(5, &mut self.board);
+        self.ai.make_move(3, &mut self.board);
     }
 
     pub fn refresh_player_moves(&mut self) {

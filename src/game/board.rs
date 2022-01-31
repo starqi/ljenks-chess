@@ -306,7 +306,12 @@ impl Board {
                     // 2) Update squares and player piece state
                     {
                         self.set_by_xy(from_coord.0, from_coord.1, Square::Blank);
-                        self.set_by_xy(to_coord.0, to_coord.1, from_sq_copy);
+                        if dragged_piece == Piece::Pawn && to_coord.1 == dragged_piece_player.last_row() {
+                            // TODO Add a method which configures preferred piece
+                            self.set_by_xy(to_coord.0, to_coord.1, Square::Occupied(Piece::Queen, dragged_piece_player));
+                        } else {
+                            self.set_by_xy(to_coord.0, to_coord.1, from_sq_copy);
+                        }
                     }
 
                     // 3) Update board hash - part 1
@@ -338,14 +343,21 @@ impl Board {
                 };
                 self.apply_before_after_sqs(sqs, true);
 
-                let castle_type_num = *castle_type as usize;
+                let oo_key = RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Oo as usize][player_num];
+                let ooo_key = RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Ooo as usize][player_num];
+
+                // We moved the king, so we moved a castle piece for both castles
+
+                if !self.get_player_state(curr_player).moved_castle_piece[CastleType::Oo as usize] {
+                    self.hash ^= oo_key;
+                }
+                if !self.get_player_state(curr_player).moved_castle_piece[CastleType::Ooo as usize] {
+                    self.hash ^= ooo_key;
+                }
 
                 let curr_player_state = self.get_player_state_mut(curr_player);
-                debug_assert!(!curr_player_state.moved_castle_piece[castle_type_num], "Illegal castle state - {}", castle_type_num);
-                curr_player_state.moved_castle_piece[castle_type_num] = true;
-
-                let castle_key = RANDOM_NUMBER_KEYS.moved_castle_piece[castle_type_num][player_num];
-                self.hash ^= castle_key;
+                curr_player_state.moved_castle_piece[CastleType::Oo as usize] = true;
+                curr_player_state.moved_castle_piece[CastleType::Ooo as usize] = true;
 
                 RevertableMove::Castle(*castle_type, old_hash)
             }
@@ -361,7 +373,8 @@ impl Board {
         result
     }
 
-    fn can_castle(&mut self, blank_coords: &[Coord], king_traversal_coords: &[Coord], curr_player: Player) -> bool {
+    /// Does not check if a castle piece has moved
+    fn _can_castle(&mut self, blank_coords: &[Coord], king_traversal_coords: &[Coord], curr_player: Player) -> bool {
         let opponent = curr_player.other_player();
 
         for Coord(x, y) in blank_coords.iter() {
@@ -390,7 +403,7 @@ impl Board {
                 &CASTLE_UTILS.ooo_blank_coords[curr_player_num]
             };
 
-            if self.can_castle(blank_coords, &CASTLE_UTILS.king_traversal_coords[castle_type as usize][curr_player as usize], curr_player) {
+            if self._can_castle(blank_coords, &CASTLE_UTILS.king_traversal_coords[castle_type as usize][curr_player as usize], curr_player) {
                 move_list.write(MoveWithEval(MoveDescription::Castle(castle_type), 0.0));
             }
         }

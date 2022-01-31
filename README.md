@@ -3,8 +3,8 @@ TODO
 - Tests for evaluation
 - Bitboards
 - If checked, don't do second round of move tests
-- Castling on one side needs to prevent other side...
-- Promotions
+/ Castling on one side needs to prevent other side...
+/ Promotions
 - En passant
 
 --------------------------------------------------

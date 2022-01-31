@@ -40,6 +40,7 @@ pub enum Player {
 static PLAYER_TO_OTHER_PLAYER: [Player; 2] = [Player::Black, Player::White];
 static PLAYER_TO_MULTIPLIER: [f32; 2] = [1., -1.];
 static PLAYER_TO_FIRST_ROW: [u8; 2] = [7, 0];
+static PLAYER_TO_LAST_ROW: [u8; 2] = [0, 7];
 
 impl Player {
 
@@ -51,6 +52,11 @@ impl Player {
     #[inline]
     pub fn first_row(self) -> u8 {
         PLAYER_TO_FIRST_ROW[self as usize]
+    }
+
+    #[inline]
+    pub fn last_row(self) -> u8 {
+        PLAYER_TO_LAST_ROW[self as usize]
     }
 
     #[inline]
