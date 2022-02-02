@@ -23,7 +23,7 @@ pub struct Ai {
 enum SingleMoveResult { NewAlpha(f32), BetaCutOff(f32), NoEffect }
 
 #[derive(Clone)]
-enum MemoType { Low, Exact(MoveWithEval), High(MoveWithEval) }
+enum MemoType { Low(MoveWithEval), Exact(MoveWithEval), High(MoveWithEval) }
 
 #[derive(Clone)]
 struct MemoData(f32, u8, MemoType);
@@ -51,7 +51,7 @@ impl Ai {
     fn get_leading_move(&self) -> Option<(&MoveWithEval, f32)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
-            Some(MemoData(eval, _, MemoType::High(best_move) | MemoType::Exact(best_move))) => {
+            Some(MemoData(eval, _, MemoType::High(best_move) | MemoType::Exact(best_move) | MemoType::Low(best_move))) => {
                 Some((best_move, *eval))
             },
             _ => {
@@ -149,7 +149,7 @@ impl Ai {
                 if saved_depth >= remaining_depth {
                     let r = saved_num;
                     match t {
-                        MemoType::Low => {
+                        MemoType::Low(_) => {
                             if r <= alpha {
                                 self.memo_hits += 1;
                                 self.show_tree_left_side = false;
@@ -327,7 +327,10 @@ impl Ai {
                 MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()))
             );
         } else {
-            (*resolved_memo).insert(self.test_board.get_hash(), MemoData(alpha, remaining_depth, MemoType::Low));
+            (*resolved_memo).insert(
+                self.test_board.get_hash(),
+                MemoData(alpha, remaining_depth, MemoType::Low(self.moves_buf.v()[0].clone()))
+            );
         }
         alpha
     }

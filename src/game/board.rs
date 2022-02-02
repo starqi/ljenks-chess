@@ -259,6 +259,24 @@ impl Board {
         false
     }
 
+    fn update_castle_state(piece: Piece, coord: &Coord, player_state: &mut PlayerState) {
+        if piece == Piece::Rook {
+            if coord.0 == 7 && !player_state.moved_castle_piece[0] {
+                player_state.moved_castle_piece[0] = true;
+            }
+            if coord.0 == 0 && !player_state.moved_castle_piece[1] {
+                player_state.moved_castle_piece[1] = true;
+            }
+        } else if piece == Piece::King {
+            if !player_state.moved_castle_piece[0] {
+                player_state.moved_castle_piece[0] = true;
+            }
+            if !player_state.moved_castle_piece[1] {
+                player_state.moved_castle_piece[1] = true;
+            }
+        }
+    }
+
     /// All correctness checks will be move generation's responsibility.
     pub fn handle_move(&mut self, m: &MoveWithEval) -> RevertableMove {
         let old_hash = self.hash;
@@ -275,33 +293,25 @@ impl Board {
                 );
 
                 if let Square::Occupied(dragged_piece, dragged_piece_player) = from_sq_copy {
+                    let curr_player = self.get_player_with_turn();
+                    debug_assert!(dragged_piece_player == curr_player, "Tried to move for the wrong current player");
+                    let opponent = dragged_piece_player.other_player();
+
+                    let target_piece: Option<Piece> = if let Square::Occupied(_target_piece, _target_piece_player) = to_sq_copy {
+                        debug_assert!(_target_piece_player == opponent, "Unexpected wrong target piece player");
+                        Some(_target_piece)
+                    } else {
+                        None
+                    };
 
                     let from_coord = _from_coord.to_coord();
                     let to_coord = _to_coord.to_coord();
 
                     // 1) Update player castle state
-                    {
-                        let curr_player = self.get_player_with_turn();
-                        let curr_state = self.get_player_state_mut(curr_player);
-
-                        debug_assert!(dragged_piece_player == curr_player, "Tried to move for the wrong current player");
-
-                        if dragged_piece == Piece::Rook {
-                            if from_coord.0 == 7 && !curr_state.moved_castle_piece[0] {
-                                curr_state.moved_castle_piece[0] = true;
-                            }
-                            if from_coord.0 == 0 && !curr_state.moved_castle_piece[1] {
-                                curr_state.moved_castle_piece[1] = true;
-                            }
-                        } else if dragged_piece == Piece::King {
-                            if !curr_state.moved_castle_piece[0] {
-                                curr_state.moved_castle_piece[0] = true;
-                            }
-                            if !curr_state.moved_castle_piece[1] {
-                                curr_state.moved_castle_piece[1] = true;
-                            }
-                        }
+                    if let Some(t) = target_piece {
+                        Self::update_castle_state(t, &to_coord, self.get_player_state_mut(opponent));
                     }
+                    Self::update_castle_state(dragged_piece, &from_coord, self.get_player_state_mut(self.get_player_with_turn()));
 
                     // 2) Update squares and player piece state
                     {
