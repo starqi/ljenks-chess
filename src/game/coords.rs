@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter, self};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct FastCoord(u8);
+pub struct FastCoord(pub u8);
 
 impl FastCoord {
 

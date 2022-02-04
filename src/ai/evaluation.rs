@@ -104,10 +104,12 @@ fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Pl
 
     let mut value: f32 = 0.;
 
-    for Coord(x, y) in ps.piece_locs.iter() {
-        let fy = *y as f32;
+    let mut piece_locs = ps.piece_locs;
+    piece_locs.consume_loop_indices(|index| {
+        let coord = FastCoord(index).to_coord();
+        let fy = coord.1 as f32;
 
-        if let Square::Occupied(piece, _) = board.get_by_xy(*x, *y) {
+        if let Square::Occupied(piece, _) = board.get_by_xy(coord.0, coord.1) {
             value += evaluate_piece(*piece);
             if *piece == Piece::Pawn {
                 value += 0.3 * (some_values_1.0 + some_values_1.1 * fy);
@@ -118,15 +120,15 @@ fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Pl
             }
 
             fill_src(&MoveTestParams {
-                src_x: *x as i8,
-                src_y: *y as i8,
+                src_x: coord.0 as i8,
+                src_y: coord.1 as i8,
                 src_piece: *piece,
                 src_player: player,
                 can_capture_king: true,
                 board: &board
             }, handler);
         }
-    }
+    });
     value * player.multiplier()
 }
 

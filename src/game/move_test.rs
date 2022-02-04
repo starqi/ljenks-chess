@@ -101,12 +101,14 @@ pub fn fill_player<T : MoveTestHandler>(
     board: &Board,
     handler: &mut T
 ) {
-    for Coord(x, y) in &board.get_player_state(player_with_turn).piece_locs {
-        if let Square::Occupied(piece, player) = board.get_by_xy(*x, *y) {
+    let mut piece_locs = board.get_player_state(player_with_turn).piece_locs;
+    piece_locs.consume_loop_indices(|index| {
+        if let Square::Occupied(piece, player) = board.get_by_num(index) {
             debug_assert!(*player == player_with_turn, "Player owns a wrong colored piece");
+            let coord = FastCoord(index).to_coord();
             fill_src(&MoveTestParams {
-                src_x: *x as i8,
-                src_y: *y as i8,
+                src_x: coord.0 as i8,
+                src_y: coord.1 as i8,
                 src_piece: *piece,
                 src_player: *player,
                 board,
@@ -115,7 +117,7 @@ pub fn fill_player<T : MoveTestHandler>(
         } else {
             panic!("Empty square in {:?} player's piece locs", player_with_turn);
         }
-    }
+    });
 }
 
 static PAWN_JUMP_ROWS: [(i8, i8, i8); 2] = [(-1, 6, 1), (1, 1, 6)];

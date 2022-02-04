@@ -1,6 +1,7 @@
 use std::fmt::{Error as FmtError, Display, Formatter};
 
-pub struct Bitboard(u64);
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Bitboard(pub u64);
 
 impl Bitboard {
     #[inline]
@@ -19,18 +20,27 @@ impl Bitboard {
     }
 
     #[inline]
-    pub fn lsb(&self) -> Option<u8> {
+    pub fn lsb_to_index(&self) -> Option<u8> {
         if self.0 == 0 {
             None
         } else {
-            Some(self._lsb())
+            Some(self._lsb_to_index())
         }
     }
 
+    /// Converts to an array index. Top left corner is 0.
     #[inline]
-    pub fn _lsb(&self) -> u8 {
+    pub fn _lsb_to_index(&self) -> u8 {
         // TODO Proper way
         63 - (((self.0 & (!self.0 + 1)) as f64).log2() as u8)
+    }
+
+    pub fn consume_loop_indices(&mut self, mut cb: impl FnMut(u8) -> ()) {
+        while self.0 != 0 {
+            let index = self._lsb_to_index();
+            cb(index);
+            self.0 &= !(1 << (63 - index));
+        }
     }
 }
 
@@ -56,7 +66,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test() {
+    fn basic_test() {
         let mut bitboard = Bitboard(0);
         bitboard.set(3, 4);
         bitboard.set(5, 6);
@@ -69,17 +79,33 @@ mod test {
         assert_eq!(bitboard.is_set(3, 4), false);
         assert_eq!(bitboard.is_set(5, 6), true);
         assert_eq!(bitboard.is_set(7, 7), true);
-        assert_eq!(bitboard.lsb(), Some(63));
+        assert_eq!(bitboard.lsb_to_index(), Some(63));
 
         bitboard.unset(7, 7);
-        assert_eq!(bitboard.lsb(), Some(53));
+        assert_eq!(bitboard.lsb_to_index(), Some(53));
         bitboard.unset(5, 6);
-        assert_eq!(bitboard.lsb(), None);
+        assert_eq!(bitboard.lsb_to_index(), None);
         bitboard.set(0, 0);
-        assert_eq!(bitboard.lsb(), Some(0));
+        assert_eq!(bitboard.lsb_to_index(), Some(0));
         bitboard.set(1, 1);
-        assert_eq!(bitboard.lsb(), Some(9));
+        assert_eq!(bitboard.lsb_to_index(), Some(9));
 
-        println!("{} {}", bitboard, bitboard._lsb());
+        println!("{} {}", bitboard, bitboard._lsb_to_index());
+    }
+
+    #[test]
+    fn consume_loop_test() {
+        let mut bitboard = Bitboard(0);
+        bitboard.set(3, 4);
+        bitboard.set(5, 6);
+        bitboard.set(7, 7);
+
+        let mut v: Vec<u8> = Vec::new();
+        bitboard.consume_loop_indices(|index| {
+            v.push(index);
+        });
+
+        assert_eq!(v, [63, 53, 35]);
+        assert_eq!(bitboard.0, 0);
     }
 }

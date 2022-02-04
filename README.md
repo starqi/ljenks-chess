@@ -1,11 +1,11 @@
 TODO
 
 - Tests for evaluation
-- Bitboards
+/ Bitboards
 - If checked, don't do second round of move tests
-/ Castling on one side needs to prevent other side...
-/ Promotions
+/ Promotion UI
 - En passant
+- Profiler? Curious.
 
 --------------------------------------------------
 

@@ -7,6 +7,7 @@ use super::move_test::*;
 use super::check_handler::*;
 use super::push_moves_handler::*;
 use super::super::*;
+use super::bitboard::*;
 
 pub enum RevertableMove {
     /// (_, old hash to revert to, moved_castle_piece)
@@ -17,8 +18,7 @@ pub enum RevertableMove {
 
 #[derive(Clone)]
 pub struct PlayerState {
-    // TODO First thing to switch into bitboards
-    pub piece_locs: HashSet<Coord>,
+    pub piece_locs: Bitboard,
     /// Index: `CastleType` enum number
     pub moved_castle_piece: [bool; 2]
 }
@@ -26,7 +26,7 @@ pub struct PlayerState {
 impl PlayerState {
     fn new() -> Self {
         Self {
-            piece_locs: HashSet::new(),
+            piece_locs: Bitboard(0),
             moved_castle_piece: [false, false]
         }
     }
@@ -187,12 +187,12 @@ impl Board {
     pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
         if let Square::Occupied(_, occupied_player) = *self.get_by_xy(x, y) {
             let piece_list = &mut self.get_player_state_mut(occupied_player).piece_locs;
-            piece_list.remove(&Coord(x, y));
+            piece_list.unset(x, y);
         }
 
         if let Square::Occupied(_, new_player) = s {
             let piece_list = &mut self.get_player_state_mut(new_player).piece_locs;
-            piece_list.insert(Coord(x, y));
+            piece_list.set(x, y);
         }
 
         self.d[y as usize * 8 + x as usize] = s;
