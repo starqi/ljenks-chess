@@ -1,17 +1,34 @@
 use std::fmt::{Error as FmtError, Display, Formatter};
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
+
+    pub fn slow_safe_set(&mut self, x: i8, y: i8) -> bool {
+        if x < 0 || y < 0 || x >= 8 || y >= 8 { return false; }
+        self.set(x as u8, y as u8);
+        true
+    }
+
     #[inline]
     pub fn set(&mut self, x: u8, y: u8) {
-        self.0 |= 1 << (63 - (y * 8 + x));
+        self.set_index(y * 8 + x);
     }
 
     #[inline]
     pub fn unset(&mut self, x: u8, y: u8) {
-        self.0 &= !(1 << (63 - (y * 8 + x)));
+        self.unset_index(y * 8 + x);
+    }
+
+    #[inline]
+    pub fn unset_index(&mut self, index: u8) {
+        self.0 &= !(1 << (63 - index));
+    }
+
+    #[inline]
+    pub fn set_index(&mut self, index: u8) {
+        self.0 |= 1 << (63 - index);
     }
 
     #[inline]
@@ -39,7 +56,7 @@ impl Bitboard {
         while self.0 != 0 {
             let index = self._lsb_to_index();
             cb(index);
-            self.0 &= !(1 << (63 - index));
+            self.unset_index(index);
         }
     }
 }

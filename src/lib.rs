@@ -8,6 +8,7 @@ mod game;
 mod ai;
 
 use ai::*;
+use game::bitboard_presets::*;
 use game::memo::*;
 use game::coords::*;
 use game::entities::*;
@@ -26,6 +27,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 lazy_static! {
     pub static ref CASTLE_UTILS: CastleUtils = CastleUtils::new();
     pub static ref RANDOM_NUMBER_KEYS: RandomNumberKeys = RandomNumberKeys::new();
+    pub static ref BITBOARD_PRESETS: BitboardPresets = BitboardPresets::new();
 }
 
 #[wasm_bindgen]
@@ -45,11 +47,13 @@ impl Main {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
         // Initialize lazy
-        &CASTLE_UTILS.oo_sqs;
-        &CASTLE_UTILS.ooo_sqs;
-        &CASTLE_UTILS.king_traversal_coords;
-        &CASTLE_UTILS.draggable_coords;
-        &RANDOM_NUMBER_KEYS.squares;
+        let _ = &CASTLE_UTILS.oo_sqs;
+        let _ = &CASTLE_UTILS.ooo_sqs;
+        let _ = &CASTLE_UTILS.king_traversal_coords;
+        let _ = &CASTLE_UTILS.draggable_coords;
+        let _ = &RANDOM_NUMBER_KEYS.squares;
+        let _ = &BITBOARD_PRESETS.knight_jumps;
+        let _ = &BITBOARD_PRESETS.rays;
 
         let board = Board::new();
         Main {

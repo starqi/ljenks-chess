@@ -109,7 +109,7 @@ fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Pl
         let coord = FastCoord(index).to_coord();
         let fy = coord.1 as f32;
 
-        if let Square::Occupied(piece, _) = board.get_by_xy(coord.0, coord.1) {
+        if let Square::Occupied(piece, _) = board.get_by_index(index) {
             value += evaluate_piece(*piece);
             if *piece == Piece::Pawn {
                 value += 0.3 * (some_values_1.0 + some_values_1.1 * fy);
@@ -155,8 +155,8 @@ pub fn add_captures_to_evals(
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.eval();
         if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
-            if let Square::Occupied(curr_dest_piece, _) = board.get_by_num(_to_coord.value()) {
-                if let Square::Occupied(dragged_piece, _) = board.get_by_num(_from_coord.value()) {
+            if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
+                if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
                     score += evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece);
                 }
             }
@@ -177,7 +177,7 @@ pub fn add_aggression_to_evals(
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.eval();
         if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
-            if let Square::Occupied(dragged_piece, _) = board.get_by_num(_from_coord.value()) {
+            if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
 
                 let to_coord = _to_coord.to_coord();
                 let params = MoveTestParams {
@@ -194,7 +194,7 @@ pub fn add_aggression_to_evals(
 
                 for i in 0..handler.move_list.write_index {
                     if let MoveWithEval(MoveDescription::NormalMove(_from_coord2, _to_coord2), _) = handler.move_list.v()[i] {
-                        if let Square::Occupied(target_piece, target_player) = board.get_by_num(_to_coord2.value()) {
+                        if let Square::Occupied(target_piece, target_player) = board.get_by_index(_to_coord2.value()) {
                             if *target_player != curr_player {
                                 score += evaluate_piece(*target_piece) * 0.33;
                             }

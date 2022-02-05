@@ -103,7 +103,7 @@ pub fn fill_player<T : MoveTestHandler>(
 ) {
     let mut piece_locs = board.get_player_state(player_with_turn).piece_locs;
     piece_locs.consume_loop_indices(|index| {
-        if let Square::Occupied(piece, player) = board.get_by_num(index) {
+        if let Square::Occupied(piece, player) = board.get_by_index(index) {
             debug_assert!(*player == player_with_turn, "Player owns a wrong colored piece");
             let coord = FastCoord(index).to_coord();
             fill_src(&MoveTestParams {

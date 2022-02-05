@@ -9,3 +9,4 @@ pub mod searchable_moves;
 pub mod push_moves_handler;
 pub mod check_handler;
 pub mod bitboard;
+pub mod bitboard_presets;

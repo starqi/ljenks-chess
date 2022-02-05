@@ -68,7 +68,7 @@ impl Board {
     pub fn stringify_move(&self, m: &MoveWithEval) -> String {
         match m.description() {
             MoveDescription::NormalMove(_from_coord, _to_coord) => {
-                let square = self.get_by_num(_from_coord.value());
+                let square = self.get_by_index(_from_coord.value());
                 // Since a piece should be on the after square,
                 // the square will stringify to eg. k, K, p, P, then it becomes eg. Ke2
                 format!("{}{} ({})", square, _to_coord, m.eval())
@@ -174,33 +174,35 @@ impl Board {
         Ok(self.get_by_xy(x as u8, y as u8))
     }
 
+    pub fn set(&mut self, file: char, rank: u8, s: Square) {
+        let Coord(x, y) = file_rank_to_xy(file, rank);
+        self.set_by_xy(x, y, s);
+    }
+
     #[inline]
     pub fn get_by_xy(&self, x: u8, y: u8) -> &Square {
         return &self.d[y as usize * 8 + x as usize];
     }
 
     #[inline]
-    pub fn get_by_num(&self, num: u8) -> &Square {
+    pub fn get_by_index(&self, num: u8) -> &Square {
         return &self.d[num as usize];
     }
 
+    #[inline]
     pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
-        if let Square::Occupied(_, occupied_player) = *self.get_by_xy(x, y) {
-            let piece_list = &mut self.get_player_state_mut(occupied_player).piece_locs;
-            piece_list.unset(x, y);
-        }
-
-        if let Square::Occupied(_, new_player) = s {
-            let piece_list = &mut self.get_player_state_mut(new_player).piece_locs;
-            piece_list.set(x, y);
-        }
-
-        self.d[y as usize * 8 + x as usize] = s;
+        self.set_by_index(y * 8 + x, s);
     }
 
-    pub fn set(&mut self, file: char, rank: u8, s: Square) {
-        let Coord(x, y) = file_rank_to_xy(file, rank);
-        self.set_by_xy(x, y, s);
+    pub fn set_by_index(&mut self, index: u8, s: Square) {
+        &mut self.get_player_state_mut(Player::White).piece_locs.unset_index(index);
+        &mut self.get_player_state_mut(Player::Black).piece_locs.unset_index(index);
+
+        if let Square::Occupied(_, new_player) = s {
+            &mut self.get_player_state_mut(new_player).piece_locs.set_index(index);
+        }
+
+        self.d[index as usize] = s;
     }
 
     //////////////////////////////////////////////////
@@ -210,14 +212,11 @@ impl Board {
     fn apply_before_after_sqs(&mut self, sqs: &[BeforeAfterSquare], is_after: bool) {
         if is_after {
             for BeforeAfterSquare(fast_coord, _, after) in sqs.iter() {
-                // FIXME set_by_num after bitboard switch
-                let coord = fast_coord.to_coord();
-                self.set_by_xy(coord.0, coord.1, *after);
+                self.set_by_index(fast_coord.0, *after);
             }
         } else {
             for BeforeAfterSquare(fast_coord, before, _) in sqs.iter() {
-                let coord = fast_coord.to_coord();
-                self.set_by_xy(coord.0, coord.1, *before);
+                self.set_by_index(fast_coord.0, *before);
             }
         }
     }
@@ -227,8 +226,7 @@ impl Board {
         match m {
             RevertableMove::NormalMove(snapshot, old_hash, old_moved_castle_piece) => {
                 for BeforeSquare(fast_coord, square) in snapshot.iter() {
-                    let coord = fast_coord.to_coord();
-                    self.set_by_xy(coord.0, coord.1, *square);
+                    self.set_by_index(fast_coord.0, *square);
                 }
                 self.get_player_state_mut(opponent).moved_castle_piece = *old_moved_castle_piece;
                 self.hash = *old_hash;
@@ -252,7 +250,7 @@ impl Board {
 
     pub fn is_capture(&self, m: &MoveWithEval) -> bool {
         if let MoveDescription::NormalMove(_, _to_coord) = m.description() {
-            if let Square::Occupied(_, _) = self.get_by_num(_to_coord.value()) {
+            if let Square::Occupied(_, _) = self.get_by_index(_to_coord.value()) {
                 return true;
             }
         }
@@ -283,8 +281,8 @@ impl Board {
         let result = match m.description() {
             MoveDescription::NormalMove(_from_coord, _to_coord) => {
 
-                let from_sq_copy = *self.get_by_num(_from_coord.value());
-                let to_sq_copy = *self.get_by_num(_to_coord.value());
+                let from_sq_copy = *self.get_by_index(_from_coord.value());
+                let to_sq_copy = *self.get_by_index(_to_coord.value());
 
                 let result = RevertableMove::NormalMove(
                     [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
@@ -315,12 +313,12 @@ impl Board {
 
                     // 2) Update squares and player piece state
                     {
-                        self.set_by_xy(from_coord.0, from_coord.1, Square::Blank);
+                        self.set_by_index(_from_coord.0, Square::Blank);
                         if dragged_piece == Piece::Pawn && to_coord.1 == dragged_piece_player.last_row() {
                             // TODO Add a method which configures preferred piece
-                            self.set_by_xy(to_coord.0, to_coord.1, Square::Occupied(Piece::Queen, dragged_piece_player));
+                            self.set_by_index(_to_coord.0, Square::Occupied(Piece::Queen, dragged_piece_player));
                         } else {
-                            self.set_by_xy(to_coord.0, to_coord.1, from_sq_copy);
+                            self.set_by_index(_to_coord.0, from_sq_copy);
                         }
                     }
 
