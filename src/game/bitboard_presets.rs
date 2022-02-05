@@ -1,14 +1,15 @@
 use super::bitboard::*;
 
+#[repr(u8)]
 pub enum RayDirection {
     Left = 0, LeftTop, Top, RightTop, Right, RightBottom, Bottom, LeftBottom
 }
 
+/// Size 2 array index = `Player` enum order
 pub struct BitboardPresets {
-    /// Index = `RayDirection` order
+    /// Index = `RayDirection` enum order
     pub rays: [[Bitboard; 64]; 8],
     pub knight_jumps: [Bitboard; 64],
-    pub pawn_jumps: [[Bitboard; 64]; 2],
     pub pawn_pushes: [[Bitboard; 64]; 2],
     pub pawn_captures: [[Bitboard; 64]; 2],
     pub king_moves: [Bitboard; 64],
@@ -23,8 +24,7 @@ impl BitboardPresets {
                 make_ray_lookup(1, 0), make_ray_lookup(1, 1), make_ray_lookup(0, 1), make_ray_lookup(-1, 1)
             ],
             knight_jumps: make_knight_jump_lookup(),
-            pawn_jumps: [make_pawn2_lookup(-1, 6), make_pawn2_lookup(1, 1)],
-            pawn_pushes: [make_pawn1_lookup(-1), make_pawn1_lookup(1)],
+            pawn_pushes: [make_pawn_lookup(-1, 6), make_pawn_lookup(1, 1)],
             pawn_captures: [make_pawn_capture_lookup(-1), make_pawn_capture_lookup(1)],
             king_moves: make_king_lookup(),
             perimeter: make_perimeter()
@@ -81,26 +81,15 @@ fn make_pawn_capture_lookup(dy: i8) -> [Bitboard; 64] {
     result
 }
 
-fn make_pawn2_lookup(dy: i8, jump_y: i8) -> [Bitboard; 64] {
-    let mut result = [Bitboard(0); 64];
-    for x in 0..8 {
-        for y in 0..8 {
-            if y == jump_y {
-                let mut b = Bitboard(0);
-                b.slow_safe_set(x, y + dy + dy);
-                result[(y * 8 + x) as usize].0 = b.0;
-            }
-        }
-    }
-    result
-}
-
-fn make_pawn1_lookup(dy: i8) -> [Bitboard; 64] {
+fn make_pawn_lookup(dy: i8, jump_y: i8) -> [Bitboard; 64] {
     let mut result = [Bitboard(0); 64];
     for x in 0..8 {
         for y in 0..8 {
             let mut b = Bitboard(0);
             b.slow_safe_set(x, y + dy);
+            if y == jump_y {
+                b.slow_safe_set(x, y + dy + dy);
+            }
             result[(y * 8 + x) as usize].0 = b.0;
         }
     }

@@ -281,28 +281,98 @@ fn push_promotions<T : MoveTestHandler>(
 
 //////////////////////////////////////////////////
 
-/*
-fn set_blockable_lsb_ray(b: &mut Bitboard, origin: FastCoord, direction: RayDirection, blockers: &Bitboard) {
-    let ray = BITBOARD_PRESETS.rays[direction as usize][origin.0 as usize];
+fn set_blockable_ray(
+    b: &mut Bitboard,
+    origin: FastCoord,
+    direction: RayDirection,
+    get_first_blocker_index: impl FnOnce(&Bitboard) -> u8,
+    blockers: &Bitboard
+) {
+    let direction_num = direction as usize;
+    let ray = BITBOARD_PRESETS.rays[direction_num][origin.0 as usize];
     let blockers2 = blockers.0 | BITBOARD_PRESETS.perimeter.0; // There will always be at least 1 blocker, even for an empty board
-    let first_blocked_at = Bitboard(ray.0 & blockers2);
-    let first_blocked_at_index = first_blocked_at._lsb_to_index();
-    let past_blocked_ray = BITBOARD_PRESETS.rays[direction as usize][first_blocked_at_index as usize];
-    let moves = Bitboard(past_blocked_ray.0 ^ ray.0);
+    let blocked_at = Bitboard(ray.0 & blockers2);
+    let first_blocked_at_index = get_first_blocker_index(&blocked_at);
+    let past_blocked_ray = BITBOARD_PRESETS.rays[direction_num][first_blocked_at_index as usize].0;
+    let moves = Bitboard(past_blocked_ray ^ ray.0);
     b.0 |= moves.0;
 }
 
-fn rook2(ml: &mut MoveList, origin: FastCoord, blockers: &Bitboard) {
-    let b = Bitboard(0);
-    set_blockable_lsb_ray(&mut b, origin, RayDirection::Left, blockers);
-    set_blockable_lsb_ray(&mut b, origin, RayDirection::Top, blockers);
+fn unset_own_pieces(b: &mut Bitboard, curr_player_state: &PlayerState) {
+    b.0 &= !curr_player_state.piece_locs.0;
+}
+
+fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_state: &PlayerState, opponent_state: &PlayerState) {
+    let blockers = Bitboard(curr_player_state.piece_locs.0 | opponent_state.piece_locs.0);
+    
+    let mut b = Bitboard(0);
+    set_blockable_ray(&mut b, origin, RayDirection::Left, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Top, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Right, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Bottom, Bitboard::_msb_to_index, &blockers);
+
+    unset_own_pieces(&mut b, curr_player_state);
+
     b.consume_loop_indices(|dest| {
         ml.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest)), 0.0));
     });
 }
-*/
+
+fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_state: &PlayerState, opponent_state: &PlayerState) {
+    let blockers = Bitboard(curr_player_state.piece_locs.0 | opponent_state.piece_locs.0);
+
+    let mut b = Bitboard(0);
+    set_blockable_ray(&mut b, origin, RayDirection::LeftTop, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::RightTop, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::RightBottom, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, Bitboard::_msb_to_index, &blockers);
+
+    unset_own_pieces(&mut b, curr_player_state);
+
+    b.consume_loop_indices(|dest| {
+        ml.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest)), 0.0));
+    });
+}
+
+fn write_queen_moves(ml: &mut MoveList, origin: FastCoord, curr_player_state: &PlayerState, opponent_state: &PlayerState) {
+    write_bishop_moves(ml, origin, curr_player_state, opponent_state);
+    write_rook_moves(ml, origin, curr_player_state, opponent_state);
+}
+
+fn write_knight_moves(ml: &mut MoveList, origin: FastCoord, curr_player_state: &PlayerState) {
+    let mut jumps = Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0);
+    unset_own_pieces(&mut jumps, curr_player_state);
+    jumps.consume_loop_indices(|dest| {
+        ml.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest)), 0.0));
+    });
+}
+
+fn write_king_moves(ml: &mut MoveList, origin: FastCoord, curr_player_state: &PlayerState) {
+    let mut m = Bitboard(BITBOARD_PRESETS.king_moves[origin.value() as usize].0);
+    unset_own_pieces(&mut m, curr_player_state);
+    // FIXME Unset the opponent king
+    // FIXME Also, integrate with faster checks
+    m.consume_loop_indices(|dest| {
+        ml.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest)), 0.0));
+    });
+}
 
 /*
+fn _write_pawn_moves(
+    ml: &mut MoveList,
+    origin: FastCoord,
+    get_first_blocker_index: impl FnOnce(&Bitboard) -> u8,
+    curr_player: Player,
+    curr_player_state: &PlayerState,
+    opponent_state: &PlayerState
+) {
+    let curr_player_num = curr_player as usize;
+    let index = origin.value() as usize;
+    let blockers = Bitboard(curr_player_state.piece_locs.0 | opponent_state.piece_locs.0);
+
+    ??????
+}
+
 fn xyz(params: &MoveTestParams) {
     match params.src_piece {
         Piece::Pawn => push_pawn(params, handler),
@@ -314,3 +384,29 @@ fn xyz(params: &MoveTestParams) {
     }
 }
 */
+
+#[cfg(test)]
+mod Test {
+
+    use super::*;
+
+    #[ignore]
+    #[test]
+    fn moves_eyeball_test() {
+        let origin = FastCoord::from_xy(3, 3);
+
+        let mut blockers = Bitboard(0);
+        blockers.set(2, 2);
+        blockers.set(6, 6);
+        blockers.set(5, 5);
+        blockers.set(1, 1);
+
+        let mut b = Bitboard(0);
+        set_blockable_ray(&mut b, origin, RayDirection::LeftTop, Bitboard::_lsb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::RightTop, Bitboard::_lsb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::RightBottom, Bitboard::_msb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, Bitboard::_msb_to_index, &blockers);
+    
+        println!("{}", b);
+    }
+}
