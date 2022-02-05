@@ -3,6 +3,7 @@ use std::fmt::{Error as FmtError, Display, Formatter};
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Bitboard(pub u64);
 
+/// Assumes top left corner index is 0. 63 is bottom right.
 impl Bitboard {
 
     pub fn slow_safe_set(&mut self, x: i8, y: i8) -> bool {
@@ -45,11 +46,27 @@ impl Bitboard {
         }
     }
 
-    /// Converts to an array index. Top left corner is 0.
+    #[inline]
+    pub fn msb_to_index(&self) -> Option<u8> {
+        if self.0 == 0 {
+            None
+        } else {
+            Some(self._msb_to_index())
+        }
+    }
+
+    /// Precondition: Bitboard value is not 0
     #[inline]
     pub fn _lsb_to_index(&self) -> u8 {
         // TODO Proper way
         63 - (((self.0 & (!self.0 + 1)) as f64).log2() as u8)
+    }
+
+    /// Precondition: Bitboard value is not 0
+    #[inline]
+    pub fn _msb_to_index(&self) -> u8 {
+        // TODO Proper way
+        63 - (((1 << ((self.0 as f64).log2().floor() as u8)) as f64).log2() as u8)
     }
 
     pub fn consume_loop_indices(&mut self, mut cb: impl FnMut(u8) -> ()) {
@@ -83,7 +100,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn basic_test() {
+    fn set_and_lsb_test() {
         let mut bitboard = Bitboard(0);
         bitboard.set(3, 4);
         bitboard.set(5, 6);
@@ -106,8 +123,19 @@ mod test {
         assert_eq!(bitboard.lsb_to_index(), Some(0));
         bitboard.set(1, 1);
         assert_eq!(bitboard.lsb_to_index(), Some(9));
+    }
 
-        println!("{} {}", bitboard, bitboard._lsb_to_index());
+    #[test]
+    fn msb_test() {
+        let mut bitboard = Bitboard(0);
+        bitboard.set(5, 6);
+        bitboard.set(7, 7);
+
+        assert_eq!(bitboard.msb_to_index(), Some(53));
+        bitboard.unset(5, 6);
+        assert_eq!(bitboard.msb_to_index(), Some(63));
+        bitboard.unset(7, 7);
+        assert_eq!(bitboard.msb_to_index(), None);
     }
 
     #[test]

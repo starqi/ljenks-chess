@@ -1,6 +1,8 @@
 use super::entities::*;
 use super::board::*;
 use super::coords::*;
+use super::bitboard::*;
+use super::super::*;
 
 // TODO Should be able to substitute bitboards for the same interface
 // TODO Should also be able to generate bitboards with this class
@@ -276,3 +278,39 @@ fn push_promotions<T : MoveTestHandler>(
 
     (moveable, terminate)
 }
+
+//////////////////////////////////////////////////
+
+/*
+fn set_blockable_lsb_ray(b: &mut Bitboard, origin: FastCoord, direction: RayDirection, blockers: &Bitboard) {
+    let ray = BITBOARD_PRESETS.rays[direction as usize][origin.0 as usize];
+    let blockers2 = blockers.0 | BITBOARD_PRESETS.perimeter.0; // There will always be at least 1 blocker, even for an empty board
+    let first_blocked_at = Bitboard(ray.0 & blockers2);
+    let first_blocked_at_index = first_blocked_at._lsb_to_index();
+    let past_blocked_ray = BITBOARD_PRESETS.rays[direction as usize][first_blocked_at_index as usize];
+    let moves = Bitboard(past_blocked_ray.0 ^ ray.0);
+    b.0 |= moves.0;
+}
+
+fn rook2(ml: &mut MoveList, origin: FastCoord, blockers: &Bitboard) {
+    let b = Bitboard(0);
+    set_blockable_lsb_ray(&mut b, origin, RayDirection::Left, blockers);
+    set_blockable_lsb_ray(&mut b, origin, RayDirection::Top, blockers);
+    b.consume_loop_indices(|dest| {
+        ml.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest)), 0.0));
+    });
+}
+*/
+
+/*
+fn xyz(params: &MoveTestParams) {
+    match params.src_piece {
+        Piece::Pawn => push_pawn(params, handler),
+        Piece::Queen => push_queen(params, handler),
+        Piece::Knight => push_knight(params, handler),
+        Piece::King => push_king(params, handler),
+        Piece::Bishop => push_bishop(params, handler),
+        Piece::Rook => push_rook(params, handler)
+    }
+}
+*/
