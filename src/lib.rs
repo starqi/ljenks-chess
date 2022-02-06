@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate lazy_static;
 extern crate console_error_panic_hook;
+
+#[cfg(test)]
 extern crate rand;
 
 mod extern_funcs;
@@ -68,7 +70,7 @@ impl Main {
     }
 
     pub fn make_ai_move(&mut self) {
-        //self.ai.make_move(3, &mut self.board);
+        self.ai.make_move(3, &mut self.board);
     }
 
     pub fn refresh_player_moves(&mut self) {

@@ -5,15 +5,17 @@ pub enum RayDirection {
     Left = 0, LeftTop, Top, RightTop, Right, RightBottom, Bottom, LeftBottom
 }
 
-/// Size 2 array index = `Player` enum order
 pub struct BitboardPresets {
     /// Index = `RayDirection` enum order
     pub rays: [[Bitboard; 64]; 8],
     pub knight_jumps: [Bitboard; 64],
+    /// Array index = `Player` enum order
     pub pawn_pushes: [[Bitboard; 64]; 2],
+    /// Array index = `Player` enum order
     pub pawn_captures: [[Bitboard; 64]; 2],
     pub king_moves: [Bitboard; 64],
-    pub perimeter: Bitboard
+    /// Array index = LSB, MSB
+    pub ensure_blocker: [Bitboard; 2]
 }
 
 impl BitboardPresets {
@@ -27,27 +29,9 @@ impl BitboardPresets {
             pawn_pushes: [make_pawn_lookup(-1, 6), make_pawn_lookup(1, 1)],
             pawn_captures: [make_pawn_capture_lookup(-1), make_pawn_capture_lookup(1)],
             king_moves: make_king_lookup(),
-            perimeter: make_perimeter()
+            ensure_blocker: [Bitboard(1u64 << 63), Bitboard(1)]
         }
     }
-}
-
-fn make_perimeter() -> Bitboard {
-    let mut result = Bitboard(0);
-
-    for y in [0, 7] {
-        for x in 0..8 {
-            result.set(x, y);
-        }
-    }
-
-    for x in [0, 7] {
-        for y in 1..7 {
-            result.set(x, y);
-        }
-    }
-
-    result
 }
 
 fn make_king_lookup() -> [Bitboard; 64] {

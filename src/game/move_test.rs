@@ -282,13 +282,14 @@ fn set_blockable_ray(
     b: &mut Bitboard,
     origin: FastCoord,
     direction: RayDirection,
+    ensure_blocker_index: usize,
     get_first_blocker_index: impl FnOnce(&Bitboard) -> u8,
     blockers: &Bitboard
 ) {
     let direction_num = direction as usize;
     let ray = BITBOARD_PRESETS.rays[direction_num][origin.0 as usize];
-    let blockers2 = blockers.0 | BITBOARD_PRESETS.perimeter.0; // There will always be at least 1 blocker, even for an empty board
-    let blocked_at = Bitboard(ray.0 & blockers2);
+    // There will always be at least 1 blocker, even for an empty board
+    let blocked_at = Bitboard((ray.0 & blockers.0) | BITBOARD_PRESETS.ensure_blocker[ensure_blocker_index].0);
     let first_blocked_at_index = get_first_blocker_index(&blocked_at);
     let past_blocked_ray = BITBOARD_PRESETS.rays[direction_num][first_blocked_at_index as usize].0;
     let moves = Bitboard(past_blocked_ray ^ ray.0);
@@ -305,44 +306,44 @@ fn unset_own_pieces(b: &mut Bitboard, curr_player_piece_locs: &Bitboard) {
     b.0 &= !curr_player_piece_locs.0;
 }
 
-fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+pub fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
     
     let mut b = Bitboard(0);
-    set_blockable_ray(&mut b, origin, RayDirection::Left, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Top, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Right, Bitboard::_msb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Bottom, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Left, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
 
     unset_own_pieces(&mut b, curr_player_piece_locs);
     consume_to_move_list(&mut b, ml, &origin);
 }
 
-fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+pub fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
 
     let mut b = Bitboard(0);
-    set_blockable_ray(&mut b, origin, RayDirection::LeftTop, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::RightTop, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::RightBottom, Bitboard::_msb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::LeftTop, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
 
     unset_own_pieces(&mut b, curr_player_piece_locs);
     consume_to_move_list(&mut b, ml, &origin);
 }
 
-fn write_queen_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+pub fn write_queen_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     write_bishop_moves(ml, origin, curr_player_piece_locs, opponent_piece_locs);
     write_rook_moves(ml, origin, curr_player_piece_locs, opponent_piece_locs);
 }
 
-fn write_knight_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
+pub fn write_knight_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
     let mut jumps = Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0);
     unset_own_pieces(&mut jumps, curr_player_piece_locs);
     consume_to_move_list(&mut jumps, ml, &origin);
 }
 
-fn write_king_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
+pub fn write_king_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
     let mut m = Bitboard(BITBOARD_PRESETS.king_moves[origin.value() as usize].0);
     unset_own_pieces(&mut m, curr_player_piece_locs);
     consume_to_move_list(&mut m, ml, &origin);
@@ -371,29 +372,28 @@ fn _write_pawn_moves(
     consume_to_move_list(&mut capture_locs, ml, &origin);
 }
 
-fn write_moves_at(ml: &mut MoveList, board: &Board, origin: FastCoord) {
-    let current_player = &board.get_player_with_turn();
-    let curr_state = &board.get_player_state(*current_player);
-    let opponent_state = &board.get_player_state(current_player.other_player());
+#[inline]
+pub fn write_white_pawn_moves(
+    ml: &mut MoveList,
+    origin: FastCoord,
+    piece_locs: &Bitboard,
+    opponent_piece_locs: &Bitboard
+) {
+    _write_pawn_moves(ml, origin, |blockers| blockers << 8, Player::White, piece_locs, opponent_piece_locs);
+}
 
-    match board.get_by_index(origin.0) {
-        Square::Occupied(Piece::Pawn, Player::White) => {
-            _write_pawn_moves(ml, origin, |blockers| blockers << 8, Player::White, &curr_state.piece_locs, &opponent_state.piece_locs);
-        }
-        Square::Occupied(Piece::Pawn, Player::Black) => {
-            _write_pawn_moves(ml, origin, |blockers| blockers >> 8, Player::Black, &curr_state.piece_locs, &opponent_state.piece_locs);
-        }
-        Square::Occupied(Piece::Queen, _) => write_queen_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
-        Square::Occupied(Piece::Knight, _) => write_knight_moves(ml, origin, &curr_state.piece_locs),
-        Square::Occupied(Piece::King, _) => write_king_moves(ml, origin, &curr_state.piece_locs),
-        Square::Occupied(Piece::Bishop, _) => write_bishop_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
-        Square::Occupied(Piece::Rook, _) => write_rook_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
-        Square::Blank => {}
-    };
+#[inline]
+pub fn write_black_pawn_moves(
+    ml: &mut MoveList,
+    origin: FastCoord,
+    piece_locs: &Bitboard,
+    opponent_piece_locs: &Bitboard
+) {
+    _write_pawn_moves(ml, origin, |blockers| blockers >> 8, Player::Black, piece_locs, opponent_piece_locs);
 }
 
 #[cfg(test)]
-mod Test {
+mod test {
 
     use super::*;
 
@@ -409,30 +409,27 @@ mod Test {
         blockers.set(1, 1);
 
         let mut b = Bitboard(0);
-        set_blockable_ray(&mut b, origin, RayDirection::LeftTop, Bitboard::_lsb_to_index, &blockers);
-        set_blockable_ray(&mut b, origin, RayDirection::RightTop, Bitboard::_lsb_to_index, &blockers);
-        set_blockable_ray(&mut b, origin, RayDirection::RightBottom, Bitboard::_msb_to_index, &blockers);
-        set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, Bitboard::_msb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::LeftTop, 0, Bitboard::_lsb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
     
         println!("{}", b);
     }
 
     #[ignore]
     #[test]
-    fn board_eyeball_test() {
-        let mut board = Board::new();
-        board.set_uniform_row(2, Square::Blank);
-        board.set_uniform_row(5, Square::Blank);
+    fn moves_eyeball_test2() {
+        let origin = FastCoord::from_xy(0, 7);
 
-        let mut ml = MoveList::new(100);
-        write_moves_at(&mut ml, &board, FastCoord::from_xy(4, 7));
+        let mut blockers = Bitboard(0);
+        blockers.set(1, 7);
 
         let mut b = Bitboard(0);
-        for m in ml.v() {
-            if let MoveDescription::NormalMove(_, _to) = m.description() {
-                b.set_index(_to.0);
-            }
-        }
+        set_blockable_ray(&mut b, origin, RayDirection::Left, 0, Bitboard::_lsb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
+        set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
         println!("{}", b);
     }
 }

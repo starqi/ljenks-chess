@@ -1,4 +1,6 @@
+#[cfg(test)]
 use rand::prelude::*;
+#[cfg(test)]
 use std::time::Instant;
 
 mod definitions {

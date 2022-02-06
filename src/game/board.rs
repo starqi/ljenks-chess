@@ -424,15 +424,13 @@ impl Board {
         let curr_player = self.get_player_with_turn();
         let opponent = curr_player.other_player();
 
-        let mut moves_handler = PushToMoveListHandler { move_list: temp_moves };
-        moves_handler.move_list.write_index = 0;
-
-        fill_player(curr_player, false, self, &mut moves_handler);
+        temp_moves.write_index = 0;
+        self.write_current_moves(temp_moves);
 
         let mut check_handler = CheckDetectionHandler::new();
-        for i in 0..moves_handler.move_list.write_index {
-            let m = &moves_handler.move_list.v()[i];
-            let revertable = self.handle_move(&m);
+        for i in 0..temp_moves.write_index {
+            let m = &temp_moves.v()[i];
+            let revertable = self.handle_move(m);
 
             check_handler.has_king_capture = false;
             fill_player(opponent, true, self, &mut check_handler); 
@@ -443,6 +441,34 @@ impl Board {
 
         self.try_write_castle(curr_player, CastleType::Oo, result);
         self.try_write_castle(curr_player, CastleType::Ooo, result);
+    }
+
+    fn write_current_moves_at(&self, ml: &mut MoveList, origin: FastCoord) {
+        let current_player = self.get_player_with_turn();
+        let curr_state = self.get_player_state(current_player);
+        let opponent_state = self.get_player_state(current_player.other_player());
+
+        match self.get_by_index(origin.0) {
+            Square::Occupied(Piece::Pawn, Player::White) => {
+                write_white_pawn_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+            }
+            Square::Occupied(Piece::Pawn, Player::Black) => {
+                write_black_pawn_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+            }
+            Square::Occupied(Piece::Queen, _) => write_queen_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Occupied(Piece::Knight, _) => write_knight_moves(ml, origin, &curr_state.piece_locs),
+            Square::Occupied(Piece::King, _) => write_king_moves(ml, origin, &curr_state.piece_locs),
+            Square::Occupied(Piece::Bishop, _) => write_bishop_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Occupied(Piece::Rook, _) => write_rook_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Blank => {}
+        };
+    }
+
+    fn write_current_moves(&self, ml: &mut MoveList) {
+        let mut piece_locs_clone = self.get_player_state(self.get_player_with_turn()).piece_locs.clone();
+        piece_locs_clone.consume_loop_indices(|index| {
+            self.write_current_moves_at(ml, FastCoord(index));
+        });
     }
 
     //////////////////////////////////////////////////
@@ -470,5 +496,30 @@ impl Board {
         self.set_uniform_row(2, Square::Occupied(Piece:: Pawn, Player::White));
         self.set_main_row(8, Player::Black);
         self.set_uniform_row(7, Square::Occupied(Piece::Pawn, Player::Black));
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    //#[ignore]
+    #[test]
+    fn board_eyeball_test() {
+        let mut board = Board::new();
+        board.set_uniform_row(2, Square::Blank);
+        board.set_uniform_row(5, Square::Blank);
+
+        let mut ml = MoveList::new(100);
+        board.write_current_moves_at(&mut ml, FastCoord::from_xy(0, 0));
+
+        let mut b = Bitboard(0);
+        for m in ml.v() {
+            if let MoveDescription::NormalMove(_, _to) = m.description() {
+                b.set_index(_to.0);
+            }
+        }
+        println!("{}", b);
     }
 }
