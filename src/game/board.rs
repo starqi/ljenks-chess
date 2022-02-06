@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter, self};
 use super::coords::*;
 use super::entities::*;
@@ -119,6 +118,8 @@ impl Board {
         let ws = self.get_player_state(Player::White);
         let bs = self.get_player_state(Player::Black);
 
+        // TODO Branches
+
         if ws.moved_castle_piece[CastleType::Oo as usize] {
             h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Oo as usize][Player::White as usize]; 
         }
@@ -195,11 +196,11 @@ impl Board {
     }
 
     pub fn set_by_index(&mut self, index: u8, s: Square) {
-        &mut self.get_player_state_mut(Player::White).piece_locs.unset_index(index);
-        &mut self.get_player_state_mut(Player::Black).piece_locs.unset_index(index);
+        self.get_player_state_mut(Player::White).piece_locs.unset_index(index);
+        self.get_player_state_mut(Player::Black).piece_locs.unset_index(index);
 
         if let Square::Occupied(_, new_player) = s {
-            &mut self.get_player_state_mut(new_player).piece_locs.set_index(index);
+            self.get_player_state_mut(new_player).piece_locs.set_index(index);
         }
 
         self.d[index as usize] = s;
@@ -447,9 +448,9 @@ impl Board {
     //////////////////////////////////////////////////
     // Board setup
 
-    fn set_uniform_row(&mut self, rank: u8, player: Player, piece: Piece) {
+    pub fn set_uniform_row(&mut self, rank: u8, sq: Square) {
         for i in 0..8 {
-            self.set_by_xy(i, 8 - rank, Square::Occupied(piece, player));
+            self.set_by_xy(i, 8 - rank, sq);
         }
     }
 
@@ -466,8 +467,8 @@ impl Board {
 
     fn set_standard_rows(&mut self) {
         self.set_main_row(1, Player::White);
-        self.set_uniform_row(2, Player::White, Piece::Pawn);
+        self.set_uniform_row(2, Square::Occupied(Piece:: Pawn, Player::White));
         self.set_main_row(8, Player::Black);
-        self.set_uniform_row(7, Player::Black, Piece::Pawn);
+        self.set_uniform_row(7, Square::Occupied(Piece::Pawn, Player::Black));
     }
 }

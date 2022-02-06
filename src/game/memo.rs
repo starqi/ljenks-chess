@@ -1,4 +1,5 @@
 use super::super::extern_funcs::random;
+use super::super::*;
 
 fn get_random_u64() -> u64 {
     let mut a = ((u16::MAX as f64) * random()) as u64;
@@ -28,7 +29,7 @@ pub struct RandomNumberKeys {
 
 impl RandomNumberKeys {
     pub fn new() -> RandomNumberKeys {
-        crate::console_log!("Generating random number keys for hashing");
+        console_log!("Generating random number keys for hashing");
         let mut squares = [0u64; SQUARES_LEN];
         for i in 0..squares.len() {
             squares[i] = get_random_u64();
