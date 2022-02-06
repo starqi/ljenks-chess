@@ -302,11 +302,18 @@ fn consume_to_move_list(b: &mut Bitboard, ml: &mut MoveList, origin: &FastCoord)
     });
 }
 
+#[inline]
+fn hits_king(b: &Bitboard, king_location: &Bitboard) -> bool {
+    (b.0 & king_location.0) != 0
+}
+
+#[inline]
 fn unset_own_pieces(b: &mut Bitboard, curr_player_piece_locs: &Bitboard) {
     b.0 &= !curr_player_piece_locs.0;
 }
 
-pub fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+#[inline]
+fn _write_rook_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
     let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
     
     let mut b = Bitboard(0);
@@ -314,12 +321,22 @@ pub fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_
     set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
     set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
     set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
-
     unset_own_pieces(&mut b, curr_player_piece_locs);
+    b
+}
+
+pub fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+    let mut b = _write_rook_moves(origin, curr_player_piece_locs, opponent_piece_locs);
     consume_to_move_list(&mut b, ml, &origin);
 }
 
-pub fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+pub fn rook_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
+    let b = _write_rook_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    hits_king(&b, opponent_king_location)
+}
+
+#[inline]
+fn _write_bishop_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
     let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
 
     let mut b = Bitboard(0);
@@ -327,36 +344,91 @@ pub fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piec
     set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
     set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
     set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
-
     unset_own_pieces(&mut b, curr_player_piece_locs);
+    b
+}
+
+pub fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+    let mut b = _write_bishop_moves(origin, curr_player_piece_locs, opponent_piece_locs);
     consume_to_move_list(&mut b, ml, &origin);
 }
 
+pub fn bishop_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
+    let b = _write_bishop_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    hits_king(&b, opponent_king_location)
+}
+
+#[inline]
+fn _write_queen_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
+    let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
+
+    let mut b = Bitboard(0);
+    set_blockable_ray(&mut b, origin, RayDirection::LeftTop, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
+    
+    set_blockable_ray(&mut b, origin, RayDirection::Left, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
+    set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
+    unset_own_pieces(&mut b, curr_player_piece_locs);
+    b
+}
+
 pub fn write_queen_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
-    write_bishop_moves(ml, origin, curr_player_piece_locs, opponent_piece_locs);
-    write_rook_moves(ml, origin, curr_player_piece_locs, opponent_piece_locs);
+    let mut b = _write_queen_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    consume_to_move_list(&mut b, ml, &origin);
+}
+
+pub fn queen_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
+    let b = _write_queen_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    hits_king(&b, opponent_king_location)
+}
+
+#[inline]
+fn _write_knight_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard) -> Bitboard {
+    let mut jumps = Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0);
+    unset_own_pieces(&mut jumps, curr_player_piece_locs);
+    jumps
 }
 
 pub fn write_knight_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
-    let mut jumps = Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0);
-    unset_own_pieces(&mut jumps, curr_player_piece_locs);
-    consume_to_move_list(&mut jumps, ml, &origin);
+    let mut b = _write_knight_moves(origin, curr_player_piece_locs);
+    consume_to_move_list(&mut b, ml, &origin);
+}
+
+pub fn knight_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
+    let b = _write_knight_moves(origin, curr_player_piece_locs);
+    hits_king(&b, opponent_king_location)
+}
+
+#[inline]
+fn _write_king_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard) -> Bitboard {
+    let mut m = Bitboard(BITBOARD_PRESETS.king_moves[origin.value() as usize].0);
+    unset_own_pieces(&mut m, curr_player_piece_locs);
+    m
 }
 
 pub fn write_king_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
-    let mut m = Bitboard(BITBOARD_PRESETS.king_moves[origin.value() as usize].0);
-    unset_own_pieces(&mut m, curr_player_piece_locs);
-    consume_to_move_list(&mut m, ml, &origin);
+    let mut b = _write_king_moves(origin, curr_player_piece_locs);
+    consume_to_move_list(&mut b, ml, &origin);
 }
 
+// This is a case, this is what prevents kings from getting close
+pub fn king_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
+    let b = _write_king_moves(origin, curr_player_piece_locs);
+    hits_king(&b, opponent_king_location)
+}
+
+#[inline]
 fn _write_pawn_moves(
-    ml: &mut MoveList,
     origin: FastCoord,
     slide_push_blockers: impl FnOnce(u64) -> u64,
     curr_player: Player,
     curr_player_piece_locs: &Bitboard,
     opponent_piece_locs: &Bitboard
-) {
+) -> Bitboard {
     let curr_player_num = curr_player as usize;
     let index = origin.value() as usize;
 
@@ -365,31 +437,47 @@ fn _write_pawn_moves(
     // Do a "motion blur" of the blockers towards the opponent direction, and convert to a mask
     let push_blockers_without_pawn2_mask = !(slide_push_blockers(push_blockers_without_pawn) | push_blockers_without_pawn);
     // This should handle blockers for pushes
-    let mut push_locs = Bitboard(BITBOARD_PRESETS.pawn_pushes[curr_player_num][index].0 & push_blockers_without_pawn2_mask);
-    consume_to_move_list(&mut push_locs, ml, &origin);
-
-    let mut capture_locs = Bitboard(BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs.0);
-    consume_to_move_list(&mut capture_locs, ml, &origin);
+    let push_locs = BITBOARD_PRESETS.pawn_pushes[curr_player_num][index].0 & push_blockers_without_pawn2_mask;
+    let capture_locs = BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs.0;
+    Bitboard(push_locs | capture_locs)
 }
 
 #[inline]
-pub fn write_white_pawn_moves(
-    ml: &mut MoveList,
+fn _write_white_pawn_moves(
     origin: FastCoord,
     piece_locs: &Bitboard,
     opponent_piece_locs: &Bitboard
-) {
-    _write_pawn_moves(ml, origin, |blockers| blockers << 8, Player::White, piece_locs, opponent_piece_locs);
+) -> Bitboard {
+    _write_pawn_moves(origin, |blockers| blockers << 8, Player::White, piece_locs, opponent_piece_locs)
+}
+
+pub fn write_white_pawn_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+    let mut b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    consume_to_move_list(&mut b, ml, &origin);
+}
+
+pub fn white_pawn_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
+    let b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    hits_king(&b, opponent_king_location)
 }
 
 #[inline]
-pub fn write_black_pawn_moves(
-    ml: &mut MoveList,
+fn _write_black_pawn_moves(
     origin: FastCoord,
     piece_locs: &Bitboard,
     opponent_piece_locs: &Bitboard
-) {
-    _write_pawn_moves(ml, origin, |blockers| blockers >> 8, Player::Black, piece_locs, opponent_piece_locs);
+) -> Bitboard {
+    _write_pawn_moves(origin, |blockers| blockers >> 8, Player::Black, piece_locs, opponent_piece_locs)
+}
+
+pub fn write_black_pawn_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
+    let mut b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    consume_to_move_list(&mut b, ml, &origin);
+}
+
+pub fn black_pawn_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
+    let b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    hits_king(&b, opponent_king_location)
 }
 
 #[cfg(test)]

@@ -76,6 +76,15 @@ impl Bitboard {
             self.unset_index(index);
         }
     }
+
+    pub fn consume_loop_indices2(&mut self, mut cb: impl FnMut(u8) -> bool) -> bool {
+        while self.0 != 0 {
+            let index = self._lsb_to_index();
+            if cb(index) { return true; }
+            self.unset_index(index);
+        }
+        false
+    }
 }
 
 impl Display for Bitboard {
