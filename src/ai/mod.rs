@@ -3,7 +3,6 @@ mod evaluation;
 use std::collections::HashMap;
 use super::game::move_list::*;
 use super::game::board::*;
-use super::game::check_handler::*;
 use super::extern_funcs::now;
 use crate::{console_log};
 
@@ -96,8 +95,8 @@ impl Ai {
         self.node_counter = 0;
         self.memo_hits = 0;
         self.fast_found_hits = 0;
-        self.memo.clear();
-        self.q_memo.clear();
+        //self.memo.clear();
+        //self.q_memo.clear();
     }
 
     /// Will assume ownership over all move list elements from `moves_start`
@@ -113,6 +112,11 @@ impl Ai {
         self.node_counter += 1;
 
         if remaining_depth <= 0 {
+                self.show_tree_left_side = false;
+                let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
+                return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
+
+
             if quiescence {
                 self.show_tree_left_side = false;
                 let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
@@ -390,7 +394,7 @@ impl Ai {
 
     fn get_no_moves_eval(&mut self, alpha: f32, beta: f32) -> f32 {
         let checking_player = self.test_board.get_player_with_turn().other_player();
-        if is_checking(&mut self.test_board, checking_player) {
+        if self.test_board.is_checking(checking_player) {
             return alpha;
         } else {
             return Self::cap(0.0, alpha, beta);

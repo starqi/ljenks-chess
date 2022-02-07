@@ -3,9 +3,6 @@ use super::coords::*;
 use super::bitboard::*;
 use super::super::*;
 
-// TODO Should be able to substitute bitboards for the same interface
-// TODO Should also be able to generate bitboards with this class
-
 pub trait MoveTestHandler {
     /// Returns whether to force terminate the whole piece, do not rely on not being called again if true
     fn push(

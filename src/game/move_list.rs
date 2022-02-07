@@ -1,8 +1,6 @@
 use std::cmp::Ordering;
-use std::fmt::{Error as FmtError, Display, Formatter};
 use super::coords::*;
 use super::entities::*;
-use crate::{console_log};
 
 #[derive(Clone)]
 pub struct BeforeSquare(pub FastCoord, pub Square);

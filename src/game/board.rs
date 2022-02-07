@@ -3,8 +3,6 @@ use super::coords::*;
 use super::entities::*;
 use super::move_list::*;
 use super::move_test::*;
-use super::check_handler::*;
-use super::push_moves_handler::*;
 use super::super::*;
 use super::bitboard::*;
 
@@ -62,7 +60,8 @@ impl Board {
             player_state: [PlayerState::new(), PlayerState::new()]
         };
         board.set_standard_rows();
-        FIXME Starting king location
+        board.get_player_state_mut(Player::White).king_location = Bitboard(1u64 << (63 - CASTLE_UTILS.pre_castle_king_sq[Player::White as usize].0));
+        board.get_player_state_mut(Player::Black).king_location = Bitboard(1u64 << (63 - CASTLE_UTILS.pre_castle_king_sq[Player::Black as usize].0));
         board.hash = board.calculate_hash();
         board
     }
@@ -358,11 +357,12 @@ impl Board {
                 let old_king_loc = self.get_player_state(curr_player).king_location.0;
                 let player_num = curr_player as usize;
 
-                let sqs: &[BeforeAfterSquare] = if *castle_type == CastleType::Oo {
-                    &CASTLE_UTILS.oo_sqs[player_num]
+                let sqs: &[BeforeAfterSquare];
+                if *castle_type == CastleType::Oo {
+                    sqs = &CASTLE_UTILS.oo_sqs[player_num];
                 } else {
-                    &CASTLE_UTILS.ooo_sqs[player_num]
-                };
+                    sqs = &CASTLE_UTILS.ooo_sqs[player_num];
+                }
                 self.apply_before_after_sqs(sqs, true);
 
                 let oo_key = RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Oo as usize][player_num];
@@ -380,7 +380,7 @@ impl Board {
                 let curr_player_state = self.get_player_state_mut(curr_player);
                 curr_player_state.moved_castle_piece[CastleType::Oo as usize] = true;
                 curr_player_state.moved_castle_piece[CastleType::Ooo as usize] = true;
-                curr_player_state.king_location = FIXME;
+                curr_player_state.king_location.0 = 1u64 << (63 - CASTLE_UTILS.post_castle_king_sq[*castle_type as usize][player_num].0);
 
                 RevertableMove::Castle(*castle_type, old_hash, old_king_loc)
             }
@@ -397,21 +397,21 @@ impl Board {
     }
 
     /// Does not check if a castle piece has moved
-    fn _can_castle(&mut self, blank_coords: &[Coord], king_traversal_coords: &[Coord], curr_player: Player) -> bool {
+    fn _can_castle(&mut self, blank_coords: &[FastCoord], king_traversal_coords: &[FastCoord], curr_player: Player) -> bool {
         let opponent = curr_player.other_player();
 
-        for Coord(x, y) in blank_coords.iter() {
-            if let Square::Occupied(_, _) = self.get_by_xy(*x, *y) {
+        for FastCoord(index) in blank_coords.iter() {
+            if let Square::Occupied(_, _) = self.get_by_index(*index) {
                 return false;
             }
         }
 
-        for Coord(x, y) in king_traversal_coords.iter() {
-            self.set_by_xy(*x, *y, Square::Occupied(Piece::King, curr_player));
+        for FastCoord(index) in king_traversal_coords.iter() {
+            self.set_by_index(*index, Square::Occupied(Piece::King, curr_player));
         }
-        let can_castle = !is_checking(self, opponent);
-        for Coord(x, y) in king_traversal_coords.iter() {
-            self.set_by_xy(*x, *y, Square::Blank);
+        let can_castle = !self.is_checking(opponent);
+        for FastCoord(index) in king_traversal_coords.iter() {
+            self.set_by_index(*index, Square::Blank);
         }
         can_castle
     }
@@ -420,7 +420,7 @@ impl Board {
         if !self.get_player_state(curr_player).moved_castle_piece[castle_type as usize] {
             let curr_player_num = curr_player as usize;
 
-            let blank_coords: &[Coord] = if castle_type == CastleType::Oo {
+            let blank_coords: &[FastCoord] = if castle_type == CastleType::Oo {
                 &CASTLE_UTILS.oo_blank_coords[curr_player_num]
             } else {
                 &CASTLE_UTILS.ooo_blank_coords[curr_player_num]
@@ -434,50 +434,48 @@ impl Board {
 
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
 
+        let curr_player = self.get_player_with_turn();
+
         temp_moves.write_index = 0;
         self.write_current_moves(temp_moves);
-
+ 
         for i in 0..temp_moves.write_index {
             let m = &temp_moves.v()[i];
             let revertable = self.handle_move(m);
-            let is_checking = self.is_currently_checking();
+            let is_checking = self.is_checking(curr_player);
             self.revert_move(&revertable);
             if !is_checking { result.write(m.clone()); }
         }
 
-        let curr_player = self.get_player_with_turn();
         self.try_write_castle(curr_player, CastleType::Oo, result);
         self.try_write_castle(curr_player, CastleType::Ooo, result);
     }
 
-    fn is_currently_checking_at(&self, origin: FastCoord) -> bool {
-        let current_player = self.get_player_with_turn();
-        let curr_state = self.get_player_state(current_player);
-        let opponent_state = self.get_player_state(current_player.other_player());
+    /// Precondition: `origin` piece is `player`'s piece
+    fn is_checking_at(&self, player: Player, origin: FastCoord) -> bool {
+        let state = self.get_player_state(player);
+        let opponent_state = self.get_player_state(player.other_player());
 
         match self.get_by_index(origin.0) {
             Square::Occupied(Piece::Pawn, Player::White) => {
-                white_pawn_hits_king(origin, &curr_state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location)
+                white_pawn_hits_king(origin, &state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location)
             }
             Square::Occupied(Piece::Pawn, Player::Black) => {
-                black_pawn_hits_king(origin, &curr_state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location)
+                black_pawn_hits_king(origin, &state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location)
             }
-            Square::Occupied(Piece::Queen, _) => queen_hits_king(origin, &curr_state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location),
-            Square::Occupied(Piece::Knight, _) => knight_hits_king(origin, &curr_state.piece_locs, &opponent_state.king_location),
-            Square::Occupied(Piece::King, _) => king_hits_king(origin, &curr_state.piece_locs, &opponent_state.king_location),
-            Square::Occupied(Piece::Bishop, _) => bishop_hits_king(origin, &curr_state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location),
-            Square::Occupied(Piece::Rook, _) => rook_hits_king(origin, &curr_state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location),
+            Square::Occupied(Piece::Queen, _) => queen_hits_king(origin, &state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location),
+            Square::Occupied(Piece::Knight, _) => knight_hits_king(origin, &state.piece_locs, &opponent_state.king_location),
+            Square::Occupied(Piece::King, _) => king_hits_king(origin, &state.piece_locs, &opponent_state.king_location),
+            Square::Occupied(Piece::Bishop, _) => bishop_hits_king(origin, &state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location),
+            Square::Occupied(Piece::Rook, _) => rook_hits_king(origin, &state.piece_locs, &opponent_state.piece_locs, &opponent_state.king_location),
             Square::Blank => false
         }
     }
 
-    fn is_currently_checking(&self) -> bool {
-
-        console_log!("{}", self.get_player_state(self.get_player_with_turn().other_player()).king_location);
-
-        let mut piece_locs_clone = self.get_player_state(self.get_player_with_turn()).piece_locs.clone();
+    pub fn is_checking(&self, player: Player) -> bool {
+        let mut piece_locs_clone = self.get_player_state(player).piece_locs.clone();
         piece_locs_clone.consume_loop_indices2(|index| {
-            self.is_currently_checking_at(FastCoord(index))
+            self.is_checking_at(player, FastCoord(index))
         })
     }
 

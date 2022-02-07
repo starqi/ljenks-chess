@@ -1,11 +1,21 @@
 TODO
 
 - Tests for evaluation
+- Evaluation using bitboards
 / Bitboards
 - If checked, don't do second round of move tests
 / Promotion UI
 - En passant
-- Profiler? Curious.
+- Profiler? Necessary to spot any bottlenecks.
+- Fix quiescence BS
+    - Why quiescence low NPS
+    - Where's the eval
+    - Intuition
+    - Stop computing non-captures
+    - Split off, no branches
+- Faster coarser sort
+- Prune memo
+- King pos still broken in certain cases
 
 --------------------------------------------------
 
@@ -16,7 +26,6 @@ TODO
 - En passant + old board state
 - Investigate Webpack Wasm generation
 - Debug build, put logs inside debug
-- Split off quiescence, less branches
 - Lazy evaluation with incremental material heuristic, maybe also with control squares?
 - Personal musings - recursive null-move-ish evaluations  
 

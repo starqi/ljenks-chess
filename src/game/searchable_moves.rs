@@ -30,7 +30,7 @@ impl SearchableMoves {
                 }
                 MoveDescription::Castle(castle_type) => {
                     for (from, to) in (CASTLE_UTILS.draggable_coords[*castle_type as usize][curr_player as usize]).iter() {
-                        self.map.insert(SearchableMoveKey(FastCoord::from_coord(from), FastCoord::from_coord(to)), m.clone());
+                        self.map.insert(SearchableMoveKey(*from, *to), m.clone());
                     }
                 }
                 _ => {

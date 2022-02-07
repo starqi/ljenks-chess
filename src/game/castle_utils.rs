@@ -9,11 +9,14 @@ pub struct CastleUtils {
     pub oo_sqs: [[BeforeAfterSquare; 4]; 2],
     pub ooo_sqs: [[BeforeAfterSquare; 5]; 2],
 
-    pub oo_blank_coords: [[Coord; 2]; 2],
-    pub ooo_blank_coords: [[Coord; 3]; 2],
+    pub oo_blank_coords: [[FastCoord; 2]; 2],
+    pub ooo_blank_coords: [[FastCoord; 3]; 2],
 
-    pub king_traversal_coords: [[[Coord; 2]; 2]; 2],
-    pub draggable_coords: [[[(Coord, Coord); 3]; 2]; 2],
+    pub king_traversal_coords: [[[FastCoord; 2]; 2]; 2],
+    pub draggable_coords: [[[(FastCoord, FastCoord); 3]; 2]; 2],
+
+    pub pre_castle_king_sq: [FastCoord; 2],
+    pub post_castle_king_sq: [[FastCoord; 2]; 2]
 }
 
 impl CastleUtils {
@@ -55,37 +58,42 @@ impl CastleUtils {
                 CastleUtils::ooo_squares_for_row(Player::Black)
             ],
             king_traversal_coords: [[
-                [Coord(6, white_first_row), Coord(5, white_first_row)],
-                [Coord(6, black_first_row), Coord(5, black_first_row)]
+                [FastCoord::from_xy(6, white_first_row), FastCoord::from_xy(5, white_first_row)],
+                [FastCoord::from_xy(6, black_first_row), FastCoord::from_xy(5, black_first_row)]
             ], [
-                [Coord(2, white_first_row), Coord(3, white_first_row)],
-                [Coord(2, black_first_row), Coord(3, black_first_row)]
+                [FastCoord::from_xy(2, white_first_row), FastCoord::from_xy(3, white_first_row)],
+                [FastCoord::from_xy(2, black_first_row), FastCoord::from_xy(3, black_first_row)]
             ]],
             oo_blank_coords: [
-                [Coord(6, white_first_row), Coord(5, white_first_row)],
-                [Coord(6, black_first_row), Coord(5, black_first_row)]
+                [FastCoord::from_xy(6, white_first_row), FastCoord::from_xy(5, white_first_row)],
+                [FastCoord::from_xy(6, black_first_row), FastCoord::from_xy(5, black_first_row)]
             ],
             ooo_blank_coords: [
-                [Coord(1, white_first_row), Coord(2, white_first_row), Coord(3, white_first_row)],
-                [Coord(1, black_first_row), Coord(2, black_first_row), Coord(3, black_first_row)]
+                [FastCoord::from_xy(1, white_first_row), FastCoord::from_xy(2, white_first_row), FastCoord::from_xy(3, white_first_row)],
+                [FastCoord::from_xy(1, black_first_row), FastCoord::from_xy(2, black_first_row), FastCoord::from_xy(3, black_first_row)]
             ],
             draggable_coords: [[[
-                (Coord(4, 7), Coord(7, 7)),
-                (Coord(7, 7), Coord(4, 7)),
-                (Coord(4, 7), Coord(6, 7))
+                (FastCoord::from_xy(4, 7), FastCoord::from_xy(7, 7)),
+                (FastCoord::from_xy(7, 7), FastCoord::from_xy(4, 7)),
+                (FastCoord::from_xy(4, 7), FastCoord::from_xy(6, 7))
             ], [
-                (Coord(4, 0), Coord(7, 0)),
-                (Coord(7, 0), Coord(4, 0)),
-                (Coord(4, 0), Coord(6, 0))
+                (FastCoord::from_xy(4, 0), FastCoord::from_xy(7, 0)),
+                (FastCoord::from_xy(7, 0), FastCoord::from_xy(4, 0)),
+                (FastCoord::from_xy(4, 0), FastCoord::from_xy(6, 0))
             ]], [[
-                (Coord(0, 7), Coord(4, 7)),
-                (Coord(4, 7), Coord(0, 7)),
-                (Coord(4, 7), Coord(2, 7))
+                (FastCoord::from_xy(0, 7), FastCoord::from_xy(4, 7)),
+                (FastCoord::from_xy(4, 7), FastCoord::from_xy(0, 7)),
+                (FastCoord::from_xy(4, 7), FastCoord::from_xy(2, 7))
             ], [
-                (Coord(0, 0), Coord(4, 0)),
-                (Coord(4, 0), Coord(0, 0)),
-                (Coord(4, 0), Coord(2, 0))
-            ]]]
+                (FastCoord::from_xy(0, 0), FastCoord::from_xy(4, 0)),
+                (FastCoord::from_xy(4, 0), FastCoord::from_xy(0, 0)),
+                (FastCoord::from_xy(4, 0), FastCoord::from_xy(2, 0))
+            ]]],
+            pre_castle_king_sq: [FastCoord::from_xy(4, 7), FastCoord::from_xy(4, 0)],
+            post_castle_king_sq: [
+                [FastCoord::from_xy(6, 7), FastCoord::from_xy(6, 0)],
+                [FastCoord::from_xy(2, 7), FastCoord::from_xy(2, 0)]
+            ]
         };
     }
 }
