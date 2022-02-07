@@ -1,4 +1,5 @@
 use std::fmt::{Error as FmtError, Display, Formatter};
+use super::super::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Bitboard(pub u64);
@@ -58,15 +59,25 @@ impl Bitboard {
     /// Precondition: Bitboard value is not 0
     #[inline]
     pub fn _lsb_to_index(&self) -> u8 {
-        // TODO Proper way - Debruijn
-        63 - (((self.0 & (!self.0 + 1)) as f64).log2() as u8)
+        // TODO Write intuition
+        BITBOARD_PRESETS.debruijn_indices[(((self.0 & (!self.0 + 1)).wrapping_mul(BITBOARD_PRESETS.debruijn_sequence)) >> 58) as usize]
     }
 
     /// Precondition: Bitboard value is not 0
     #[inline]
     pub fn _msb_to_index(&self) -> u8 {
-        // TODO Proper way - Debruijn
-        63 - (((1u64 << ((self.0 as f64).log2().floor() as u8)) as f64).log2() as u8)
+        // Set to 1 the lower bits from the MSB, doubling the amount of bits set each time,
+        // then use add carry propagation to isolate the MSB, rest is same as LSB.
+        let mut x = self.0;
+        x |= x >> 1; 
+        x |= x >> 2;
+        x |= x >> 4;
+        x |= x >> 8;
+        x |= x >> 16;
+        x |= x >> 32;
+        x >>= 1;
+        x = x.wrapping_add(1);
+        BITBOARD_PRESETS.debruijn_indices[((x.wrapping_mul(BITBOARD_PRESETS.debruijn_sequence)) >> 58) as usize]
     }
 
     pub fn consume_loop_indices(&mut self, mut cb: impl FnMut(u8) -> ()) {
