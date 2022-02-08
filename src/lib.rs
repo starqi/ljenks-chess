@@ -77,6 +77,9 @@ impl Main {
         self.move_list.write_index = 0;
         self.board.get_moves(&mut self.temp, &mut self.move_list);
         let end_exclusive = self.move_list.write_index;
+        console_log!("{} moves", end_exclusive);
+        console_log!("White King\n{}", self.board.get_player_state(Player::White).king_location);
+        console_log!("Black King\n{}", self.board.get_player_state(Player::Black).king_location);
         self.searchable.reset(self.board.get_player_with_turn(), &mut self.move_list, 0, end_exclusive);
     }
 
@@ -87,6 +90,7 @@ impl Main {
         let _m = self.searchable.get_move(&Coord(from_x as u8, from_y as u8), &Coord(to_x as u8, to_y as u8));
         if let Some(m) = _m {
             self.board.handle_move(m);
+            self.board.assert_hash();
             true
         } else {
             false

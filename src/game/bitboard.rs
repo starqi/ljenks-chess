@@ -7,6 +7,12 @@ pub struct Bitboard(pub u64);
 /// Assumes top left corner index is 0. 63 is bottom right.
 impl Bitboard {
 
+    pub fn from_index(index: u8) -> Bitboard {
+        let mut b = Bitboard(0);
+        b.set_index(index);
+        b
+    }
+
     pub fn slow_safe_set(&mut self, x: i8, y: i8) -> bool {
         if x < 0 || y < 0 || x >= 8 || y >= 8 { return false; }
         self.set(x as u8, y as u8);

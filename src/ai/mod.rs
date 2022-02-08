@@ -1,6 +1,8 @@
 mod evaluation;
 
+use std::cmp::{min};
 use std::collections::HashMap;
+use super::game::entities::*;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::extern_funcs::now;
@@ -25,7 +27,7 @@ enum SingleMoveResult { NewAlpha(f32), BetaCutOff(f32), NoEffect }
 enum MemoType { Low(MoveWithEval), Exact(MoveWithEval), High(MoveWithEval) }
 
 #[derive(Clone)]
-struct MemoData(f32, u8, MemoType);
+struct MemoData(f32, i8, MemoType);
 
 static MAX_EVAL: f32 = 9000.;
 
@@ -59,12 +61,12 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, depth: u8, real_board: &mut Board) {
+    pub fn make_move(&mut self, depth: i8, real_board: &mut Board) {
 
         self.test_board.clone_from(real_board);
 
         let start_ms = now();
-        for d in (1..=depth).step_by(2) {
+        for d in (1i8..=depth).step_by(2) {
             console_log!("\nBegin depth {}", d);
             self.show_tree_left_side = true;
             unsafe {
@@ -79,8 +81,9 @@ impl Ai {
             }
         }
 
-        let c_hash = self.test_board.calculate_hash();
-        debug_assert_eq!(c_hash, self.test_board.get_hash());
+        self.test_board.assert_hash();
+        self.assert_king_pos(Player::White);
+        self.assert_king_pos(Player::Black);
 
         let leading_move = self.get_leading_move();
         if let Some((m, e)) = leading_move {
@@ -95,15 +98,22 @@ impl Ai {
         self.node_counter = 0;
         self.memo_hits = 0;
         self.fast_found_hits = 0;
-        //self.memo.clear();
-        //self.q_memo.clear();
+        self.memo.clear();
+        self.q_memo.clear();
+    }
+
+    fn assert_king_pos(&self, player: Player) {
+        if let Square::Occupied(Piece::King, player) = self.test_board.get_by_index(self.test_board.get_player_state(player).king_location._lsb_to_index()) {
+        } else {
+            panic!("Wrong king square detected for {:?}", player);
+        }
     }
 
     /// Will assume ownership over all move list elements from `moves_start`
     /// Only calculates score
     unsafe fn negamax(
         &mut self,
-        remaining_depth: u8,
+        remaining_depth: i8,
         quiescence: bool,
         mut alpha: f32,
         beta: f32,
@@ -292,8 +302,13 @@ impl Ai {
                 has_quiescence_move = true;
             }
 
+            //let diff = i - moves_start;
+            let less_depth_amount = 0;
+            //let less_depth_amount = min((-((diff >= 5) as i8) as usize) & (diff >> 2), 2) as i8;
+            //let less_depth_amount = ((-((diff >= 5) as i8) as usize) & 1) as i8;
+            
             let r = self.negamax_try_move(
-                remaining_depth, 
+                remaining_depth - less_depth_amount, 
                 quiescence,
                 alpha,
                 new_alpha_i != NEW_ALPHA_I_NEVER_SET,
@@ -342,7 +357,7 @@ impl Ai {
     unsafe fn negamax_try_move(
         // Unsafe to allow `m` and `self` be aliases
         &mut self,
-        remaining_depth: u8,
+        remaining_depth: i8,
         quiescence: bool,
         alpha: f32,
         is_alpha_exact_eval: bool,

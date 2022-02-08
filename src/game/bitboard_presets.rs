@@ -138,7 +138,7 @@ fn set_ray_dests(b: &mut Bitboard, x: i8, y: i8, dx: i8, dy: i8) {
 }
 
 #[cfg(test)]
-mod Test {
+mod test {
 
     use super::*;
 
