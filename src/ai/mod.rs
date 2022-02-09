@@ -1,18 +1,18 @@
 mod evaluation;
 
-use std::cmp::{min};
 use std::collections::HashMap;
 use super::game::entities::*;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::extern_funcs::now;
 use crate::{console_log};
+use evaluation::ValueBoard;
 
 pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
     temp_moves: MoveList,
-    eval_temp_arr: [f32; 64],
+    temp_value_board: ValueBoard,
     memo: HashMap<u64, MemoData>,
     q_memo: HashMap<u64, MemoData>,
     memo_hits: usize,
@@ -21,15 +21,15 @@ pub struct Ai {
     node_counter: u32
 }
 
-enum SingleMoveResult { NewAlpha(f32), BetaCutOff(f32), NoEffect }
+enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 
 #[derive(Clone)]
 enum MemoType { Low(MoveWithEval), Exact(MoveWithEval), High(MoveWithEval) }
 
 #[derive(Clone)]
-struct MemoData(f32, i8, MemoType);
+struct MemoData(i32, i8, MemoType);
 
-static MAX_EVAL: f32 = 9000.;
+static MAX_EVAL: i32 = 999999;
 
 impl Ai {
 
@@ -39,7 +39,7 @@ impl Ai {
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
             temp_moves: MoveList::new(50),
-            eval_temp_arr: [0.; 64],
+            temp_value_board: ValueBoard::new(),
             memo: HashMap::new(),
             q_memo: HashMap::new(),
             memo_hits: 0,
@@ -49,7 +49,7 @@ impl Ai {
         }
     }
 
-    fn get_leading_move(&self) -> Option<(&MoveWithEval, f32)> {
+    fn get_leading_move(&self) -> Option<(&MoveWithEval, i32)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
             Some(MemoData(eval, _, MemoType::High(best_move) | MemoType::Exact(best_move) | MemoType::Low(best_move))) => {
@@ -115,18 +115,22 @@ impl Ai {
         &mut self,
         remaining_depth: i8,
         quiescence: bool,
-        mut alpha: f32,
-        beta: f32,
+        mut alpha: i32,
+        beta: i32,
         moves_start: usize
-    ) -> f32 {
+    ) -> i32 {
         self.node_counter += 1;
 
         if remaining_depth <= 0 {
-                self.show_tree_left_side = false;
-                let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
-                return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
+            self.show_tree_left_side = false;
+
+            self.temp_moves.write_index = 0;
+            let eval = evaluation::evaluate(&self.test_board, &mut self.temp_moves, &mut self.temp_value_board);
+
+            return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
 
 
+            /*
             if quiescence {
                 self.show_tree_left_side = false;
                 let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
@@ -141,6 +145,7 @@ impl Ai {
 
                 return self.negamax(3, true, alpha, beta, moves_start);
             }
+            */
         }
 
         let resolved_memo: *mut HashMap<u64, MemoData> = if quiescence { &mut self.q_memo } else { &mut self.memo };
@@ -256,8 +261,8 @@ impl Ai {
             let revertable = self.test_board.handle_move(&m);
             let memo: Option<&MemoData> = (*resolved_memo).get(&self.test_board.get_hash());
 
-            const BIG_NUMBER: f32 = 100.;
-            const EVAL_UPPER_BOUND: f32 = 999.;
+            const BIG_NUMBER: i32 = 10000;
+            const EVAL_UPPER_BOUND: i32 = 99999;
             let r = if let Some(MemoData(opponent_max_this, _, MemoType::Exact(_))) = memo {
                 -*opponent_max_this * BIG_NUMBER
             } else {
@@ -274,7 +279,7 @@ impl Ai {
                 self.show_tree_left_side = false;
                 return self.get_no_moves_eval(alpha, beta);
             }
-            evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
+            //evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
         }
         evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
@@ -302,10 +307,9 @@ impl Ai {
                 has_quiescence_move = true;
             }
 
-            //let diff = i - moves_start;
-            let less_depth_amount = 0;
+            let diff = i - moves_start;
             //let less_depth_amount = min((-((diff >= 5) as i8) as usize) & (diff >> 2), 2) as i8;
-            //let less_depth_amount = ((-((diff >= 5) as i8) as usize) & 1) as i8;
+            let less_depth_amount = ((-((diff >= 5) as i8) as usize) & 1) as i8;
             
             let r = self.negamax_try_move(
                 remaining_depth - less_depth_amount, 
@@ -359,21 +363,21 @@ impl Ai {
         &mut self,
         remaining_depth: i8,
         quiescence: bool,
-        alpha: f32,
+        alpha: i32,
         is_alpha_exact_eval: bool,
-        beta: f32,
+        beta: i32,
         m: *const MoveWithEval,
         moves_start: usize
     ) -> SingleMoveResult {
         let revertable = self.test_board.handle_move(&*m);
 
-        let mut fast_found_max_this = 0.0f32;
+        let mut fast_found_max_this: i32 = 0;
         let mut fast_found = false;
 
         if !quiescence && is_alpha_exact_eval {
             // PVS idea - Do a fast boolean check that the current best move with score alpha is really the best.
             // If we always bet correctly, then the second more expensive negamax below is always avoided.
-            fast_found_max_this = -self.negamax(remaining_depth - 1, false, -alpha - 0.01, -alpha, moves_start);
+            fast_found_max_this = -self.negamax(remaining_depth - 1, false, -alpha - 1, -alpha, moves_start);
             if fast_found_max_this <= alpha {
                 fast_found = true;
                 self.fast_found_hits += 1;
@@ -401,18 +405,18 @@ impl Ai {
         self.test_board.is_capture(m)
     }
 
-    fn cap(r: f32, alpha: f32, beta: f32) -> f32 {
+    fn cap(r: i32, alpha: i32, beta: i32) -> i32 {
         if r <= alpha { return alpha; }
         else if r >= beta { return beta; }
         else { return r; }
     }
 
-    fn get_no_moves_eval(&mut self, alpha: f32, beta: f32) -> f32 {
+    fn get_no_moves_eval(&mut self, alpha: i32, beta: i32) -> i32 {
         let checking_player = self.test_board.get_player_with_turn().other_player();
         if self.test_board.is_checking(checking_player) {
             return alpha;
         } else {
-            return Self::cap(0.0, alpha, beta);
+            return Self::cap(0, alpha, beta);
         }
     }
 }

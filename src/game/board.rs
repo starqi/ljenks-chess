@@ -415,14 +415,16 @@ impl Board {
             }
         }
 
-        for FastCoord(index) in king_traversal_coords.iter() {
-            self.set_by_index_no_hash(*index, Square::Occupied(Piece::King, curr_player));
-        }
-        // FIXME
+        let old_king_loc = {
+            let curr_state = self.get_player_state_mut(curr_player);
+            let _old_king_loc = curr_state.king_location;
+            for FastCoord(index) in king_traversal_coords.iter() {
+                curr_state.king_location.set_index(*index);
+            }
+            _old_king_loc
+        };
         let can_castle = !self.is_checking(opponent);
-        for FastCoord(index) in king_traversal_coords.iter() {
-            self.set_by_index_no_hash(*index, Square::Blank);
-        }
+        self.get_player_state_mut(curr_player).king_location = old_king_loc;
         can_castle
     }
 
@@ -437,7 +439,7 @@ impl Board {
             };
 
             if self._can_castle(blank_coords, &CASTLE_UTILS.king_traversal_coords[castle_type as usize][curr_player as usize], curr_player) {
-                move_list.write(MoveWithEval(MoveDescription::Castle(castle_type), 0.0));
+                move_list.write(MoveWithEval(MoveDescription::Castle(castle_type), 0));
             }
         }
     }
@@ -447,7 +449,7 @@ impl Board {
         let curr_player = self.get_player_with_turn();
 
         temp_moves.write_index = 0;
-        self.write_current_moves(temp_moves);
+        self.get_pseudo_moves(temp_moves);
  
         for i in 0..temp_moves.write_index {
             let m = &temp_moves.v()[i];
@@ -489,7 +491,7 @@ impl Board {
         })
     }
 
-    fn write_current_moves_at(&self, ml: &mut MoveList, origin: FastCoord) {
+    fn get_pseudo_moves_at(&self, ml: &mut MoveList, origin: FastCoord) {
         let current_player = self.get_player_with_turn();
         let curr_state = self.get_player_state(current_player);
         let opponent_state = self.get_player_state(current_player.other_player());
@@ -510,10 +512,10 @@ impl Board {
         };
     }
 
-    fn write_current_moves(&self, ml: &mut MoveList) {
+    pub fn get_pseudo_moves(&self, ml: &mut MoveList) {
         let mut piece_locs_clone = self.get_player_state(self.get_player_with_turn()).piece_locs.clone();
         piece_locs_clone.consume_loop_indices(|index| {
-            self.write_current_moves_at(ml, FastCoord(index));
+            self.get_pseudo_moves_at(ml, FastCoord(index));
         });
     }
 
@@ -558,7 +560,7 @@ mod test {
         board.set_uniform_row(5, Square::Blank);
 
         let mut ml = MoveList::new(100);
-        board.write_current_moves_at(&mut ml, FastCoord::from_xy(0, 0));
+        board.get_pseudo_moves_at(&mut ml, FastCoord::from_xy(0, 0));
 
         let mut b = Bitboard(0);
         for m in ml.v() {

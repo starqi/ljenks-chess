@@ -38,7 +38,7 @@ pub enum Player {
 }
 
 static PLAYER_TO_OTHER_PLAYER: [Player; 2] = [Player::Black, Player::White];
-static PLAYER_TO_MULTIPLIER: [f32; 2] = [1., -1.];
+static PLAYER_TO_MULTIPLIER: [i32; 2] = [1, -1];
 static PLAYER_TO_FIRST_ROW: [u8; 2] = [7, 0];
 static PLAYER_TO_LAST_ROW: [u8; 2] = [0, 7];
 
@@ -60,7 +60,7 @@ impl Player {
     }
 
     #[inline]
-    pub fn multiplier(self) -> f32 {
+    pub fn multiplier(self) -> i32 {
         PLAYER_TO_MULTIPLIER[self as usize]
     }
 }

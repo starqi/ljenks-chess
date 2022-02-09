@@ -2,148 +2,109 @@ use super::super::game::entities::*;
 use super::super::game::coords::*;
 use super::super::game::board::*;
 use super::super::game::move_list::*;
-use super::super::game::move_test::*;
-use super::super::game::push_moves_handler::*;
 
-/// Must be bigger than all piece values
-const NO_CONTROL_VAL: f32 = 99.0;
-
-static PIECE_VALUES: [i8; 6] = [
-    1, 5, 3, 3, 9, 10
+static PIECE_VALUES: [i32; 6] = [
+    100, 500, 300, 300, 900, 100
 ];
 
-static SOME_VALUES_1: [(f32, f32); 2] = [(7., -1.0), (0.0, 1.0)];
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Value { NoValue, Value(i32) }
 
-struct SquareControlHandler<'a> {
-    temp_arr: &'a mut [f32; 64]
+// TODO Extract
+pub struct ValueBoard {
+    data: [Value; 64]
 }
 
-pub fn clear_square_control(a: &mut [f32; 64]) {
-    a.fill(NO_CONTROL_VAL);
-}
+impl ValueBoard {
 
-#[inline]
-pub fn get_square_worth_white(x: usize, y: usize) -> f32 {
-    if y <= 1 { 1.0 }
-    else if y >= 6 { 0.1 }
-    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4.0 }
-}
-
-#[inline]
-pub fn get_square_worth_black(x: usize, y: usize) -> f32 {
-    if y >= 6 { 1.0 }
-    else if y <= 1 { 0.1 }
-    else { 1.5 * (3.5 - (3.5 - x as f32).abs() + 0.4) / 4.0 }
-}
-
-/// Currently, returns at 4 for a center square, 3 for opponent side square
-pub fn get_white_square_control(a: &mut [f32; 64]) -> f32 {
-    let mut eval = 0.;
-    for y in 0..8 {
-        for x in 0..8 {
-            let v = a[y * 8 + x];
-            if v != NO_CONTROL_VAL && v.round() == v {
-                if v < 0. {
-                    eval -= get_square_worth_black(x, y);
-                } else if v > 0. {
-                    eval += get_square_worth_white(x, y);
-                }
-            }
-        }
+    pub fn new() -> ValueBoard {
+        ValueBoard { data: [Value::NoValue; 64] }
     }
-    eval
-}
 
-/// Precondition: `temp_arr` is cleared to a number > the highest piece value before move tests
-impl <'a> MoveTestHandler for SquareControlHandler<'a> {
-    fn push(
-        &mut self,
-        moveable: bool,
-        can_capture: bool,
-        params: &MoveTestParams,
-        dest_x: u8,
-        dest_y: u8,
-        _: &Square,
-        _: Option<Piece>
-    ) -> bool {
-        if !can_capture { return false; }
+    #[inline]
+    pub fn reset(&mut self) {
+        self.data.fill(Value::NoValue);
+    }
 
-        let index = dest_y as usize * 8 + dest_x as usize;
+    #[inline]
+    pub fn set_by_index(&mut self, index: usize, value: Value) {
+        self.data[index] = value;
+    }
 
-        let mut lowest_controller_value_negpos = self.temp_arr[index];
-        {
-            let r = lowest_controller_value_negpos.round();
-            if r != lowest_controller_value_negpos {
-                lowest_controller_value_negpos = r;
-            }
-        }
-        let lowest_controller_value = lowest_controller_value_negpos.abs();
-
-        let candidate_value = evaluate_piece(params.src_piece);
-        let candidate_value_negpos = candidate_value * params.src_player.multiplier();
-
-        if candidate_value < lowest_controller_value {
-            self.temp_arr[index] = candidate_value_negpos;
-        } else if candidate_value == lowest_controller_value && candidate_value_negpos != lowest_controller_value_negpos {
-            self.temp_arr[index] = candidate_value_negpos + 0.3333;
-        }
-
-        return false;
+    #[inline]
+    pub fn get_by_index(&self, index: usize) -> &Value {
+        &self.data[index]
     }
 }
 
 #[inline]
-pub fn evaluate_piece(piece: Piece) -> f32 {
-    PIECE_VALUES[piece as usize] as f32
+pub fn get_square_worth_white(x: i32, y: i32) -> i32 {
+    if y <= 1 { 100 }
+    else if y >= 6 { 10 }
+    else { 150 * (350 - (350 - x * 100).abs() + 40) / 400 }
 }
 
-fn evaluate_player(board: &Board, handler: &mut SquareControlHandler, player: Player) -> f32 {
+#[inline]
+pub fn get_square_worth_black(x: i32, y: i32) -> i32 {
+    if y >= 6 { 100 }
+    else if y <= 1 { 10 }
+    else { 150 * (350 - (350 - x * 100).abs() + 40) / 400 }
+}
+
+#[inline]
+pub fn evaluate_piece(piece: Piece) -> i32 {
+    PIECE_VALUES[piece as usize] as i32
+}
+
+static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
+
+fn evaluate_player(
+    board: &Board,
+    player: Player,
+    temp_ml: &mut MoveList,
+    result: &mut ValueBoard
+) -> i32 {
 
     let ps = board.get_player_state(player);
-    let some_values_1 = SOME_VALUES_1[player as usize];
+    let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
+    let mut value: i32 = 0;
 
-    let mut value: f32 = 0.;
-
-    let mut piece_locs = ps.piece_locs;
-    piece_locs.consume_loop_indices(|index| {
+    let mut piece_locs_copy = ps.piece_locs;
+    piece_locs_copy.consume_loop_indices(|index| {
         let coord = FastCoord(index).to_coord();
-        let fy = coord.1 as f32;
 
         if let Square::Occupied(piece, _) = board.get_by_index(index) {
             value += evaluate_piece(*piece);
-            if *piece == Piece::Pawn {
-                value += 0.3 * (some_values_1.0 + some_values_1.1 * fy);
-            } else {
-                if fy > 0. && fy < 7. {
-                    value += 0.75;
-                }
-            }
 
-            fill_src(&MoveTestParams {
-                src_x: coord.0 as i8,
-                src_y: coord.1 as i8,
-                src_piece: *piece,
-                src_player: player,
-                can_capture_king: true,
-                board: &board
-            }, handler);
+            // Reward pawn push
+            let is_pawn_mask = -((*piece == Piece::Pawn) as i32);
+            value += is_pawn_mask & ((pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * 30);
         }
     });
+
+    /*
+    temp_ml.write_index = 0;
+    // FIXME Need to be able to choose the player
+    board.get_pseudo_moves(temp_ml);
+
+    for m in temp_ml.v() {
+        if let MoveWithEval(MoveDescription::NormalMove(_from_coord, _to_coord), _) = m {
+            FIXME
+        }
+    }
+    */
+
     value * player.multiplier()
 }
 
-fn round_eval(v: f32) -> f32 {
-    (v * 100.).round() / 100.
-}
+pub fn evaluate(board: &Board, temp_ml: &mut MoveList, result: &mut ValueBoard) -> i32 {
+    result.reset();
 
-pub fn evaluate(board: &Board, temp_arr: &mut [f32; 64]) -> f32 {
-    clear_square_control(temp_arr);
-
-    let mut handler = SquareControlHandler { temp_arr };
-    let white_eval = evaluate_player(board, &mut handler, Player::White);
-    let black_eval = evaluate_player(board, &mut handler, Player::Black);
+    let white_eval = evaluate_player(board, Player::White, temp_ml, result);
+    let black_eval = evaluate_player(board, Player::Black, temp_ml, result);
     
-    round_eval(0.2 * get_white_square_control(handler.temp_arr) + white_eval + black_eval)
+    white_eval + black_eval
+    //round_eval(0.2 * get_white_square_control(handler.temp_arr) + white_eval + black_eval)
 }
 
 pub fn add_captures_to_evals(
@@ -165,6 +126,7 @@ pub fn add_captures_to_evals(
     });
 }
 
+/*
 pub fn add_aggression_to_evals(
     board: &Board,
     m: &mut MoveList,
@@ -206,3 +168,4 @@ pub fn add_aggression_to_evals(
         score
     });
 }
+*/

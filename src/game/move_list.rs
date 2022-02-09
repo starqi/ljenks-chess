@@ -30,13 +30,13 @@ impl Default for MoveDescription {
 
 /// Put all AI info here, such as eval and metadata (is capture or not), but lazily when AI needs it
 #[derive(Clone, Default)]
-pub struct MoveWithEval(pub MoveDescription, pub f32);
+pub struct MoveWithEval(pub MoveDescription, pub i32);
 
 impl MoveWithEval {
     #[inline]
     pub fn description(&self) -> &MoveDescription { &self.0 }
     #[inline]
-    pub fn eval(&self) -> f32 { self.1 }
+    pub fn eval(&self) -> i32 { self.1 }
 }
 
 pub struct MoveList {
@@ -88,7 +88,7 @@ impl MoveList {
         s.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
     }
 
-    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, mut to_eval: impl FnMut(&MoveWithEval) -> f32) {
+    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, mut to_eval: impl FnMut(&MoveWithEval) -> i32) {
         for i in start..end_exclusive {
             let m = &mut self.v[i];
             m.1 = to_eval(m);
