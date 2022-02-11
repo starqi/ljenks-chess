@@ -3,6 +3,20 @@ use super::coords::*;
 use super::bitboard::*;
 use super::super::*;
 
+pub struct AttackFromBoards {
+    pub data: [Bitboard; 64]
+}
+
+impl AttackFromBoards {
+    pub fn new() -> AttackFromBoards {
+        AttackFromBoards { data: [Bitboard(0); 64] }
+    }
+
+    pub fn reset(&mut self) {
+        self.data.fill(Bitboard(0));
+    }
+}
+
 fn set_blockable_ray(
     b: &mut Bitboard,
     origin: FastCoord,
@@ -21,9 +35,15 @@ fn set_blockable_ray(
     b.0 |= moves.0;
 }
 
-fn consume_to_move_list(b: &mut Bitboard, ml: &mut MoveList, origin: &FastCoord) {
+fn consume_to_move_list(b: &mut Bitboard, origin: &FastCoord, result: &mut MoveList) {
     b.consume_loop_indices(|dest| {
-        ml.write(MoveWithEval(MoveDescription::NormalMove(*origin, FastCoord(dest)), 0));
+        result.write(MoveWithEval(MoveDescription::NormalMove(*origin, FastCoord(dest)), 0));
+    });
+}
+
+fn update_attack_from_boards(origin: &FastCoord, b: &mut Bitboard, result: &mut AttackFromBoards) {
+    b.consume_loop_indices(|dest| {
+        result.data[dest as usize].set_index(origin.0);
     });
 }
 
@@ -52,7 +72,12 @@ fn _write_rook_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, oppon
 
 pub fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_rook_moves(origin, curr_player_piece_locs, opponent_piece_locs);
-    consume_to_move_list(&mut b, ml, &origin);
+    consume_to_move_list(&mut b, &origin, ml);
+}
+
+pub fn update_rook_af(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, result: &mut AttackFromBoards) {
+    let mut b = _write_rook_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    update_attack_from_boards(&origin, &mut b, result);
 }
 
 pub fn rook_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
@@ -75,7 +100,12 @@ fn _write_bishop_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, opp
 
 pub fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_bishop_moves(origin, curr_player_piece_locs, opponent_piece_locs);
-    consume_to_move_list(&mut b, ml, &origin);
+    consume_to_move_list(&mut b, &origin, ml);
+}
+
+pub fn update_bishop_af(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, result: &mut AttackFromBoards) {
+    let mut b = _write_bishop_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    update_attack_from_boards(&origin, &mut b, result);
 }
 
 pub fn bishop_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
@@ -103,7 +133,12 @@ fn _write_queen_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, oppo
 
 pub fn write_queen_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_queen_moves(origin, curr_player_piece_locs, opponent_piece_locs);
-    consume_to_move_list(&mut b, ml, &origin);
+    consume_to_move_list(&mut b, &origin, ml);
+}
+
+pub fn update_queen_af(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, result: &mut AttackFromBoards) {
+    let mut b = _write_queen_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    update_attack_from_boards(&origin, &mut b, result);
 }
 
 pub fn queen_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
@@ -120,7 +155,12 @@ fn _write_knight_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard) -> 
 
 pub fn write_knight_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
     let mut b = _write_knight_moves(origin, curr_player_piece_locs);
-    consume_to_move_list(&mut b, ml, &origin);
+    consume_to_move_list(&mut b, &origin, ml);
+}
+
+pub fn update_knight_af(origin: FastCoord, curr_player_piece_locs: &Bitboard, result: &mut AttackFromBoards) {
+    let mut b = _write_knight_moves(origin, curr_player_piece_locs);
+    update_attack_from_boards(&origin, &mut b, result);
 }
 
 pub fn knight_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
@@ -137,13 +177,29 @@ fn _write_king_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard) -> Bi
 
 pub fn write_king_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
     let mut b = _write_king_moves(origin, curr_player_piece_locs);
-    consume_to_move_list(&mut b, ml, &origin);
+    consume_to_move_list(&mut b, &origin, ml);
+}
+
+pub fn update_king_af(origin: FastCoord, curr_player_piece_locs: &Bitboard, result: &mut AttackFromBoards) {
+    let mut b = _write_king_moves(origin, curr_player_piece_locs);
+    update_attack_from_boards(&origin, &mut b, result);
 }
 
 // This is a case, this is what prevents kings from getting close
 pub fn king_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
     let b = _write_king_moves(origin, curr_player_piece_locs);
     hits_king(&b, opponent_king_location)
+}
+
+#[inline]
+fn _write_pawn_captures(
+    origin: FastCoord,
+    curr_player: Player,
+    opponent_piece_locs: &Bitboard
+) -> Bitboard {
+    let curr_player_num = curr_player as usize;
+    let index = origin.value() as usize;
+    Bitboard(BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs.0)
 }
 
 #[inline]
@@ -163,8 +219,8 @@ fn _write_pawn_moves(
     let push_blockers_without_pawn2_mask = !(slide_push_blockers(push_blockers_without_pawn) | push_blockers_without_pawn);
     // This should handle blockers for pushes
     let push_locs = BITBOARD_PRESETS.pawn_pushes[curr_player_num][index].0 & push_blockers_without_pawn2_mask;
-    let capture_locs = BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs.0;
-    Bitboard(push_locs | capture_locs)
+    let capture_locs = _write_pawn_captures(origin, curr_player, opponent_piece_locs);
+    Bitboard(push_locs | capture_locs.0)
 }
 
 #[inline]
@@ -176,9 +232,22 @@ fn _write_white_pawn_moves(
     _write_pawn_moves(origin, |blockers| blockers << 8, Player::White, piece_locs, opponent_piece_locs)
 }
 
+#[inline]
+fn _write_white_pawn_captures(
+    origin: FastCoord,
+    opponent_piece_locs: &Bitboard
+) -> Bitboard {
+    _write_pawn_captures(origin, Player::White, opponent_piece_locs)
+}
+
 pub fn write_white_pawn_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
-    consume_to_move_list(&mut b, ml, &origin);
+    consume_to_move_list(&mut b, &origin, ml);
+}
+
+pub fn update_white_pawn_af(origin: FastCoord, opponent_piece_locs: &Bitboard, result: &mut AttackFromBoards) {
+    let mut b = _write_white_pawn_captures(origin, opponent_piece_locs);
+    update_attack_from_boards(&origin, &mut b, result);
 }
 
 pub fn white_pawn_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
@@ -195,9 +264,22 @@ fn _write_black_pawn_moves(
     _write_pawn_moves(origin, |blockers| blockers >> 8, Player::Black, piece_locs, opponent_piece_locs)
 }
 
+#[inline]
+fn _write_black_pawn_captures(
+    origin: FastCoord,
+    opponent_piece_locs: &Bitboard
+) -> Bitboard {
+    _write_pawn_captures(origin, Player::Black, opponent_piece_locs)
+}
+
 pub fn write_black_pawn_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
-    consume_to_move_list(&mut b, ml, &origin);
+    consume_to_move_list(&mut b, &origin, ml);
+}
+
+pub fn update_black_pawn_af(origin: FastCoord, opponent_piece_locs: &Bitboard, result: &mut AttackFromBoards) {
+    let mut b = _write_black_pawn_captures(origin, opponent_piece_locs);
+    update_attack_from_boards(&origin, &mut b, result);
 }
 
 pub fn black_pawn_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {

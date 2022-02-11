@@ -1,53 +1,20 @@
+use std::cmp::min;
 use super::super::game::entities::*;
 use super::super::game::coords::*;
 use super::super::game::board::*;
+use super::super::game::move_test::*;
 use super::super::game::move_list::*;
+
+static PIECE_VALUE_BOUND: i32 = 1000;
 
 static PIECE_VALUES: [i32; 6] = [
     100, 500, 300, 300, 900, 100
 ];
 
-#[derive(Copy, Clone, PartialEq, Eq)]
-enum Value { NoValue, Value(i32) }
-
-// TODO Extract
-pub struct ValueBoard {
-    data: [Value; 64]
-}
-
-impl ValueBoard {
-
-    pub fn new() -> ValueBoard {
-        ValueBoard { data: [Value::NoValue; 64] }
-    }
-
-    #[inline]
-    pub fn reset(&mut self) {
-        self.data.fill(Value::NoValue);
-    }
-
-    #[inline]
-    pub fn set_by_index(&mut self, index: usize, value: Value) {
-        self.data[index] = value;
-    }
-
-    #[inline]
-    pub fn get_by_index(&self, index: usize) -> &Value {
-        &self.data[index]
-    }
-}
-
 #[inline]
 pub fn get_square_worth_white(x: i32, y: i32) -> i32 {
     if y <= 1 { 100 }
     else if y >= 6 { 10 }
-    else { 150 * (350 - (350 - x * 100).abs() + 40) / 400 }
-}
-
-#[inline]
-pub fn get_square_worth_black(x: i32, y: i32) -> i32 {
-    if y >= 6 { 100 }
-    else if y <= 1 { 10 }
     else { 150 * (350 - (350 - x * 100).abs() + 40) / 400 }
 }
 
@@ -58,12 +25,8 @@ pub fn evaluate_piece(piece: Piece) -> i32 {
 
 static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 
-fn evaluate_player(
-    board: &Board,
-    player: Player,
-    temp_ml: &mut MoveList,
-    result: &mut ValueBoard
-) -> i32 {
+/// Precondition: `prepared_af_boards` is filled in with attacked from map
+fn evaluate_player(board: &Board, player: Player) -> i32 {
 
     let ps = board.get_player_state(player);
     let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
@@ -82,29 +45,45 @@ fn evaluate_player(
         }
     });
 
-    /*
-    temp_ml.write_index = 0;
-    // FIXME Need to be able to choose the player
-    board.get_pseudo_moves(temp_ml);
-
-    for m in temp_ml.v() {
-        if let MoveWithEval(MoveDescription::NormalMove(_from_coord, _to_coord), _) = m {
-            FIXME
-        }
-    }
-    */
-
     value * player.multiplier()
 }
 
-pub fn evaluate(board: &Board, temp_ml: &mut MoveList, result: &mut ValueBoard) -> i32 {
-    result.reset();
+fn calculate_white_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
 
-    let white_eval = evaluate_player(board, Player::White, temp_ml, result);
-    let black_eval = evaluate_player(board, Player::Black, temp_ml, result);
+    board.rewrite_af_boards(prepared_af_boards);
+
+    let mut white_square_surplus: i32 = 0;
+    for y in 0..8 {
+        for x in 0..8 {
+            let b = prepared_af_boards.data[y * 8 + x];
+            let mut lowest_attacker_worth: [i32; 2] = [PIECE_VALUE_BOUND, PIECE_VALUE_BOUND];
+
+            let mut b2 = b;
+            b2.consume_loop_indices(|index| {
+                match board.get_by_index(index) {
+                    Square::Occupied(attacking_piece, attacking_player) => {
+                        let value = evaluate_piece(*attacking_piece);
+                        let ref mut lowest_ref = lowest_attacker_worth[*attacking_player as usize];
+                        *lowest_ref = min(*lowest_ref, value);
+                    },
+                    Square::Blank => panic!("Unexpected empty square when attacker is expected")
+                };
+            });
+
+            let one_or_neg_one_or_zero = (lowest_attacker_worth[1] - lowest_attacker_worth[0]).signum();
+            let zero_if_white = (one_or_neg_one_or_zero != 1) as i32;
+            white_square_surplus += one_or_neg_one_or_zero * get_square_worth_white(x as i32, zero_if_white * 7 + one_or_neg_one_or_zero * (y as i32));
+        }
+    }
+
+    white_square_surplus >> 3
+}
+
+pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
+    let white_eval = evaluate_player(board, Player::White);
+    let black_eval = evaluate_player(board, Player::Black);
     
-    white_eval + black_eval
-    //round_eval(0.2 * get_white_square_control(handler.temp_arr) + white_eval + black_eval)
+    white_eval + black_eval + calculate_white_control(board, prepared_af_boards)
 }
 
 pub fn add_captures_to_evals(
@@ -126,46 +105,33 @@ pub fn add_captures_to_evals(
     });
 }
 
-/*
-pub fn add_aggression_to_evals(
-    board: &Board,
-    m: &mut MoveList,
-    start: usize,
-    end_exclusive: usize,
-    temp_ml: &mut MoveList
-) {
-    let curr_player = board.get_player_with_turn();
-    let mut handler = PushToMoveListHandler { move_list: temp_ml };
-    m.write_evals(start, end_exclusive, |m| {
-        let mut score = m.eval();
-        if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
-            if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
+#[cfg(test)]
+mod test {
 
-                let to_coord = _to_coord.to_coord();
-                let params = MoveTestParams {
-                    src_x: to_coord.0 as i8,
-                    src_y: to_coord.1 as i8,
-                    src_piece: *dragged_piece,
-                    src_player: curr_player,
-                    can_capture_king: true,
-                    board
-                };
+    use super::*;
 
-                handler.move_list.write_index = 0;
-                fill_src(&params, &mut handler);
+    #[test]
+    fn basic_square_control() {
+        let mut board = Board::new();
+        board.set_uniform_row_test(2, Square::Blank);
+        board.set_uniform_row_test(7, Square::Blank);
+        let mut af = AttackFromBoards::new();
 
-                for i in 0..handler.move_list.write_index {
-                    if let MoveWithEval(MoveDescription::NormalMove(_from_coord2, _to_coord2), _) = handler.move_list.v()[i] {
-                        if let Square::Occupied(target_piece, target_player) = board.get_by_index(_to_coord2.value()) {
-                            if *target_player != curr_player {
-                                score += evaluate_piece(*target_piece) * 0.33;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        score
-    });
+        let mut white_control_surplus = calculate_white_control(&board, &mut af);
+        assert_eq!(white_control_surplus, 0);
+
+        board.set_test('d', 1, Square::Blank);
+        board.set_test('a', 1, Square::Blank);
+        white_control_surplus = calculate_white_control(&board, &mut af);
+        println!("a {}", white_control_surplus);
+        assert!(white_control_surplus < 0);
+
+        board.set_test('d', 8, Square::Blank);
+        board.set_test('a', 8, Square::Blank);
+        board.set_test('g', 8, Square::Blank);
+        board.set_test('b', 8, Square::Blank);
+        white_control_surplus = calculate_white_control(&board, &mut af);
+        println!("b {}", white_control_surplus);
+        assert!(white_control_surplus > 0);
+    }
 }
-*/

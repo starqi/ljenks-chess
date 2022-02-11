@@ -65,7 +65,13 @@ impl Bitboard {
     /// Precondition: Bitboard value is not 0
     #[inline]
     pub fn _lsb_to_index(&self) -> u8 {
-        // TODO Write intuition
+        // Intuition:
+        // - 0 + 1 is equivalent to negative sign, w/o Rust overflow, think of going in +/- direction starting from 0
+        // - X & -X isolates the LSB: think of bits below LSB, flip them, then +1 will chain add carry, ending at the LSB
+        // - Multiply by an isolated LSB is a right shift
+        // - All Debruijn sequence substrings are 1 to 1 to 0-63
+        // - Each unique isolated LSB will shift 1-to-1 to a unique Debruijn substring, which is 0-63; do another 1-to-1 map st.
+        //   traversing the board via LSB yields consecutive 0 to 63
         BITBOARD_PRESETS.debruijn_indices[(((self.0 & (!self.0 + 1)).wrapping_mul(BITBOARD_PRESETS.debruijn_sequence)) >> 58) as usize]
     }
 

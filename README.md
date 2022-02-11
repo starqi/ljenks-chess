@@ -1,11 +1,8 @@
 TODO
 
+- Did old eval's blind y-axis development make it look like it was playing properly? Square control -> queen moves...
 - Tests for evaluation
-- King traversal squares no longer works with new approach, test that castle can be blocked
 - LMR works but move ordering is probably bad
-    - Debug exact intuition
-- Evaluation using bitboards
-/ Bitboards
 - If checked, don't do second round of move tests
 / Promotion UI
 - En passant

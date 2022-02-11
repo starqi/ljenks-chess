@@ -2,17 +2,17 @@ mod evaluation;
 
 use std::collections::HashMap;
 use super::game::entities::*;
+use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::extern_funcs::now;
 use crate::{console_log};
-use evaluation::ValueBoard;
 
 pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
     temp_moves: MoveList,
-    temp_value_board: ValueBoard,
+    af_boards: AttackFromBoards,
     memo: HashMap<u64, MemoData>,
     q_memo: HashMap<u64, MemoData>,
     memo_hits: usize,
@@ -39,7 +39,7 @@ impl Ai {
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
             temp_moves: MoveList::new(50),
-            temp_value_board: ValueBoard::new(),
+            af_boards: AttackFromBoards::new(),
             memo: HashMap::new(),
             q_memo: HashMap::new(),
             memo_hits: 0,
@@ -125,7 +125,7 @@ impl Ai {
             self.show_tree_left_side = false;
 
             self.temp_moves.write_index = 0;
-            let eval = evaluation::evaluate(&self.test_board, &mut self.temp_moves, &mut self.temp_value_board);
+            let eval = evaluation::evaluate(&self.test_board, &mut self.af_boards);
 
             return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
 
@@ -309,7 +309,8 @@ impl Ai {
 
             let diff = i - moves_start;
             //let less_depth_amount = min((-((diff >= 5) as i8) as usize) & (diff >> 2), 2) as i8;
-            let less_depth_amount = ((-((diff >= 5) as i8) as usize) & 1) as i8;
+            //let less_depth_amount = ((-((diff >= 5) as i8) as usize) & 1) as i8;
+            let less_depth_amount = 0;
             
             let r = self.negamax_try_move(
                 remaining_depth - less_depth_amount, 

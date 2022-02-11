@@ -107,6 +107,7 @@ impl Board {
         RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
     }
 
+    /// Slow hash calculation from scratch, currently just for assertions
     pub fn calculate_hash(&self) -> u64 {
         let mut h: u64 = 0;
 
@@ -180,11 +181,6 @@ impl Board {
         Ok(self.get_by_xy(x as u8, y as u8))
     }
 
-    pub fn set(&mut self, file: char, rank: u8, s: Square) {
-        let Coord(x, y) = file_rank_to_xy(file, rank);
-        self.set_by_xy(x, y, s);
-    }
-
     #[inline]
     pub fn get_by_xy(&self, x: u8, y: u8) -> &Square {
         return &self.d[y as usize * 8 + x as usize];
@@ -195,8 +191,18 @@ impl Board {
         return &self.d[num as usize];
     }
 
+    #[cfg(test)]
+    pub fn set_test(&mut self, file: char, rank: u8, s: Square) {
+        self.set(file, rank, s);
+    }
+
+    fn set(&mut self, file: char, rank: u8, s: Square) {
+        let Coord(x, y) = file_rank_to_xy(file, rank);
+        self.set_by_xy(x, y, s);
+    }
+
     #[inline]
-    pub fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
+    fn set_by_xy(&mut self, x: u8, y: u8, s: Square) {
         self.set_by_index(y * 8 + x, s);
     }
 
@@ -444,12 +450,13 @@ impl Board {
         }
     }
 
+    /// Get moves for the current player
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
 
         let curr_player = self.get_player_with_turn();
 
         temp_moves.write_index = 0;
-        self.get_pseudo_moves(temp_moves);
+        self.get_pseudo_moves_for(curr_player, temp_moves);
  
         for i in 0..temp_moves.write_index {
             let m = &temp_moves.v()[i];
@@ -491,31 +498,63 @@ impl Board {
         })
     }
 
-    fn get_pseudo_moves_at(&self, ml: &mut MoveList, origin: FastCoord) {
-        let current_player = self.get_player_with_turn();
-        let curr_state = self.get_player_state(current_player);
-        let opponent_state = self.get_player_state(current_player.other_player());
+    pub fn rewrite_af_boards(&self, result: &mut AttackFromBoards) {
+        result.reset();
+        let mut piece_locs_clone = self.get_player_state(Player::White).piece_locs.clone();
+        piece_locs_clone.consume_loop_indices(|index| {
+            self.update_af_board_at(FastCoord(index), Player::White, result);
+        });
+        piece_locs_clone = self.get_player_state(Player::Black).piece_locs.clone();
+        piece_locs_clone.consume_loop_indices(|index| {
+            self.update_af_board_at(FastCoord(index), Player::Black, result);
+        });
+    }
+
+    /// Precondition: `origin` piece is `player`'s piece
+    fn update_af_board_at(&self, origin: FastCoord, player: Player, result: &mut AttackFromBoards) {
+        let curr_state = self.get_player_state(player);
+        let opponent_state = self.get_player_state(player.other_player());
 
         match self.get_by_index(origin.0) {
             Square::Occupied(Piece::Pawn, Player::White) => {
-                write_white_pawn_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+                update_white_pawn_af(origin, &opponent_state.piece_locs, result);
             }
             Square::Occupied(Piece::Pawn, Player::Black) => {
-                write_black_pawn_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+                update_black_pawn_af(origin, &opponent_state.piece_locs, result);
             }
-            Square::Occupied(Piece::Queen, _) => write_queen_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
-            Square::Occupied(Piece::Knight, _) => write_knight_moves(ml, origin, &curr_state.piece_locs),
-            Square::Occupied(Piece::King, _) => write_king_moves(ml, origin, &curr_state.piece_locs),
-            Square::Occupied(Piece::Bishop, _) => write_bishop_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
-            Square::Occupied(Piece::Rook, _) => write_rook_moves(ml, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Occupied(Piece::Queen, _) => update_queen_af(origin, &curr_state.piece_locs, &opponent_state.piece_locs, result),
+            Square::Occupied(Piece::Knight, _) => update_knight_af(origin, &curr_state.piece_locs, result),
+            Square::Occupied(Piece::King, _) => update_king_af(origin, &curr_state.piece_locs, result),
+            Square::Occupied(Piece::Bishop, _) => update_bishop_af(origin, &curr_state.piece_locs, &opponent_state.piece_locs, result),
+            Square::Occupied(Piece::Rook, _) => update_rook_af(origin, &curr_state.piece_locs, &opponent_state.piece_locs, result),
             Square::Blank => {}
         };
     }
 
-    pub fn get_pseudo_moves(&self, ml: &mut MoveList) {
-        let mut piece_locs_clone = self.get_player_state(self.get_player_with_turn()).piece_locs.clone();
+    fn get_pseudo_moves_at(&self, origin: FastCoord, player: Player, result: &mut MoveList) {
+        let curr_state = self.get_player_state(player);
+        let opponent_state = self.get_player_state(player.other_player());
+
+        match self.get_by_index(origin.0) {
+            Square::Occupied(Piece::Pawn, Player::White) => {
+                write_white_pawn_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+            }
+            Square::Occupied(Piece::Pawn, Player::Black) => {
+                write_black_pawn_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+            }
+            Square::Occupied(Piece::Queen, _) => write_queen_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Occupied(Piece::Knight, _) => write_knight_moves(result, origin, &curr_state.piece_locs),
+            Square::Occupied(Piece::King, _) => write_king_moves(result, origin, &curr_state.piece_locs),
+            Square::Occupied(Piece::Bishop, _) => write_bishop_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Occupied(Piece::Rook, _) => write_rook_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Blank => {}
+        };
+    }
+
+    pub fn get_pseudo_moves_for(&self, player: Player, result: &mut MoveList) {
+        let mut piece_locs_clone = self.get_player_state(player).piece_locs.clone();
         piece_locs_clone.consume_loop_indices(|index| {
-            self.get_pseudo_moves_at(ml, FastCoord(index));
+            self.get_pseudo_moves_at(FastCoord(index), player, result);
         });
     }
 
@@ -526,6 +565,11 @@ impl Board {
         for i in 0..8 {
             self.set_by_xy(i, 8 - rank, sq);
         }
+    }
+
+    #[cfg(test)]
+    pub fn set_uniform_row_test(&mut self, rank: u8, sq: Square) {
+        self.set_uniform_row(rank, sq);
     }
 
     fn set_main_row(&mut self, rank: u8, player: Player) {
@@ -557,10 +601,10 @@ mod test {
     fn board_eyeball_test() {
         let mut board = Board::new();
         board.set_uniform_row(2, Square::Blank);
-        board.set_uniform_row(5, Square::Blank);
+        board.set_uniform_row(7, Square::Blank);
 
         let mut ml = MoveList::new(100);
-        board.get_pseudo_moves_at(&mut ml, FastCoord::from_xy(0, 0));
+        board.get_pseudo_moves_at(FastCoord::from_xy(0, 0), Player::White, &mut ml);
 
         let mut b = Bitboard(0);
         for m in ml.v() {
@@ -569,5 +613,21 @@ mod test {
             }
         }
         println!("{}", b);
+    }
+
+    #[ignore]
+    #[test]
+    fn attacked_from_eyeball_test() {
+        let mut board = Board::new();
+        board.set_uniform_row(2, Square::Blank);
+        board.set_uniform_row(7, Square::Blank);
+
+        let mut af = AttackFromBoards::new();
+        board.rewrite_af_boards(&mut af);
+        for y in 0..8 {
+            for x in 0..8 {
+                println!("{},{}\n{}", x, y, af.data[y * 8 + x]);
+            }
+        }
     }
 }
