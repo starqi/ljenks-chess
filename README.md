@@ -1,18 +1,25 @@
 TODO
 
-- Did old eval's blind y-axis development make it look like it was playing properly? Square control -> queen moves...
-- Tests for evaluation
-- LMR works but move ordering is probably bad
-- If checked, don't do second round of move tests
-/ Promotion UI
-- En passant
-- Profiler? Necessary to spot any bottlenecks.
+- Use memo for 0 depth eval...
 - Fix quiescence BS
     - Why quiescence low NPS
     - Where's the eval
     - Intuition
     - Stop computing non-captures
     - Split off, no branches
+- Evaluation
+    - Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
+        - Should be able to make queen balanced like this, instead of 0
+    - Use a table for square importance
+        - Add king area to it
+    - Lots of tests
+    - Not done but now looks necessary: Pawn push but only in end game, pawn structure
+- Tests for evaluation
+- LMR works but move ordering is probably bad
+- If checked, don't do second round of move tests
+/ Promotion UI
+- En passant
+- Profiler? Necessary to spot any bottlenecks.
 - Faster coarser sort
 - Prune memo
 - Memo unit tests

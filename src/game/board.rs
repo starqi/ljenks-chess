@@ -67,6 +67,17 @@ impl Board {
         board
     }
 
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        let mut board = Self {
+            d: [Square::Blank; 64],
+            hash: 0,
+            player_with_turn: Player::White,
+            player_state: [PlayerState::new(), PlayerState::new()]
+        };
+        board
+    }
+
     pub fn stringify_move(&self, m: &MoveWithEval) -> String {
         match m.description() {
             MoveDescription::NormalMove(_from_coord, _to_coord) => {
