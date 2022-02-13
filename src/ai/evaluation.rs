@@ -58,6 +58,7 @@ fn evaluate_player(board: &Board, player: Player) -> i32 {
         if let Square::Occupied(piece, _) = board.get_by_index(index) {
             value += evaluate_piece(*piece);
 
+            // TODO Move to end game evaluation only
             //// Reward pawn push
             //let is_pawn_mask = -((*piece == Piece::Pawn) as i32);
             //value += is_pawn_mask & ((pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * 10);
@@ -132,6 +133,7 @@ mod test {
 
     use super::*;
 
+    #[ignore]
     #[test]
     fn control_eyeball_test() {
         let mut board = Board::empty();

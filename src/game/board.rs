@@ -52,6 +52,7 @@ impl Display for Board {
     }
 }
 
+/// Currently, manual board mutations (eg. set square) are only enabled for tests, no correctness guaranteed.
 impl Board {
     pub fn new() -> Self {
         let mut board = Self {
@@ -481,6 +482,38 @@ impl Board {
         self.try_write_castle(curr_player, CastleType::Ooo, result);
     }
 
+    // TODO Attack/check via castle is missing
+    pub fn get_checks_captures_for(&mut self, player: Player, temp_moves: &mut MoveList, result: &mut MoveList) {
+
+        let opponent = player.other_player();
+        let curr_state = self.get_player_state(player);
+        let opponent_state = self.get_player_state(opponent);
+
+        let curr_king_coord = FastCoord(curr_state.king_location._lsb_to_index());
+        let params = CheckCaptureParams {
+            curr_player_piece_locs: &curr_state.piece_locs,
+            opponent_piece_locs: &opponent_state.piece_locs,
+            king_potential_rook_atks: _write_rook_moves(curr_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
+            king_potential_bishop_atks: _write_bishop_moves(curr_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
+            king_potential_knight_atks: _write_knight_moves(curr_king_coord, &curr_state.piece_locs),
+            king_potential_pawn_atks: BITBOARD_PRESETS.pawn_captures[player as usize][curr_king_coord.0 as usize]
+        };
+
+        temp_moves.write_index = 0;
+        let mut curr_piece_locs_clone = curr_state.piece_locs.clone();
+        curr_piece_locs_clone.consume_loop_indices(|index| {
+            self.get_checks_captures_at(FastCoord(index), &params, result);
+        });
+ 
+        for i in 0..temp_moves.write_index {
+            let m = &temp_moves.v()[i];
+            let revertable = self.handle_move(m);
+            let is_checking = self.is_checking(self.get_player_with_turn());
+            self.revert_move(&revertable);
+            if !is_checking { result.write(m.clone()); }
+        }
+    }
+
     /// Precondition: `origin` piece is `player`'s piece
     fn is_checking_at(&self, player: Player, origin: FastCoord) -> bool {
         let state = self.get_player_state(player);
@@ -542,6 +575,7 @@ impl Board {
         };
     }
 
+    /// Precondition: `origin` piece is `player`'s piece
     fn get_pseudo_moves_at(&self, origin: FastCoord, player: Player, result: &mut MoveList) {
         let curr_state = self.get_player_state(player);
         let opponent_state = self.get_player_state(player.other_player());
@@ -558,6 +592,24 @@ impl Board {
             Square::Occupied(Piece::King, _) => write_king_moves(result, origin, &curr_state.piece_locs),
             Square::Occupied(Piece::Bishop, _) => write_bishop_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
             Square::Occupied(Piece::Rook, _) => write_rook_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Square::Blank => {}
+        };
+    }
+
+    /// Precondition: `origin` piece is `params` current player's piece
+    fn get_checks_captures_at(&self, origin: FastCoord, params: &CheckCaptureParams, result: &mut MoveList) {
+        match self.get_by_index(origin.0) {
+            Square::Occupied(Piece::Pawn, Player::White) => {
+                write_white_pawn_ccs(result, origin, &params);
+            }
+            Square::Occupied(Piece::Pawn, Player::Black) => {
+                write_black_pawn_ccs(result, origin, &params);
+            }
+            Square::Occupied(Piece::Queen, _) => write_queen_ccs(result, origin, params),
+            Square::Occupied(Piece::Knight, _) => write_knight_ccs(result, origin, params),
+            Square::Occupied(Piece::King, _) => write_king_captures(result, origin, params.curr_player_piece_locs, params.opponent_piece_locs),
+            Square::Occupied(Piece::Bishop, _) => write_bishop_ccs(result, origin, params),
+            Square::Occupied(Piece::Rook, _) => write_rook_ccs(result, origin, params),
             Square::Blank => {}
         };
     }

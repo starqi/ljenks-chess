@@ -271,7 +271,8 @@ impl Ai {
         for i in (moves_start..moves_end_exclusive).rev() {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
-            let diff = i - moves_start;
+            //FIXME
+            //let diff = i - moves_start;
             //let less_depth_amount = min((-((diff >= 5) as i8) as usize) & (diff >> 2), 2) as i8;
             //let less_depth_amount = ((-((diff >= 5) as i8) as usize) & 1) as i8;
             let less_depth_amount = 0;

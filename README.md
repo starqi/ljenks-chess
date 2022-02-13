@@ -1,6 +1,5 @@
 TODO
 
-- Use memo for 0 depth eval...
 - Fix quiescence BS
     - Why quiescence low NPS
     - Where's the eval
@@ -12,8 +11,11 @@ TODO
         - Should be able to make queen balanced like this, instead of 0
     - Use a table for square importance
         - Add king area to it
+    - Castle bonus
     - Lots of tests
-    - Not done but now looks necessary: Pawn push but only in end game, pawn structure
+    - Pawn push but only in end game
+    - Pawn structure
+    - Piece synergy
 - Tests for evaluation
 - LMR works but move ordering is probably bad
 - If checked, don't do second round of move tests

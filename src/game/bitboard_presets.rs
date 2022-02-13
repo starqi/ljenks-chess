@@ -6,15 +6,15 @@ pub enum RayDirection {
 }
 
 pub struct BitboardPresets {
-    /// Index = `RayDirection` enum order
+    /// First index = `RayDirection` enum order
     pub rays: [[Bitboard; 64]; 8],
     pub knight_jumps: [Bitboard; 64],
-    /// Array index = `Player` enum order
+    /// First index = `Player` enum order
     pub pawn_pushes: [[Bitboard; 64]; 2],
-    /// Array index = `Player` enum order
+    /// First index = `Player` enum order
     pub pawn_captures: [[Bitboard; 64]; 2],
     pub king_moves: [Bitboard; 64],
-    /// Array index = LSB, MSB
+    /// Index = LSB, MSB
     pub ensure_blocker: [Bitboard; 2],
     pub debruijn_indices: [u8; 64],
     pub debruijn_sequence: u64
@@ -34,6 +34,7 @@ impl BitboardPresets {
             ensure_blocker: [Bitboard(1u64 << 63), Bitboard(1)],
 
             // Use existing sequence but convert to index 0 = a8, https://www.chessprogramming.org/BitScan#De_Bruijn_Multiplication
+            // TODO Obviously their solution is better because it does not require the - 63 operation
             debruijn_indices: [63, 62, 15, 61, 6, 14, 35, 60, 2, 5, 13, 21, 25, 34, 46, 59, 1, 8, 4, 27, 10, 12, 20, 41, 18, 24, 30, 33, 39, 45, 51, 58, 0, 16, 7, 36, 3, 22, 26, 47, 9, 28, 11, 42, 19, 31, 40, 52, 17, 37, 23, 48, 29, 43, 32, 53, 38, 49, 44, 54, 50, 55, 56, 57],
             debruijn_sequence: 0x03f79d71b4cb0a89
         }
