@@ -17,7 +17,6 @@ pub struct Ai {
     q_memo: HashMap<u64, MemoData>,
     memo_hits: usize,
     fast_found_hits: usize,
-    show_tree_left_side: bool,
     node_counter: u32
 }
 
@@ -44,7 +43,6 @@ impl Ai {
             q_memo: HashMap::new(),
             memo_hits: 0,
             fast_found_hits: 0,
-            show_tree_left_side: false,
             node_counter: 0
         }
     }
@@ -68,7 +66,6 @@ impl Ai {
         let start_ms = now();
         for d in (1i8..=depth).step_by(2) {
             console_log!("\nBegin depth {}", d);
-            self.show_tree_left_side = true;
             unsafe {
                 self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
             }
@@ -109,8 +106,58 @@ impl Ai {
         }
     }
 
-    fn qsearch(&mut self) -> i32 {
-        0
+    fn find_memo_score(&mut self, remaining_depth: i8, alpha: i32, beta: i32) -> (Option<&MemoType>, Option<i32>) {
+        if let Some(MemoData(saved_num, saved_depth, memo_type)) = self.memo.get(&self.test_board.get_hash()) {
+
+            // If the memoized move has the precision we want, use its score
+            if *saved_depth >= remaining_depth {
+                match memo_type {
+                    MemoType::Low(_) => {
+                        if *saved_num <= alpha {
+                            self.memo_hits += 1;
+                            return (Some(memo_type), Some(alpha));
+                        }
+                    },
+                    MemoType::High(_) => {
+                        if *saved_num >= beta { 
+                            self.memo_hits += 1;
+                            return (Some(memo_type), Some(beta));
+                        }
+                    },
+                    MemoType::Exact(_) => {
+                        self.memo_hits += 1;
+
+                        if *saved_num < alpha {
+                            return (Some(memo_type), Some(alpha)); 
+                        } else if *saved_num > beta {
+                            return (Some(memo_type), Some(beta)); 
+                        } else {
+                            return (Some(memo_type), Some(*saved_num)); 
+                        }
+                    }
+                };
+            }; 
+
+            (Some(memo_type), None)
+        } else {
+            (None, None)
+        }
+    }
+
+    fn qsearch(
+        &mut self,
+        remaining_depth_opt: i8,
+        alpha: i32,
+        beta: i32,
+        moves_start: usize
+    ) -> i32 {
+        let score = if let (_, Some(adjusted_score)) = self.find_memo_score(0, alpha, beta) {
+            adjusted_score
+        } else {
+            evaluation::evaluate(&self.test_board, &mut self.af_boards)
+        };
+
+        return Self::cap(self.test_board.get_player_with_turn().multiplier() * score, alpha, beta);
     }
 
     /// Will assume ownership over all move list elements from `moves_start`
@@ -125,17 +172,10 @@ impl Ai {
         self.node_counter += 1;
 
         if remaining_depth <= 0 {
-            self.show_tree_left_side = false;
 
-            self.temp_moves.write_index = 0;
-            let eval = evaluation::evaluate(&self.test_board, &mut self.af_boards);
-
-            return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
-
-
+            return self.qsearch(10, alpha, beta, moves_start);
             /*
             if quiescence {
-                self.show_tree_left_side = false;
                 let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
                 return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
             } else {
@@ -153,91 +193,54 @@ impl Ai {
 
         const NEW_ALPHA_I_NEVER_SET: i32 = -1;
         const NEW_ALPHA_I_HASH_MOVE: i32 = -2;
+
         let mut new_alpha_i: i32 = NEW_ALPHA_I_NEVER_SET;
         // When `new_alpha_i` is `NEW_ALPHA_I_HASH_MOVE`, the hash move can be found here
         let mut hash_move: Option<MoveWithEval> = None;
 
-        {
-            let memo = {
-                let _memo: Option<&MemoData> = self.memo.get(&self.test_board.get_hash());
-                _memo.map(|x| x.clone())
-            };
+        match self.find_memo_score(remaining_depth, alpha, beta) {
+            (_, Some(adjusted_score)) => { // Use memoized move
+                return adjusted_score;
+            },
+            (Some(memo_type), None) => { // Memoized move is not precise enough, try using it as the first best move
 
-            if let Some(MemoData(saved_num, saved_depth, t)) = memo {
-
-                // Using the memo, try to completely avoid any computation for this call
-                if saved_depth >= remaining_depth {
-                    let r = saved_num;
-                    match t {
-                        MemoType::Low(_) => {
-                            if r <= alpha {
-                                self.memo_hits += 1;
-                                self.show_tree_left_side = false;
-                                return alpha;
-                            }
-                        },
-                        MemoType::High(_) => {
-                            if r >= beta { 
-                                self.memo_hits += 1;
-                                self.show_tree_left_side = false;
-                                return beta; 
-                            }
-                        },
-                        MemoType::Exact(_) => {
-                            self.memo_hits += 1;
-                            self.show_tree_left_side = false;
-
-                            if r < alpha { return alpha; }
-                            else if r > beta { return beta; }
-                            else { return r; }
-                        }
-                    };
-                }
-
-                // At this point, cannot simply use memoized result.
-                // Get PV or refutation move from memo, try it out at full depth before computing move generation,
-                // and either beta cut off or use as candidate-to-beat among rest of moves after move generation.
-                let best_move: Option<MoveWithEval> = match t {
-                    MemoType::Exact(m) | MemoType::High(m) => Some(m),
-                    _ => None
+                // Clone the move, unlike if the move is on move list, because memo updates will overwrite the same memory. Also, we can move it into the memo.
+                let move_clone = if let MemoType::Exact(m) | MemoType::High(m) = memo_type {
+                    Some(m.clone())
+                } else {
+                    // (1) For fail low memo entries, currently the move is a random move so we can't use it as the best move (but it doesn't have to be that way TODO)
+                    None
                 };
 
-                if let Some(m) = best_move {
-
-                    if self.show_tree_left_side {
-                        console_log!("L = {} (Hash)", self.test_board.stringify_move(&m));
-                    }
-
-                    match self.negamax_try_move(remaining_depth, alpha, false, beta, &m, moves_start) {
-                        SingleMoveResult::BetaCutOff(max_this) => {
+                if let Some(m) = move_clone {
+                    match self.negamax_try_move(remaining_depth, alpha, true, beta, &m, moves_start) {
+                        SingleMoveResult::BetaCutOff(score) => {
                             self.memo.insert(
                                 self.test_board.get_hash(),
-                                MemoData(max_this, remaining_depth, MemoType::High(m))
+                                MemoData(score, remaining_depth, MemoType::High(m))
                             );
-                            self.show_tree_left_side = false;
                             return beta;
                         },
-                        SingleMoveResult::NewAlpha(max_this) => {
+                        SingleMoveResult::NewAlpha(score) => {
                             // The move loop below will begin not with the alpha provided from caller,
-                            // but with the proven better alpha re-examined at full depth from the memo, which is also an exact score
-                            alpha = max_this;
+                            // but with the proven better alpha re-examined at full depth from the memo, which is also an exact score.
+                            alpha = score;
                             new_alpha_i = NEW_ALPHA_I_HASH_MOVE;
                             hash_move = Some(m);
                         },
                         SingleMoveResult::NoEffect => {
-                            // The memoized move was not very good after examining it full depth
+                            // The memoized move was not very good after examining it full depth, begin normal loop through moves.
                         }
                     };
                 }
-            }
-        }
+            },
+            _ => {}
+        };
 
-        // Generate moves
+        // Generate moves and order
         self.moves_buf.write_index = moves_start;
         self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
-
-        // Order by memoized evaluations, then by aggression heuristic
         for i in moves_start..moves_end_exclusive {
 
             let m = self.moves_buf.get_mutable_snapshot(i);
@@ -257,19 +260,13 @@ impl Ai {
         }
 
         if moves_start == moves_end_exclusive {
-            self.show_tree_left_side = false;
             return self.get_no_moves_eval(alpha, beta);
         }
-        //evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
 
+        //FIXME
+        //evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
         evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
-
-        if self.show_tree_left_side {
-            if new_alpha_i != NEW_ALPHA_I_HASH_MOVE {
-                console_log!("L = {}", self.test_board.stringify_move(&self.moves_buf.v()[moves_end_exclusive - 1]));
-            }
-        }
 
         for i in (moves_start..moves_end_exclusive).rev() {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
@@ -296,7 +293,6 @@ impl Ai {
                     self.test_board.get_hash(),
                     MemoData(max_this, remaining_depth, MemoType::High((*m).clone()))
                 );
-                self.show_tree_left_side = false;
                 return beta;
             }
         }
@@ -312,6 +308,7 @@ impl Ai {
                 MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()))
             );
         } else {
+            // See (1)
             self.memo.insert(
                 self.test_board.get_hash(),
                 MemoData(alpha, remaining_depth, MemoType::Low(self.moves_buf.v()[0].clone()))
@@ -320,8 +317,8 @@ impl Ai {
         alpha
     }
 
+    /// Unsafe purpose: allow reference to `m` while the move list holding it is being mutated, trusting proper management of move list subsets.
     unsafe fn negamax_try_move(
-        // Unsafe to allow `m` and `self` be aliases
         &mut self,
         remaining_depth: i8,
         alpha: i32,
@@ -336,8 +333,13 @@ impl Ai {
         let mut fast_found = false;
 
         if is_alpha_exact_eval {
-            // PVS idea - Do a fast boolean check that the current best move with score alpha is really the best.
-            // If we always bet correctly, then the second more expensive negamax below is always avoided.
+
+            // PVS intuition - Bet on the current best move staying the best move. If it's a good bet,
+            // normal alpha-beta would likely fail low - alpha is not incremented - so for speed, we move up the -beta argument
+            // to as close to alpha as possible -alpha - 1, for a faster/narrower window, and this doesn't change the result
+            // as long as the best move stays the best. 
+            // If wrong, then we need to do another full search to satisfy the contract of providing a proper score between alpha and beta.
+
             fast_found_max_this = -self.negamax(remaining_depth - 1, -alpha - 1, -alpha, moves_start);
             if fast_found_max_this <= alpha {
                 fast_found = true;
