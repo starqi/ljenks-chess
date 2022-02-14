@@ -271,7 +271,7 @@ fn _write_pawn_captures(
     Bitboard(BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs.0)
 }
 
-// Not public, don't expose `slide_push_blockers` internals
+// Not public, don't expose `slide_push_blockers` internal,
 #[inline]
 fn _write_pawn_moves(
     origin: FastCoord,

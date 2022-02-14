@@ -204,11 +204,7 @@ impl Board {
     }
 
     #[cfg(test)]
-    pub fn set_test(&mut self, file: char, rank: u8, s: Square) {
-        self.set(file, rank, s);
-    }
-
-    fn set(&mut self, file: char, rank: u8, s: Square) {
+    pub fn set(&mut self, file: char, rank: u8, s: Square) {
         let Coord(x, y) = file_rank_to_xy(file, rank);
         self.set_by_xy(x, y, s);
     }
@@ -489,14 +485,14 @@ impl Board {
         let curr_state = self.get_player_state(player);
         let opponent_state = self.get_player_state(opponent);
 
-        let curr_king_coord = FastCoord(curr_state.king_location._lsb_to_index());
+        let opponent_king_coord = FastCoord(opponent_state.king_location._lsb_to_index());
         let params = CheckCaptureParams {
             curr_player_piece_locs: &curr_state.piece_locs,
             opponent_piece_locs: &opponent_state.piece_locs,
-            king_potential_rook_atks: _write_rook_moves(curr_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
-            king_potential_bishop_atks: _write_bishop_moves(curr_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
-            king_potential_knight_atks: _write_knight_moves(curr_king_coord, &curr_state.piece_locs),
-            king_potential_pawn_atks: BITBOARD_PRESETS.pawn_captures[player as usize][curr_king_coord.0 as usize]
+            king_potential_rook_atks: _write_rook_moves(opponent_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
+            king_potential_bishop_atks: _write_bishop_moves(opponent_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
+            king_potential_knight_atks: _write_knight_moves(opponent_king_coord, &curr_state.piece_locs),
+            king_potential_pawn_atks: BITBOARD_PRESETS.pawn_captures[opponent as usize][opponent_king_coord.0 as usize]
         };
 
         temp_moves.write_index = 0;
@@ -690,6 +686,55 @@ mod test {
         for y in 0..8 {
             for x in 0..8 {
                 println!("{},{}\n{}", x, y, af.data[y * 8 + x]);
+            }
+        }
+    }
+
+    #[ignore]
+    #[test]
+    fn cc_eyeball_test() {
+        let mut board = Board::new();
+        board.set_uniform_row(2, Square::Blank);
+        board.set_uniform_row(7, Square::Blank);
+        board.set('a', 2, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set('d', 3, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set('f', 3, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set('e', 3, Square::Occupied(Piece::Pawn, Player::Black));
+
+        let mut temp = MoveList::new(100);
+        let mut result = MoveList::new(100);
+        board.get_checks_captures_for(Player::Black, &mut temp, &mut result);
+
+        for m in result.v() {
+            if let MoveDescription::NormalMove(_from, _to) = m.description() {
+                let mut b = Bitboard(0);
+                b.set_index(_from.0);
+                b.set_index(_to.0);
+                println!("{}", b);
+            }
+        }
+    }
+
+    #[ignore]
+    #[test]
+    fn cc_eyeball_test2() {
+        let mut board = Board::empty();
+        board.set('d', 2, Square::Occupied(Piece::Pawn, Player::White));
+        board.set('e', 5, Square::Occupied(Piece::King, Player::Black));
+        board.set('a', 1, Square::Occupied(Piece::King, Player::White));
+        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(0, 7).0);
+        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(4, 3).0);
+
+        let mut temp = MoveList::new(10);
+        let mut result = MoveList::new(10);
+        board.get_checks_captures_for(Player::White, &mut temp, &mut result);
+
+        for m in result.v() {
+            if let MoveDescription::NormalMove(_from, _to) = m.description() {
+                let mut b = Bitboard(0);
+                b.set_index(_from.0);
+                b.set_index(_to.0);
+                println!("{}", b);
             }
         }
     }
