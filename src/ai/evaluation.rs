@@ -138,7 +138,7 @@ mod test {
     fn control_eyeball_test() {
         let mut board = Board::empty();
         let mut af = AttackFromBoards::new();
-        board.set('d', 4, Square::Occupied(Piece::Queen, Player::White));
+        board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Queen, Player::White));
         println!("{}", calculate_control(&board, &mut af));
     }
 
@@ -152,16 +152,16 @@ mod test {
         let mut white_control_surplus = calculate_control(&board, &mut af);
         assert_eq!(white_control_surplus, 0);
 
-        board.set('d', 1, Square::Blank);
-        board.set('a', 1, Square::Blank);
+        board.set_by_file_rank_test('d', 1, Square::Blank);
+        board.set_by_file_rank_test('a', 1, Square::Blank);
         white_control_surplus = calculate_control(&board, &mut af);
         println!("a {}", white_control_surplus);
         assert!(white_control_surplus < 0);
 
-        board.set('d', 8, Square::Blank);
-        board.set('a', 8, Square::Blank);
-        board.set('g', 8, Square::Blank);
-        board.set('b', 8, Square::Blank);
+        board.set_by_file_rank_test('d', 8, Square::Blank);
+        board.set_by_file_rank_test('a', 8, Square::Blank);
+        board.set_by_file_rank_test('g', 8, Square::Blank);
+        board.set_by_file_rank_test('b', 8, Square::Blank);
         white_control_surplus = calculate_control(&board, &mut af);
         println!("b {}", white_control_surplus);
         assert!(white_control_surplus > 0);

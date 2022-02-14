@@ -68,7 +68,6 @@ impl Board {
         board
     }
 
-    #[cfg(test)]
     pub fn empty() -> Self {
         let mut board = Self {
             d: [Square::Blank; 64],
@@ -77,6 +76,11 @@ impl Board {
             player_state: [PlayerState::new(), PlayerState::new()]
         };
         board
+    }
+
+    #[cfg(test)]
+    pub fn empty_test() -> Self {
+        Self::empty()
     }
 
     pub fn stringify_move(&self, m: &MoveWithEval) -> String {
@@ -183,7 +187,7 @@ impl Board {
     //////////////////////////////////////////////////
     // Get set squares
 
-    pub fn get_safe(&self, file: char, rank: u8) -> Result<&Square, Error> {
+    pub fn get_by_file_rank_safe(&self, file: char, rank: u8) -> Result<&Square, Error> {
         let Coord(x, y) = file_rank_to_xy_safe(file, rank)?;
         Ok(self.get_by_xy(x, y))
     }
@@ -203,10 +207,14 @@ impl Board {
         return &self.d[num as usize];
     }
 
-    #[cfg(test)]
-    pub fn set(&mut self, file: char, rank: u8, s: Square) {
+    fn set_by_file_rank(&mut self, file: char, rank: u8, s: Square) {
         let Coord(x, y) = file_rank_to_xy(file, rank);
         self.set_by_xy(x, y, s);
+    }
+
+    #[cfg(test)]
+    pub fn set_by_file_rank_test(&mut self, file: char, rank: u8, s: Square) {
+        self.set_by_file_rank(file, rank, s);
     }
 
     #[inline]
@@ -632,14 +640,14 @@ impl Board {
     }
 
     fn set_main_row(&mut self, rank: u8, player: Player) {
-        self.set('a', rank, Square::Occupied(Piece::Rook, player));
-        self.set('b', rank, Square::Occupied(Piece::Knight, player));
-        self.set('c', rank, Square::Occupied(Piece::Bishop, player));
-        self.set('d', rank, Square::Occupied(Piece::Queen, player));
-        self.set('e', rank, Square::Occupied(Piece::King, player));
-        self.set('f', rank, Square::Occupied(Piece::Bishop, player));
-        self.set('g', rank, Square::Occupied(Piece::Knight, player));
-        self.set('h', rank, Square::Occupied(Piece::Rook, player));
+        self.set_by_file_rank('a', rank, Square::Occupied(Piece::Rook, player));
+        self.set_by_file_rank('b', rank, Square::Occupied(Piece::Knight, player));
+        self.set_by_file_rank('c', rank, Square::Occupied(Piece::Bishop, player));
+        self.set_by_file_rank('d', rank, Square::Occupied(Piece::Queen, player));
+        self.set_by_file_rank('e', rank, Square::Occupied(Piece::King, player));
+        self.set_by_file_rank('f', rank, Square::Occupied(Piece::Bishop, player));
+        self.set_by_file_rank('g', rank, Square::Occupied(Piece::Knight, player));
+        self.set_by_file_rank('h', rank, Square::Occupied(Piece::Rook, player));
     }
 
     fn set_standard_rows(&mut self) {
@@ -696,10 +704,10 @@ mod test {
         let mut board = Board::new();
         board.set_uniform_row(2, Square::Blank);
         board.set_uniform_row(7, Square::Blank);
-        board.set('a', 2, Square::Occupied(Piece::Pawn, Player::Black));
-        board.set('d', 3, Square::Occupied(Piece::Pawn, Player::Black));
-        board.set('f', 3, Square::Occupied(Piece::Pawn, Player::Black));
-        board.set('e', 3, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set_by_file_rank_test('a', 2, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set_by_file_rank_test('d', 3, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set_by_file_rank_test('f', 3, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set_by_file_rank_test('e', 3, Square::Occupied(Piece::Pawn, Player::Black));
 
         let mut temp = MoveList::new(100);
         let mut result = MoveList::new(100);
@@ -719,9 +727,9 @@ mod test {
     #[test]
     fn cc_eyeball_test2() {
         let mut board = Board::empty();
-        board.set('d', 2, Square::Occupied(Piece::Pawn, Player::White));
-        board.set('e', 5, Square::Occupied(Piece::King, Player::Black));
-        board.set('a', 1, Square::Occupied(Piece::King, Player::White));
+        board.set_by_file_rank_test('d', 2, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('e', 5, Square::Occupied(Piece::King, Player::Black));
+        board.set_by_file_rank_test('a', 1, Square::Occupied(Piece::King, Player::White));
         board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(0, 7).0);
         board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(4, 3).0);
 

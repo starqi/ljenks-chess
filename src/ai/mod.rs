@@ -106,6 +106,8 @@ impl Ai {
         }
     }
 
+    /// First tuple entry = the memoized result if any
+    /// Second tuple entry = if this value exists, we can stop recursing because the full result is memoized, including the score sign
     fn find_memo_score(&mut self, remaining_depth: i8, alpha: i32, beta: i32) -> (Option<&MemoType>, Option<i32>) {
         if let Some(MemoData(saved_num, saved_depth, memo_type)) = self.memo.get(&self.test_board.get_hash()) {
 
@@ -144,20 +146,61 @@ impl Ai {
         }
     }
 
-    fn qsearch(
+    unsafe fn qsearch(
         &mut self,
         remaining_depth_opt: i8,
-        alpha: i32,
+        mut alpha: i32,
         beta: i32,
         moves_start: usize
     ) -> i32 {
+
+        self.node_counter += 1;
+        // Evaluation is always maximizing for white. Black is also maximizing, so whenever it's black's turn, black's 'score definition" is negative of white's score definition.
+        let score_multiplier = self.test_board.get_player_with_turn().multiplier();
+
         let score = if let (_, Some(adjusted_score)) = self.find_memo_score(0, alpha, beta) {
-            adjusted_score
+            return adjusted_score; // No score multiplier necessary
         } else {
-            evaluation::evaluate(&self.test_board, &mut self.af_boards)
+            score_multiplier * evaluation::evaluate(&self.test_board, &mut self.af_boards)
         };
 
-        return Self::cap(self.test_board.get_player_with_turn().multiplier() * score, alpha, beta);
+        if remaining_depth_opt <= 0 { return score; }
+
+        // Intuition: If static evaluation is >= beta, and pretending zugzwang doesn't apply, we stop searching assuming 
+        // more free moves will make score go even higher, despite unstable captures still existing.
+        if score >= beta { return beta; }
+
+        // Intuition: Same as beta, if static eval is X, given a free move, we expect it to be > X. Of course, if this assumption is wrong and score < X,
+        // then we are lying in that the returned score is exact because above initial alpha, but it's not true.
+        if score > alpha { alpha = score; }
+
+        // Generate moves and order
+        self.moves_buf.write_index = moves_start;
+        self.test_board.get_checks_captures_for(self.test_board.get_player_with_turn(), &mut self.temp_moves, &mut self.moves_buf);
+        let moves_end_exclusive = self.moves_buf.write_index;
+        if moves_start == moves_end_exclusive { return score; }
+
+        evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
+        self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
+
+        for i in (moves_start..moves_end_exclusive).rev() {
+            let m: *const MoveWithEval = &self.moves_buf.v()[i];
+            let revertable = self.test_board.handle_move(&*m);
+
+            let r = -self.qsearch(
+                remaining_depth_opt - 1, 
+                -beta,
+                -alpha,
+                moves_end_exclusive
+            );
+
+            self.test_board.revert_move(&revertable);
+
+            if r >= beta { return beta; }
+            if r > alpha { alpha = score; }
+        }
+
+        alpha
     }
 
     /// Will assume ownership over all move list elements from `moves_start`
@@ -169,27 +212,12 @@ impl Ai {
         beta: i32,
         moves_start: usize
     ) -> i32 {
-        self.node_counter += 1;
 
         if remaining_depth <= 0 {
-
             return self.qsearch(10, alpha, beta, moves_start);
-            /*
-            if quiescence {
-                let eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
-                return Self::cap(self.test_board.get_player_with_turn().multiplier() * eval, alpha, beta);
-            } else {
-                let mut eval = evaluation::evaluate(&self.test_board, &mut self.eval_temp_arr);
-                eval = self.test_board.get_player_with_turn().multiplier() * eval;
-
-                // Typical quiescence pruning (TODO review)
-                if eval >= beta { return beta; }
-                if eval > alpha { alpha = eval; }
-
-                return self.negamax(3, true, alpha, beta, moves_start);
-            }
-            */
         }
+
+        self.node_counter += 1;
 
         const NEW_ALPHA_I_NEVER_SET: i32 = -1;
         const NEW_ALPHA_I_HASH_MOVE: i32 = -2;
@@ -213,7 +241,8 @@ impl Ai {
                 };
 
                 if let Some(m) = move_clone {
-                    match self.negamax_try_move(remaining_depth, alpha, true, beta, &m, moves_start) {
+                    // Reminder: No null window, because this is our best move candidate, hence it is not expected to fail low
+                    match self.negamax_try_move(remaining_depth, alpha, false, beta, &m, moves_start) {
                         SingleMoveResult::BetaCutOff(score) => {
                             self.memo.insert(
                                 self.test_board.get_hash(),
@@ -241,6 +270,9 @@ impl Ai {
         self.moves_buf.write_index = moves_start;
         self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
+
+        // FIXME
+        /*
         for i in moves_start..moves_end_exclusive {
 
             let m = self.moves_buf.get_mutable_snapshot(i);
@@ -249,8 +281,8 @@ impl Ai {
 
             const BIG_NUMBER: i32 = 10000;
             const EVAL_UPPER_BOUND: i32 = 99999;
-            let r = if let Some(MemoData(opponent_max_this, _, MemoType::Exact(_))) = memo {
-                -*opponent_max_this * BIG_NUMBER
+            let r = if let Some(MemoData(opponent_score, _, MemoType::Exact(_))) = memo {
+                -*opponent_score * BIG_NUMBER
             } else {
                 -EVAL_UPPER_BOUND * BIG_NUMBER
             };
@@ -258,6 +290,7 @@ impl Ai {
             self.test_board.revert_move(&revertable);
             (*m).1 = r;
         }
+        */
 
         if moves_start == moves_end_exclusive {
             return self.get_no_moves_eval(alpha, beta);
@@ -286,13 +319,13 @@ impl Ai {
                 moves_end_exclusive
             );
 
-            if let SingleMoveResult::NewAlpha(max_this) = r {
-                alpha = max_this;
+            if let SingleMoveResult::NewAlpha(score) = r {
+                alpha = score;
                 new_alpha_i = i as i32;
-            } else if let SingleMoveResult::BetaCutOff(max_this) = r {
+            } else if let SingleMoveResult::BetaCutOff(score) = r {
                 self.memo.insert(
                     self.test_board.get_hash(),
-                    MemoData(max_this, remaining_depth, MemoType::High((*m).clone()))
+                    MemoData(score, remaining_depth, MemoType::High((*m).clone()))
                 );
                 return beta;
             }
@@ -315,6 +348,7 @@ impl Ai {
                 MemoData(alpha, remaining_depth, MemoType::Low(self.moves_buf.v()[0].clone()))
             );
         }
+
         alpha
     }
 
@@ -323,56 +357,45 @@ impl Ai {
         &mut self,
         remaining_depth: i8,
         alpha: i32,
-        is_alpha_exact_eval: bool,
+        do_null_window: bool,
         beta: i32,
         m: *const MoveWithEval,
         moves_start: usize
     ) -> SingleMoveResult {
         let revertable = self.test_board.handle_move(&*m);
 
-        let mut fast_found_max_this: i32 = 0;
+        let mut fast_found_score: i32 = 0;
         let mut fast_found = false;
 
-        if is_alpha_exact_eval {
+        if do_null_window {
 
-            // PVS intuition - Bet on the current best move staying the best move. If it's a good bet,
-            // normal alpha-beta would likely fail low - alpha is not incremented - so for speed, we move up the -beta argument
-            // to as close to alpha as possible -alpha - 1, for a faster/narrower window, and this doesn't change the result
-            // as long as the best move stays the best. 
-            // If wrong, then we need to do another full search to satisfy the contract of providing a proper score between alpha and beta.
+            // PVS intuition
+            // In the ideal alpha-beta setup, the first move is the best move, set a new alpha and no new alpha is set again.
+            // In this case, we do the same alpha-beta (no null window) for the first move, followed by as small a window as possible
+            // for subsequent moves (faster), betting on fail-lows. (If we do null window on first move, then it'll frequently re-search.)
 
-            fast_found_max_this = -self.negamax(remaining_depth - 1, -alpha - 1, -alpha, moves_start);
-            if fast_found_max_this <= alpha {
+            fast_found_score = -self.negamax(remaining_depth - 1, -alpha - 1, -alpha, moves_start);
+            if fast_found_score <= alpha {
                 fast_found = true;
                 self.fast_found_hits += 1;
             }
         } 
 
-        let max_this = if fast_found {
-            fast_found_max_this
+        let score = if fast_found {
+            fast_found_score
         } else {
             -self.negamax(remaining_depth - 1, -beta, -alpha, moves_start)
         };
 
         self.test_board.revert_move(&revertable);
 
-        if max_this >= beta {
-            SingleMoveResult::BetaCutOff(max_this)
-        } else if max_this > alpha {
-            SingleMoveResult::NewAlpha(max_this)
+        if score >= beta {
+            SingleMoveResult::BetaCutOff(score)
+        } else if score > alpha {
+            SingleMoveResult::NewAlpha(score)
         } else {
             SingleMoveResult::NoEffect
         }
-    }
-
-    fn is_unstable_move(&self, m: &MoveWithEval) -> bool {
-        self.test_board.is_capture(m)
-    }
-
-    fn cap(r: i32, alpha: i32, beta: i32) -> i32 {
-        if r <= alpha { return alpha; }
-        else if r >= beta { return beta; }
-        else { return r; }
     }
 
     fn get_no_moves_eval(&mut self, alpha: i32, beta: i32) -> i32 {
@@ -380,7 +403,9 @@ impl Ai {
         if self.test_board.is_checking(checking_player) {
             return alpha;
         } else {
-            return Self::cap(0, alpha, beta);
+            if 0 <= alpha { return alpha; }
+            else if 0 >= beta { return beta; }
+            else { return 0; }
         }
     }
 }
