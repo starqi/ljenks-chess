@@ -14,10 +14,12 @@ pub struct Ai {
     temp_moves: MoveList,
     af_boards: AttackFromBoards,
     memo: HashMap<u64, MemoData>,
-    q_memo: HashMap<u64, MemoData>,
     memo_hits: usize,
     fast_found_hits: usize,
-    node_counter: u32
+    node_counter: u64,
+    start_ms: u128,
+    ms_till_terminate: u128,
+    terminated: bool
 }
 
 enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
@@ -40,10 +42,12 @@ impl Ai {
             temp_moves: MoveList::new(50),
             af_boards: AttackFromBoards::new(),
             memo: HashMap::new(),
-            q_memo: HashMap::new(),
             memo_hits: 0,
             fast_found_hits: 0,
-            node_counter: 0
+            node_counter: 0,
+            start_ms: 0,
+            ms_till_terminate: 5000,
+            terminated: false
         }
     }
 
@@ -59,11 +63,13 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, depth: i8, real_board: &mut Board) {
+    pub fn make_move(&mut self, depth: i8, ms_till_terminate: u128, real_board: &mut Board) {
 
         self.test_board.clone_from(real_board);
 
-        let start_ms = now();
+        self.start_ms = now();
+        self.ms_till_terminate = ms_till_terminate;
+        self.terminated = false;
         for d in (1i8..=depth).step_by(2) {
             console_log!("\nBegin depth {}", d);
             unsafe {
@@ -75,6 +81,11 @@ impl Ai {
                 console_log!("{}, {}", self.test_board.stringify_move(m), e);
             } else {
                 console_log!("No leading move");
+            }
+
+            if self.terminated { 
+                console_log!("Terminated due to time");
+                break; 
             }
         }
 
@@ -89,14 +100,13 @@ impl Ai {
         } else {
             console_log!("No move");
         }
-        console_log!("Memo hits - {}, size - {} / q - {}, fast found - {}", self.memo_hits, self.memo.len(), self.q_memo.len(), self.fast_found_hits);
-        console_log!("NPS - {}", (self.node_counter as f64 / ((now() - start_ms) as f64 / 1000.)).round());
+        console_log!("Memo hits - {}, size - {}, fast found - {}", self.memo_hits, self.memo.len(), self.fast_found_hits);
+        console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
 
         self.node_counter = 0;
         self.memo_hits = 0;
         self.fast_found_hits = 0;
         self.memo.clear();
-        self.q_memo.clear();
     }
 
     fn assert_king_pos(&self, player: Player) {
@@ -104,6 +114,28 @@ impl Ai {
         } else {
             panic!("Wrong king square detected for {:?}", player);
         }
+    }
+
+    fn get_no_moves_eval(&mut self, alpha: i32, beta: i32) -> i32 {
+        let checking_player = self.test_board.get_player_with_turn().other_player();
+        if self.test_board.is_checking(checking_player) {
+            return alpha;
+        } else {
+            if 0 <= alpha { return alpha; }
+            else if 0 >= beta { return beta; }
+            else { return 0; }
+        }
+    }
+
+    fn insert_memo(&mut self, memo_data: MemoData) {
+        if self.terminated { return; }
+        self.memo.insert(self.test_board.get_hash(), memo_data);
+    }
+
+    fn increment_node_check_termination(&mut self) -> bool {
+        self.node_counter += 1;
+        self.terminated = self.terminated || (self.node_counter % 50000 == 0 && now() - self.start_ms > self.ms_till_terminate);
+        self.terminated
     }
 
     /// First tuple entry = the memoized result if any
@@ -154,9 +186,10 @@ impl Ai {
         moves_start: usize
     ) -> i32 {
 
-        self.node_counter += 1;
         // Evaluation is always maximizing for white. Black is also maximizing, so whenever it's black's turn, black's 'score definition" is negative of white's score definition.
         let score_multiplier = self.test_board.get_player_with_turn().multiplier();
+
+        if self.increment_node_check_termination() { return MAX_EVAL * score_multiplier; }
 
         let score = if let (_, Some(adjusted_score)) = self.find_memo_score(0, alpha, beta) {
             return adjusted_score; // No score multiplier necessary
@@ -217,7 +250,9 @@ impl Ai {
             return self.qsearch(10, alpha, beta, moves_start);
         }
 
-        self.node_counter += 1;
+        if self.increment_node_check_termination() {
+            return MAX_EVAL * self.test_board.get_player_with_turn().multiplier();
+        }
 
         const NEW_ALPHA_I_NEVER_SET: i32 = -1;
         const NEW_ALPHA_I_HASH_MOVE: i32 = -2;
@@ -244,10 +279,7 @@ impl Ai {
                     // Reminder: No null window, because this is our best move candidate, hence it is not expected to fail low
                     match self.negamax_try_move(remaining_depth, alpha, false, beta, &m, moves_start) {
                         SingleMoveResult::BetaCutOff(score) => {
-                            self.memo.insert(
-                                self.test_board.get_hash(),
-                                MemoData(score, remaining_depth, MemoType::High(m))
-                            );
+                            self.insert_memo(MemoData(score, remaining_depth, MemoType::High(m)));
                             return beta;
                         },
                         SingleMoveResult::NewAlpha(score) => {
@@ -304,12 +336,7 @@ impl Ai {
         for i in (moves_start..moves_end_exclusive).rev() {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
-            //FIXME
-            //let diff = i - moves_start;
-            //let less_depth_amount = min((-((diff >= 5) as i8) as usize) & (diff >> 2), 2) as i8;
-            //let less_depth_amount = ((-((diff >= 5) as i8) as usize) & 1) as i8;
-            let less_depth_amount = 0;
-            
+            let less_depth_amount = -(((*m).1 == 0i32) as i8) & 1;
             let r = self.negamax_try_move(
                 remaining_depth - less_depth_amount, 
                 alpha,
@@ -323,30 +350,18 @@ impl Ai {
                 alpha = score;
                 new_alpha_i = i as i32;
             } else if let SingleMoveResult::BetaCutOff(score) = r {
-                self.memo.insert(
-                    self.test_board.get_hash(),
-                    MemoData(score, remaining_depth, MemoType::High((*m).clone()))
-                );
+                self.insert_memo(MemoData(score, remaining_depth, MemoType::High((*m).clone())));
                 return beta;
             }
         }
 
         if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
-            self.memo.insert(
-                self.test_board.get_hash(),
-                MemoData(alpha, remaining_depth, MemoType::Exact(hash_move.unwrap()))
-            );
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(hash_move.unwrap())));
         } else if new_alpha_i >= 0 {
-            self.memo.insert(
-                self.test_board.get_hash(),
-                MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()))
-            );
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone())));
         } else {
             // See (1)
-            self.memo.insert(
-                self.test_board.get_hash(),
-                MemoData(alpha, remaining_depth, MemoType::Low(self.moves_buf.v()[0].clone()))
-            );
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Low(self.moves_buf.v()[0].clone())));
         }
 
         alpha
@@ -395,17 +410,6 @@ impl Ai {
             SingleMoveResult::NewAlpha(score)
         } else {
             SingleMoveResult::NoEffect
-        }
-    }
-
-    fn get_no_moves_eval(&mut self, alpha: i32, beta: i32) -> i32 {
-        let checking_player = self.test_board.get_player_with_turn().other_player();
-        if self.test_board.is_checking(checking_player) {
-            return alpha;
-        } else {
-            if 0 <= alpha { return alpha; }
-            else if 0 >= beta { return beta; }
-            else { return 0; }
         }
     }
 }

@@ -1,11 +1,5 @@
 TODO
 
-- Fix quiescence BS
-    - Why quiescence low NPS
-    - Where's the eval
-    - Intuition
-    - Stop computing non-captures
-    - Split off, no branches
 - Evaluation
     - Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
         - Should be able to make queen balanced like this, instead of 0
@@ -19,7 +13,7 @@ TODO
 - Tests for evaluation
 - LMR works but move ordering is probably bad
 - If checked, don't do second round of move tests
-/ Promotion UI
+- Promotion UI
 - En passant
 - Profiler? Necessary to spot any bottlenecks.
 - Faster coarser sort

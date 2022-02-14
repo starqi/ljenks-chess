@@ -120,7 +120,7 @@ pub fn add_captures_to_evals(
         if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
             if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
                 if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
-                    score += evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece);
+                    score += (evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece)).abs();
                 }
             }
         }
