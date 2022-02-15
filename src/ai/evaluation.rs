@@ -1,4 +1,5 @@
-use std::cmp::min;
+use std::cmp::{max, min};
+use super::super::*;
 use super::super::game::entities::*;
 use super::super::game::coords::*;
 use super::super::game::board::*;
@@ -9,6 +10,10 @@ use super::super::game::move_list::*;
 static PIECE_VALUES: [i32; 6] = [
     100, 500, 300, 300, 900, 1000
 ];
+
+static MOVE_ORDER_CAPTURE_MIN_VAL: i32 = 100;
+static MOVE_ORDER_MOB_SQ_VAL: i32 = 3;
+static MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 3;
 
 static PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 
@@ -120,8 +125,28 @@ pub fn add_captures_to_evals(
         if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
             if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
                 if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
-                    score += (evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece)).abs();
+                    score += max(evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece), MOVE_ORDER_CAPTURE_MIN_VAL);
                 }
+            }
+        }
+        score
+    });
+}
+
+pub fn add_mobility_to_evals(
+    board: &Board,
+    m: &mut MoveList,
+    start: usize,
+    end_exclusive: usize,
+) {
+    m.write_evals(start, end_exclusive, |m| {
+        let mut score = m.eval();
+        if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
+            if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {
+                let mut atks = board.get_imaginary_pseudo_move_at(*_to_coord, *src_piece, *src_player);
+                score += atks.pop_count() as i32 * MOVE_ORDER_MOB_SQ_VAL;
+                atks.0 &= BITBOARD_PRESETS.central_squares.0;
+                score += atks.consume_pop_count() as i32 * MOVE_ORDER_MOB_CENTER_SQ_BONUS;
             }
         }
         score
@@ -132,6 +157,20 @@ pub fn add_captures_to_evals(
 mod test {
 
     use super::*;
+
+    #[ignore]
+    #[test]
+    fn move_mob_eyeball_test() {
+        let mut board = Board::new();
+        board.set_uniform_row_test(2, Square::Blank);
+        board.set_uniform_row_test(6, Square::Blank);
+
+        let mut ml = MoveList::new(50);
+        board.get_pseudo_moves_at(FastCoord::from_xy(3, 7), &mut ml);
+        let write_index = ml.write_index;
+        add_mobility_to_evals(&board, &mut ml, 0, write_index);
+        board.print_move_list(&ml, 0, ml.write_index);
+    }
 
     #[ignore]
     #[test]

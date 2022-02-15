@@ -579,8 +579,14 @@ impl Board {
         };
     }
 
+    pub fn get_pseudo_moves_at(&self, origin: FastCoord, result: &mut MoveList) {
+        if let Square::Occupied(_, player) = self.get_by_index(origin.0) {
+            self._get_pseudo_moves_at(origin, *player, result);
+        }
+    }
+
     /// Precondition: `origin` piece is `player`'s piece
-    fn get_pseudo_moves_at(&self, origin: FastCoord, player: Player, result: &mut MoveList) {
+    fn _get_pseudo_moves_at(&self, origin: FastCoord, player: Player, result: &mut MoveList) {
         let curr_state = self.get_player_state(player);
         let opponent_state = self.get_player_state(player.other_player());
 
@@ -598,6 +604,26 @@ impl Board {
             Square::Occupied(Piece::Rook, _) => write_rook_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
             Square::Blank => {}
         };
+    }
+
+    /// Imaginary in that there is no piece there.
+    pub fn get_imaginary_pseudo_move_at(&self, origin: FastCoord, piece: Piece, player: Player) -> Bitboard {
+        let curr_state = self.get_player_state(player);
+        let opponent_state = self.get_player_state(player.other_player());
+
+        match piece {
+            Piece::Pawn => {
+                match player {
+                    Player::White => _write_white_pawn_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+                    Player::Black => _write_black_pawn_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs)
+                }
+            },
+            Piece::Queen => _write_queen_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Piece::Knight => _write_knight_moves(origin, &curr_state.piece_locs),
+            Piece::King => _write_king_moves(origin, &curr_state.piece_locs),
+            Piece::Bishop => _write_bishop_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs),
+            Piece::Rook => _write_rook_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs)
+        }
     }
 
     /// Precondition: `origin` piece is `params` current player's piece
@@ -621,7 +647,7 @@ impl Board {
     pub fn get_pseudo_moves_for(&self, player: Player, result: &mut MoveList) {
         let mut piece_locs_clone = self.get_player_state(player).piece_locs.clone();
         piece_locs_clone.consume_loop_indices(|index| {
-            self.get_pseudo_moves_at(FastCoord(index), player, result);
+            self._get_pseudo_moves_at(FastCoord(index), player, result);
         });
     }
 
@@ -671,7 +697,7 @@ mod test {
         board.set_uniform_row(7, Square::Blank);
 
         let mut ml = MoveList::new(100);
-        board.get_pseudo_moves_at(FastCoord::from_xy(0, 0), Player::White, &mut ml);
+        board._get_pseudo_moves_at(FastCoord::from_xy(0, 0), Player::White, &mut ml);
 
         let mut b = Bitboard(0);
         for m in ml.v() {

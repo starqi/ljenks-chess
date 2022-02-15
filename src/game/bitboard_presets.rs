@@ -1,4 +1,5 @@
 use super::bitboard::*;
+use super::super::*;
 
 #[repr(u8)]
 pub enum RayDirection {
@@ -16,6 +17,9 @@ pub struct BitboardPresets {
     pub king_moves: [Bitboard; 64],
     /// Index = LSB, MSB
     pub ensure_blocker: [Bitboard; 2],
+    /// Index = `Player` enum order
+    pub opponent_squares: [Bitboard; 2],
+    pub central_squares: Bitboard,
     pub debruijn_indices: [u8; 64],
     pub debruijn_sequence: u64
 }
@@ -32,6 +36,8 @@ impl BitboardPresets {
             pawn_captures: [make_pawn_capture_lookup(-1), make_pawn_capture_lookup(1)],
             king_moves: make_king_lookup(),
             ensure_blocker: [Bitboard(1u64 << 63), Bitboard(1)],
+            opponent_squares: [bitboard_union!(make_line(7), make_line(6), make_line(5)), bitboard_union!(make_line(0) , make_line(1) , make_line(2))],
+            central_squares: make_center_sqs(),
 
             // Use existing sequence but convert to index 0 = a8, https://www.chessprogramming.org/BitScan#De_Bruijn_Multiplication
             // TODO Obviously their solution is better because it does not require the - 63 operation
@@ -39,6 +45,24 @@ impl BitboardPresets {
             debruijn_sequence: 0x03f79d71b4cb0a89
         }
     }
+}
+
+fn make_line(y: u8) -> Bitboard {
+    let mut result = Bitboard(0);
+    for x in 0..8 {
+        result.set(x, y);
+    }
+    result
+}
+
+fn make_center_sqs() -> Bitboard {
+    let mut result = Bitboard(0);
+    for x in 2..5 {
+        for y in 2..5 {
+            result.set(x, y);
+        }
+    }
+    result
 }
 
 fn make_king_lookup() -> [Bitboard; 64] {

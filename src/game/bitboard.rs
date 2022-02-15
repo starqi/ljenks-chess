@@ -108,6 +108,19 @@ impl Bitboard {
         }
         false
     }
+
+    pub fn consume_pop_count(&mut self) -> u8 {
+        let mut counter: u8 = 0;
+        while self.0 != 0 {
+            self.0 &= self.0 - 1; // See LSB isolation propagation idea, same thing but end up with 0 @ LSB, 1 in less significant positions
+            counter += 1;
+        }
+        counter
+    }
+
+    pub fn pop_count(&self) -> u8 {
+        Bitboard(self.0).consume_pop_count()
+    }
 }
 
 impl Display for Bitboard {

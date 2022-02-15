@@ -1,5 +1,6 @@
 mod evaluation;
 
+use std::cmp::min;
 use std::collections::HashMap;
 use super::game::entities::*;
 use super::game::move_test::*;
@@ -328,17 +329,17 @@ impl Ai {
             return self.get_no_moves_eval(alpha, beta);
         }
 
-        //FIXME
-        //evaluation::add_aggression_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive, &mut self.temp_moves);
         evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
+        evaluation::add_mobility_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
 
         for i in (moves_start..moves_end_exclusive).rev() {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
-            let less_depth_amount = -(((*m).1 == 0i32) as i8) & 1;
+            let m_score = (*m).1;
+            let less_depth_amount = min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3);
             let r = self.negamax_try_move(
-                remaining_depth - less_depth_amount, 
+                remaining_depth - (less_depth_amount as i8), 
                 alpha,
                 new_alpha_i != NEW_ALPHA_I_NEVER_SET,
                 beta,

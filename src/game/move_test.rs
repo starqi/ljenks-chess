@@ -44,13 +44,13 @@ fn set_blockable_ray(
     b.0 |= moves.0;
 }
 
-fn consume_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
+pub fn consume_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
     b.consume_loop_indices(|dest| {
         result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest)), 0));
     });
 }
 
-fn update_attack_from_boards(origin: FastCoord, b: &mut Bitboard, result: &mut AttackFromBoards) {
+pub fn update_attack_from_boards(origin: FastCoord, b: &mut Bitboard, result: &mut AttackFromBoards) {
     b.consume_loop_indices(|dest| {
         result.data[dest as usize].set_index(origin.0);
     });
@@ -62,7 +62,7 @@ fn hits_king(b: &Bitboard, king_location: &Bitboard) -> bool {
 }
 
 #[inline]
-fn unset_own_pieces(b: &mut Bitboard, curr_player_piece_locs: &Bitboard) {
+pub fn unset_own_pieces(b: &mut Bitboard, curr_player_piece_locs: &Bitboard) {
     b.0 &= !curr_player_piece_locs.0;
 }
 
