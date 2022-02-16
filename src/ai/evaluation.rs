@@ -1,7 +1,7 @@
 use std::cmp::{max, min};
 use super::super::*;
 use super::super::game::entities::*;
-use super::super::game::coords::*;
+use super::super::game::bitboard::*;
 use super::super::game::board::*;
 use super::super::game::move_test::*;
 use super::super::game::move_list::*;
@@ -11,18 +11,21 @@ static PIECE_VALUES: [i32; 6] = [
     100, 500, 300, 300, 900, 1000
 ];
 
+static PAWN_PUSH_BONUS: i32 = 10;
+static MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
+static CASTLE_BONUS: i32 = 50;
+static MOVE_ORDER_ATTACK_BONUS: i32 = 30;
+static MOVE_ORDER_CASTLE_VAL: i32 = 50;
 static MOVE_ORDER_CAPTURE_MIN_VAL: i32 = 100;
 static MOVE_ORDER_MOB_SQ_VAL: i32 = 3;
 static MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 3;
-
 static PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
+static CONTROL_SURPLUS_TO_EVAL_LSHIFT: i32 = 8;
 
 /// Matches `Piece` enum number
 static PIECE_VALUES_FOR_CONTROL: [i32; 6] = [
     1, 5, 3, 3, 9, 10
 ];
-
-static CONTROL_SURPLUS_TO_EVAL_LSHIFT: i32 = 8;
 
 static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 
@@ -53,23 +56,30 @@ pub fn evaluate_piece_for_control(piece: Piece) -> i32 {
 fn evaluate_player(board: &Board, player: Player) -> i32 {
 
     let ps = board.get_player_state(player);
-    //let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
     let mut value: i32 = 0;
 
+    // Count material
     let mut piece_locs_copy = ps.piece_locs;
     piece_locs_copy.consume_loop_indices(|index| {
-        //let coord = FastCoord(index).to_coord();
-
         if let Square::Occupied(piece, _) = board.get_by_index(index) {
             value += evaluate_piece(*piece);
-
-            // TODO Move to end game evaluation only
-            //// Reward pawn push
-            //let is_pawn_mask = -((*piece == Piece::Pawn) as i32);
-            //value += is_pawn_mask & ((pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * 10);
         }
     });
 
+    // Reward pawn push in later stages of game
+    if value <= MIN_MATERIAL_FOR_PAWN_EVAL {
+        let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
+        let mut piece_locs_copy = ps.piece_locs;
+        piece_locs_copy.consume_loop_indices(|index| {
+            let coord = FastCoord(index).to_coord();
+            if let Square::Occupied(piece, _) = board.get_by_index(index) {
+                let is_pawn_mask = -((*piece == Piece::Pawn) as i32);
+                value += is_pawn_mask & ((pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
+            }
+        });
+    }
+
+    value += -(ps.is_castled as i32) & CASTLE_BONUS;
     value * player.multiplier()
 }
 
@@ -133,22 +143,33 @@ pub fn add_captures_to_evals(
     });
 }
 
+/// Precondition: Move list is the current player's moves
 pub fn add_mobility_to_evals(
     board: &Board,
     m: &mut MoveList,
     start: usize,
     end_exclusive: usize,
 ) {
+    let opp_state = board.get_player_state(board.get_player_with_turn().other_player());
+
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.eval();
+
         if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
             if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {
-                let mut atks = board.get_imaginary_pseudo_move_at(*_to_coord, *src_piece, *src_player);
+                let atks = board.get_imaginary_pseudo_move_at(*_to_coord, *src_piece, *src_player);
                 score += atks.pop_count() as i32 * MOVE_ORDER_MOB_SQ_VAL;
-                atks.0 &= BITBOARD_PRESETS.central_squares.0;
-                score += atks.consume_pop_count() as i32 * MOVE_ORDER_MOB_CENTER_SQ_BONUS;
+
+                let piece_atks = Bitboard(atks.0 & opp_state.piece_locs.0);
+                score += -((piece_atks.0 != 0) as i32) & MOVE_ORDER_ATTACK_BONUS;
+
+                let mut important_sq_atks = Bitboard(atks.0 & (BITBOARD_PRESETS.central_squares.0 | BITBOARD_PRESETS.opponent_squares[*src_player as usize].0));
+                score += important_sq_atks.consume_pop_count() as i32 * MOVE_ORDER_MOB_CENTER_SQ_BONUS;
             }
+        } else if let MoveDescription::Castle(_) = m.description() {
+            score += MOVE_ORDER_CASTLE_VAL;
         }
+
         score
     });
 }

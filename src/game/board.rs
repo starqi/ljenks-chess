@@ -18,6 +18,7 @@ pub enum RevertableMove {
 pub struct PlayerState {
     pub piece_locs: Bitboard,
     pub king_location: Bitboard,
+    pub is_castled: bool,
     /// Index: `CastleType` enum number
     pub moved_castle_piece: [bool; 2]
 }
@@ -27,7 +28,8 @@ impl PlayerState {
         Self {
             piece_locs: Bitboard(0),
             king_location: Bitboard(0),
-            moved_castle_piece: [false, false]
+            moved_castle_piece: [false, false],
+            is_castled: false
         }
     }
 }
@@ -289,6 +291,7 @@ impl Board {
                 let opponent_state = self.get_player_state_mut(opponent);
                 opponent_state.moved_castle_piece = *old_moved_castle_piece;
                 opponent_state.king_location = *old_king_location;
+                opponent_state.is_castled = false;
 
                 self.hash = *old_hash;
             }
@@ -412,7 +415,10 @@ impl Board {
                 self.apply_before_after_sqs(sqs, true);
                 // We moved the king, so we moved a castle piece for both castles, set both flags
                 self.update_castle_state_hash(curr_player, true, true);
-                self.get_player_state_mut(curr_player).king_location = Bitboard::from_index(CASTLE_UTILS.post_castle_king_sq[*castle_type as usize][curr_player_num].0);
+
+                let curr_state = self.get_player_state_mut(curr_player);
+                curr_state.is_castled = true; // Does not need to be part of hash, but is useful to AI
+                curr_state.king_location = Bitboard::from_index(CASTLE_UTILS.post_castle_king_sq[*castle_type as usize][curr_player_num].0);
 
                 result
             }

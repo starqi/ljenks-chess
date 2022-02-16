@@ -337,22 +337,36 @@ impl Ai {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
             let m_score = (*m).1;
-            let less_depth_amount = min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3);
-            let r = self.negamax_try_move(
-                remaining_depth - (less_depth_amount as i8), 
-                alpha,
-                new_alpha_i != NEW_ALPHA_I_NEVER_SET,
-                beta,
-                m,
-                moves_end_exclusive
-            );
+            let mut less_depth_amount = (-((remaining_depth > 3) as i32)) & min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3);
 
-            if let SingleMoveResult::NewAlpha(score) = r {
-                alpha = score;
-                new_alpha_i = i as i32;
-            } else if let SingleMoveResult::BetaCutOff(score) = r {
-                self.insert_memo(MemoData(score, remaining_depth, MemoType::High((*m).clone())));
-                return beta;
+            loop {
+                let r = self.negamax_try_move(
+                    remaining_depth - (less_depth_amount as i8), 
+                    alpha,
+                    new_alpha_i != NEW_ALPHA_I_NEVER_SET,
+                    beta,
+                    m,
+                    moves_end_exclusive
+                );
+
+                // If we reduce depth, then try again with real depth if guessed wrong, and recursive call is not a fail-low
+                if let SingleMoveResult::NewAlpha(score) = r {
+                    if less_depth_amount <= 0 {
+                        alpha = score;
+                        new_alpha_i = i as i32;
+                    } else {
+                        less_depth_amount = 0;
+                    }
+                } else if let SingleMoveResult::BetaCutOff(score) = r {
+                    if less_depth_amount <= 0 {
+                        self.insert_memo(MemoData(score, remaining_depth, MemoType::High((*m).clone())));
+                        return beta;
+                    } else {
+                        less_depth_amount = 0;
+                    }
+                } else {
+                    break;
+                }
             }
         }
 
