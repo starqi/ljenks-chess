@@ -1,29 +1,28 @@
 TODO
 
 - Evaluation
-    . Castle bonus, currently at 0!
     - Moving pieces out of the way, similar to synergy
     - Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
         - Should be able to make queen balanced like this, instead of 0
     - Use a table for square importance
         - Add king area to it
     - Lots of tests
-    . Pawn push but only in end game
+    - Castle bonus should be replaced with king safety?
+    - Tapered pawn push eval
     - Pawn structure
     - Piece synergy
 - Is CC not fully correct
     - Promotions
     - Currently has if statement, which doesn't count checks...
-. What about attacking a piece? Not part of mobility score.
-. Missed opponent side mobility eval
+- Take into account attacked piece value
 - Save best alpha to memo if terminated
-. Stop cutting remaining depth if <= 3 in LMR...
-	. Then add search extensions
+- Count re-search statistics
 - If checked, don't do second round of move tests
 - Promotion UI
 - Profiler? Necessary to spot any bottlenecks.
 - Faster coarser sort
 - Prune memo
+- 3 fold, and game end draw screen
 - Memo unit tests
 - Proper transposition table - stop clearing it
 - UI: Disallow fake premoves

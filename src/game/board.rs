@@ -70,6 +70,7 @@ impl Board {
         board
     }
 
+    // TODO Can set up castle, but still disallow setting random squares
     pub fn empty() -> Self {
         let mut board = Self {
             d: [Square::Blank; 64],
@@ -91,17 +92,17 @@ impl Board {
                 let square = self.get_by_index(_from_coord.value());
                 // Since a piece should be on the after square,
                 // the square will stringify to eg. k, K, p, P, then it becomes eg. Ke2
-                format!("{}{} ({})", square, _to_coord, m.eval())
+                format!("{}{} m={}", square, _to_coord, m.eval())
             },
             MoveDescription::Castle(castle_type) => {
                 if *castle_type == CastleType::Oo {
-                    format!("oo ({})", m.eval())
+                    format!("oo m={}", m.eval())
                 } else {
-                    format!("ooo ({})", m.eval())
+                    format!("ooo m={}", m.eval())
                 }
             },
             MoveDescription::SkipMove => {
-                format!("skip ({})", m.eval())
+                format!("skip m={}", m.eval())
             }
         }
     }

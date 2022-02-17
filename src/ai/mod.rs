@@ -28,6 +28,7 @@ enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 #[derive(Clone)]
 enum MemoType { Low(MoveWithEval), Exact(MoveWithEval), High(MoveWithEval) }
 
+// TODO Evaluation is redundant
 #[derive(Clone)]
 struct MemoData(i32, i8, MemoType);
 
@@ -52,11 +53,11 @@ impl Ai {
         }
     }
 
-    fn get_leading_move(&self) -> Option<(&MoveWithEval, i32)> {
+    fn get_leading_move(&self) -> Option<(&MoveWithEval, i8)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
-            Some(MemoData(eval, _, MemoType::High(best_move) | MemoType::Exact(best_move) | MemoType::Low(best_move))) => {
-                Some((best_move, *eval))
+            Some(MemoData(eval, depth, MemoType::High(best_move) | MemoType::Exact(best_move) | MemoType::Low(best_move))) => {
+                Some((best_move, *depth))
             },
             _ => {
                 None
@@ -78,8 +79,8 @@ impl Ai {
             }
 
             let leading_move = self.get_leading_move();
-            if let Some((m, e)) = leading_move {
-                console_log!("{}, {}", self.test_board.stringify_move(m), e);
+            if let Some((m, depth)) = leading_move {
+                console_log!("{}, d={}", self.test_board.stringify_move(m), depth);
             } else {
                 console_log!("No leading move");
             }
@@ -128,11 +129,12 @@ impl Ai {
         }
     }
 
+    #[inline]
     fn insert_memo(&mut self, memo_data: MemoData) {
-        if self.terminated { return; }
         self.memo.insert(self.test_board.get_hash(), memo_data);
     }
 
+    /// Node counter increase coupled with check to not miss an increment
     fn increment_node_check_termination(&mut self) -> bool {
         self.node_counter += 1;
         self.terminated = self.terminated || (self.node_counter % 50000 == 0 && now() - self.start_ms > self.ms_till_terminate);
@@ -182,7 +184,7 @@ impl Ai {
     unsafe fn qsearch(
         &mut self,
         remaining_depth_opt: i8,
-        mut alpha: i32,
+        initial_alpha: i32,
         beta: i32,
         moves_start: usize
     ) -> i32 {
@@ -190,7 +192,9 @@ impl Ai {
         // Evaluation is always maximizing for white. Black is also maximizing, so whenever it's black's turn, black's 'score definition" is negative of white's score definition.
         let score_multiplier = self.test_board.get_player_with_turn().multiplier();
 
-        if self.increment_node_check_termination() { return MAX_EVAL * score_multiplier; }
+        if self.increment_node_check_termination() { return initial_alpha; } // See (2)
+
+        let mut alpha = initial_alpha;
 
         let score = if let (_, Some(adjusted_score)) = self.find_memo_score(0, alpha, beta) {
             return adjusted_score; // No score multiplier necessary
@@ -230,7 +234,10 @@ impl Ai {
 
             self.test_board.revert_move(&revertable);
 
-            if r >= beta { return beta; }
+            if r >= beta { 
+                if self.terminated { return initial_alpha; } // See (2)
+                return beta; 
+            }
             if r > alpha { alpha = score; }
         }
 
@@ -242,18 +249,18 @@ impl Ai {
     unsafe fn negamax(
         &mut self,
         remaining_depth: i8,
-        mut alpha: i32,
+        initial_alpha: i32,
         beta: i32,
         moves_start: usize
     ) -> i32 {
 
         if remaining_depth <= 0 {
-            return self.qsearch(10, alpha, beta, moves_start);
+            return self.qsearch(10, initial_alpha, beta, moves_start);
         }
 
-        if self.increment_node_check_termination() {
-            return MAX_EVAL * self.test_board.get_player_with_turn().multiplier();
-        }
+        if self.increment_node_check_termination() { return initial_alpha; } // Chain force beta cutoff in all parents; checked by assertions (2)
+
+        let mut alpha = initial_alpha;
 
         const NEW_ALPHA_I_NEVER_SET: i32 = -1;
         const NEW_ALPHA_I_HASH_MOVE: i32 = -2;
@@ -280,8 +287,12 @@ impl Ai {
                     // Reminder: No null window, because this is our best move candidate, hence it is not expected to fail low
                     match self.negamax_try_move(remaining_depth, alpha, false, beta, &m, moves_start) {
                         SingleMoveResult::BetaCutOff(score) => {
-                            self.insert_memo(MemoData(score, remaining_depth, MemoType::High(m)));
-                            return beta;
+                            if self.terminated {
+                                return initial_alpha; // See (2)
+                            } else {
+                                self.insert_memo(MemoData(score, remaining_depth, MemoType::High(m)));
+                                return beta;
+                            }
                         },
                         SingleMoveResult::NewAlpha(score) => {
                             // The move loop below will begin not with the alpha provided from caller,
@@ -294,6 +305,7 @@ impl Ai {
                             // The memoized move was not very good after examining it full depth, begin normal loop through moves.
                         }
                     };
+                    assert!(!self.terminated);
                 }
             },
             _ => {}
@@ -351,6 +363,7 @@ impl Ai {
 
                 // If we reduce depth, then try again with real depth if guessed wrong, and recursive call is not a fail-low
                 if let SingleMoveResult::NewAlpha(score) = r {
+                    assert!(!self.terminated);
                     if less_depth_amount <= 0 {
                         alpha = score;
                         new_alpha_i = i as i32;
@@ -358,11 +371,21 @@ impl Ai {
                         less_depth_amount = 0;
                     }
                 } else if let SingleMoveResult::BetaCutOff(score) = r {
-                    if less_depth_amount <= 0 {
-                        self.insert_memo(MemoData(score, remaining_depth, MemoType::High((*m).clone())));
-                        return beta;
+                    if self.terminated {
+                        // Don't lose the best move so far during termination, but don't pretend it's the real move at this depth (hence -1 to remaining depth)
+                        if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
+                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(hash_move.unwrap().clone())));
+                        } else if new_alpha_i >= 0 {
+                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone())));
+                        }
+                        return initial_alpha; // See (2)
                     } else {
-                        less_depth_amount = 0;
+                        if less_depth_amount <= 0 {
+                            self.insert_memo(MemoData(score, remaining_depth, MemoType::High((*m).clone())));
+                            return beta;
+                        } else {
+                            less_depth_amount = 0;
+                        }
                     }
                 } else {
                     break;
@@ -370,6 +393,7 @@ impl Ai {
             }
         }
 
+        assert!(!self.terminated);
         if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
             self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(hash_move.unwrap())));
         } else if new_alpha_i >= 0 {
