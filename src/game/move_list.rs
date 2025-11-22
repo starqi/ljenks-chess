@@ -14,10 +14,16 @@ pub enum CastleType {
     Oo = 0, Ooo
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum MoveMetadata {
+    None = 0, DoublePawnJump, EnPassant, Promotion
+}
+
 /// Keep minimal in size, to make move generation fast, and move execution slower
 #[derive(Clone)]
 pub enum MoveDescription {
-    NormalMove(FastCoord, FastCoord),
+    NormalMove(FastCoord, FastCoord, MoveMetadata),
     Castle(CastleType),
     SkipMove
 }
@@ -59,6 +65,7 @@ impl MoveList {
         &mut self.v[i]
     }
 
+    // TODO Operators?
     #[inline]
     pub fn v(&self) -> &Vec<MoveWithEval> {
         &self.v

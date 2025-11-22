@@ -4,6 +4,42 @@ use super::super::*;
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Bitboard(pub u64);
 
+impl std::ops::BitAnd for Bitboard {
+    type Output = Self;
+    
+    #[inline]
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Bitboard(self.0 & rhs.0)
+    }
+}
+
+impl std::ops::BitOr for Bitboard {
+    type Output = Self;
+    
+    #[inline]
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Bitboard(self.0 | rhs.0)
+    }
+}
+
+impl std::ops::BitXor for Bitboard {
+    type Output = Self;
+    
+    #[inline]
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Bitboard(self.0 ^ rhs.0)
+    }
+}
+
+impl std::ops::Not for Bitboard {
+    type Output = Self;
+    
+    #[inline]
+    fn not(self) -> Self::Output {
+        Bitboard(!self.0)
+    }
+}
+
 /// Assumes top left corner index is 0. 63 is bottom right.
 impl Bitboard {
 
@@ -98,6 +134,12 @@ impl Bitboard {
             cb(index);
             self.unset_index(index);
         }
+    }
+
+    pub fn consume_one_index_lsb(&mut self) -> u8 {
+        let index = self._lsb_to_index();
+        self.unset_index(index);
+        index
     }
 
     pub fn consume_loop_indices2(&mut self, mut cb: impl FnMut(u8) -> bool) -> bool {

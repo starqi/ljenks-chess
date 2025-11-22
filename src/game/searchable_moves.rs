@@ -17,7 +17,7 @@ impl SearchableMoves {
         SearchableMoves { map }
     }
 
-    pub fn reset(&mut self, curr_player: Player, move_list: &MoveList, start: usize, end_exclusive: usize) {
+    pub fn reset_from_move_list(&mut self, curr_player: Player, move_list: &MoveList, start: usize, end_exclusive: usize) {
 
         self.map.clear();
 
@@ -25,7 +25,7 @@ impl SearchableMoves {
             let m = &move_list.v()[i];
 
             match m.description() {
-                MoveDescription::NormalMove(from, to) => {
+                MoveDescription::NormalMove(from, to, _) => {
                     self.map.insert(SearchableMoveKey(*from, *to), m.clone());
                 }
                 MoveDescription::Castle(castle_type) => {

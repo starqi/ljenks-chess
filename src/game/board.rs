@@ -7,10 +7,17 @@ use super::super::*;
 use super::bitboard::*;
 
 pub enum RevertableMove {
+    // TODO IMMEDIATE Better style? Params are accessible outside module...
+
     /// (old squares, old hash to revert to, moved_castle_piece - first index is `Player` enum number, old king location)
-    NormalMove([BeforeSquare; 2], u64, [[bool; 2]; 2], Bitboard),
+    NormalMove([BeforeSquare; 2], u64, [[bool; 2]; 2], Bitboard, TargetSquare),
+
+    /// (old squares, old hash to revert to, en passant target)
+    DoublePawnJump([BeforeSquare; 2], u64, TargetSquare),
+    EnPassant([BeforeSquare; 3], u64, TargetSquare),
+
     /// (oo/ooo, old hash to revert to, moved_castle_piece, old king location),
-    Castle(CastleType, u64, [bool; 2], Bitboard),
+    Castle(CastleType, u64, [bool; 2], Bitboard, TargetSquare),
     NoOp(u64)
 }
 
@@ -35,11 +42,38 @@ impl PlayerState {
 }
 
 #[derive(Clone)]
+pub struct TargetSquare {
+    bitboard: Bitboard,
+    index: u8
+}
+
+impl TargetSquare {
+    fn new() -> Self {
+        TargetSquare { bitboard: Bitboard(0), index: 0 }
+    }
+
+    fn has_target(&self) -> bool {
+        self.bitboard.0 != 0
+    }
+
+    fn reset(&mut self) {
+        self.bitboard.0 = 0;
+        self.index = 0;
+    }
+
+    fn set(&mut self, x: u8, y: u8) {
+        self.index = FastCoord::from_xy(x, y).0;
+        self.bitboard = Bitboard::from_index(self.index);
+    }
+}
+
+#[derive(Clone)]
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
     hash: u64,
-    player_state: [PlayerState; 2]
+    player_state: [PlayerState; 2],
+    en_passant_extra_target: TargetSquare
 }
 
 impl Display for Board {
@@ -54,14 +88,19 @@ impl Display for Board {
     }
 }
 
-/// Currently, manual board mutations (eg. set square) are only enabled for tests, no correctness guaranteed.
+// TODO (Feature Req) Outside ability to set the board to mostly anything without breaking hash,
+// right now tests have responsibilty to maintain proper state
+
 impl Board {
+
+    /// Sets up a standard board
     pub fn new() -> Self {
         let mut board = Self {
             d: [Square::Blank; 64],
             hash: 0,
             player_with_turn: Player::White,
-            player_state: [PlayerState::new(), PlayerState::new()]
+            player_state: [PlayerState::new(), PlayerState::new()],
+            en_passant_extra_target: TargetSquare::new()
         };
         board.set_standard_rows();
         board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(CASTLE_UTILS.pre_castle_king_sq[Player::White as usize].0);
@@ -70,25 +109,33 @@ impl Board {
         board
     }
 
-    // TODO Can set up castle, but still disallow setting random squares
-    pub fn empty() -> Self {
+    /// Creates a board with only kings on their starting squares
+    pub fn with_kings_only() -> Self {
         let mut board = Self {
             d: [Square::Blank; 64],
             hash: 0,
             player_with_turn: Player::White,
-            player_state: [PlayerState::new(), PlayerState::new()]
+            player_state: [PlayerState::new(), PlayerState::new()],
+            en_passant_extra_target: TargetSquare::new()
         };
+        
+        board.set_by_file_rank('e', 1, Square::Occupied(Piece::King, Player::White));
+        board.set_by_file_rank('e', 8, Square::Occupied(Piece::King, Player::Black));
+        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(4, 7).0);
+        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(4, 0).0);
+        board.get_player_state_mut(Player::White).moved_castle_piece = [false, false];
+        board.get_player_state_mut(Player::Black).moved_castle_piece = [false, false];
+        board.hash = board.calculate_hash();
         board
     }
 
-    #[cfg(test)]
-    pub fn empty_test() -> Self {
-        Self::empty()
-    }
+    //////////////////////////////////////////////////
+    // Misc
 
     pub fn stringify_move(&self, m: &MoveWithEval) -> String {
         match m.description() {
-            MoveDescription::NormalMove(_from_coord, _to_coord) => {
+            MoveDescription::NormalMove(_from_coord, _to_coord, metadata) => {
+                // TODO metadata
                 let square = self.get_by_index(_from_coord.value());
                 // Since a piece should be on the after square,
                 // the square will stringify to eg. k, K, p, P, then it becomes eg. Ke2
@@ -121,10 +168,8 @@ impl Board {
         console_log!("");
     }
 
-    #[inline]
-    pub fn get_square_hash(i: usize, piece: Piece, player: Player) -> u64 {
-        RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
-    }
+    //////////////////////////////////////////////////
+    // Hashes
 
     /// Slow hash calculation from scratch, currently just for assertions
     pub fn calculate_hash(&self) -> u64 {
@@ -157,6 +202,10 @@ impl Board {
 
         if self.get_player_with_turn() == Player::White { h ^= RANDOM_NUMBER_KEYS.is_white_to_play; }
         
+        if self.en_passant_extra_target.has_target() {
+            h ^= Self::get_loc_hash(self.en_passant_extra_target.index);
+        }
+        
         h
     }
 
@@ -167,6 +216,21 @@ impl Board {
 
     pub fn assert_hash(&self) {
         assert_eq!(self.hash, self.calculate_hash());
+    }
+
+    #[inline]
+    fn get_loc_hash_en_passant(en_passant_extra_target: &TargetSquare) -> u64 {
+        Self::get_loc_hash(en_passant_extra_target.index)
+    }
+
+    #[inline]
+    fn get_square_hash(i: usize, piece: Piece, player: Player) -> u64 {
+        RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
+    }
+
+    #[inline]
+    fn get_loc_hash(index: u8) -> u64 {
+        RANDOM_NUMBER_KEYS.locations[index as usize]
     }
 
     //////////////////////////////////////////////////
@@ -202,22 +266,27 @@ impl Board {
 
     #[inline]
     pub fn get_by_xy(&self, x: u8, y: u8) -> &Square {
-        return &self.d[y as usize * 8 + x as usize];
+        &self.d[y as usize * 8 + x as usize]
     }
 
     #[inline]
     pub fn get_by_index(&self, num: u8) -> &Square {
-        return &self.d[num as usize];
+        &self.d[num as usize]
     }
 
-    fn set_by_file_rank(&mut self, file: char, rank: u8, s: Square) {
-        let Coord(x, y) = file_rank_to_xy(file, rank);
-        self.set_by_xy(x, y, s);
+    #[inline]
+    pub fn get_by_fast_coord(&self, fc: FastCoord) -> &Square {
+        self.get_by_index(fc.0)
     }
 
     #[cfg(test)]
     pub fn set_by_file_rank_test(&mut self, file: char, rank: u8, s: Square) {
         self.set_by_file_rank(file, rank, s);
+    }
+
+    fn set_by_file_rank(&mut self, file: char, rank: u8, s: Square) {
+        let Coord(x, y) = file_rank_to_xy(file, rank);
+        self.set_by_xy(x, y, s);
     }
 
     #[inline]
@@ -234,7 +303,7 @@ impl Board {
         self.d[index as usize] = s;
     }
 
-    pub fn set_by_index(&mut self, index: u8, s: Square) {
+    fn set_by_index(&mut self, index: u8, s: Square) {
         self.get_player_state_mut(Player::White).piece_locs.unset_index(index);
         self.get_player_state_mut(Player::Black).piece_locs.unset_index(index);
 
@@ -252,6 +321,72 @@ impl Board {
     //////////////////////////////////////////////////
     // Moves
 
+    pub fn revert_move(&mut self, m: &RevertableMove) {
+        let opponent = self.get_player_with_turn().other_player();
+        match m {
+            RevertableMove::NormalMove(snapshot, old_hash, old_moved_castle_piece, old_king_location, old_en_passant_target) => {
+                for BeforeSquare(fast_coord, square) in snapshot.iter() {
+                    self.set_by_index_no_hash(fast_coord.0, *square);
+                }
+
+                self.get_player_state_mut(Player::White).moved_castle_piece = old_moved_castle_piece[Player::White as usize];
+                self.get_player_state_mut(Player::Black).moved_castle_piece = old_moved_castle_piece[Player::Black as usize];
+
+                let opponent_state = self.get_player_state_mut(opponent);
+                opponent_state.king_location = *old_king_location;
+
+                self.en_passant_extra_target = old_en_passant_target.clone();
+                self.hash = *old_hash;
+                // Reset en passant file to what it was before the move
+                // This is handled by restoring the old hash, which includes the en passant state
+            },
+            RevertableMove::Castle(castle_type, old_hash, old_moved_castle_piece, old_king_location, old_en_passant_target) => {
+                let sqs: &[BeforeAfterSquare] = if *castle_type == CastleType::Oo {
+                    &CASTLE_UTILS.oo_sqs[opponent as usize]
+                } else {
+                    &CASTLE_UTILS.ooo_sqs[opponent as usize]
+                };
+                self.apply_before_after_sqs(sqs, false);
+
+                let opponent_state = self.get_player_state_mut(opponent);
+                opponent_state.moved_castle_piece = *old_moved_castle_piece;
+                opponent_state.king_location = *old_king_location;
+                opponent_state.is_castled = false;
+
+                self.en_passant_extra_target = old_en_passant_target.clone();
+                self.hash = *old_hash;
+            }
+            // TODO IMMEDIATE Simplify, refactor this method?
+            RevertableMove::DoublePawnJump(snapshot, old_hash, old_en_passant_target) => {
+                for BeforeSquare(fast_coord, square) in snapshot.iter() {
+                    self.set_by_index_no_hash(fast_coord.0, *square);
+                }
+                self.en_passant_extra_target = old_en_passant_target.clone();
+                self.hash = *old_hash;
+            },
+            RevertableMove::EnPassant(snapshot, old_hash, old_en_passant_target) => {
+                for BeforeSquare(fast_coord, square) in snapshot.iter() {
+                    self.set_by_index_no_hash(fast_coord.0, *square);
+                }
+                self.en_passant_extra_target = old_en_passant_target.clone();
+                self.hash = *old_hash;
+            },
+            RevertableMove::NoOp(old_hash) => {
+                self.hash = *old_hash;
+            }
+        }
+        self.player_with_turn = opponent;
+    }
+
+    pub fn is_capture(&self, m: &MoveWithEval) -> bool {
+        if let MoveDescription::NormalMove(_, _to_coord, _) = m.description() {
+            if let Square::Occupied(_, _) = self.get_by_index(_to_coord.value()) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// No hash changes
     fn apply_before_after_sqs(&mut self, sqs: &[BeforeAfterSquare], is_after: bool) {
         if is_after {
@@ -265,55 +400,8 @@ impl Board {
         }
     }
 
-    pub fn revert_move(&mut self, m: &RevertableMove) {
-        let opponent = self.get_player_with_turn().other_player();
-        match m {
-            RevertableMove::NormalMove(snapshot, old_hash, old_moved_castle_piece, old_king_location) => {
-                for BeforeSquare(fast_coord, square) in snapshot.iter() {
-                    self.set_by_index_no_hash(fast_coord.0, *square);
-                }
-
-                self.get_player_state_mut(Player::White).moved_castle_piece = old_moved_castle_piece[Player::White as usize];
-                self.get_player_state_mut(Player::Black).moved_castle_piece = old_moved_castle_piece[Player::Black as usize];
-
-                let opponent_state = self.get_player_state_mut(opponent);
-                opponent_state.king_location = *old_king_location;
-
-                self.hash = *old_hash;
-            },
-            RevertableMove::Castle(castle_type, old_hash, old_moved_castle_piece, old_king_location) => {
-                let sqs: &[BeforeAfterSquare] = if *castle_type == CastleType::Oo {
-                    &CASTLE_UTILS.oo_sqs[opponent as usize]
-                } else {
-                    &CASTLE_UTILS.ooo_sqs[opponent as usize]
-                };
-                self.apply_before_after_sqs(sqs, false);
-
-                let opponent_state = self.get_player_state_mut(opponent);
-                opponent_state.moved_castle_piece = *old_moved_castle_piece;
-                opponent_state.king_location = *old_king_location;
-                opponent_state.is_castled = false;
-
-                self.hash = *old_hash;
-            }
-            RevertableMove::NoOp(old_hash) => {
-                self.hash = *old_hash;
-            }
-        }
-        self.player_with_turn = opponent;
-    }
-
-    pub fn is_capture(&self, m: &MoveWithEval) -> bool {
-        if let MoveDescription::NormalMove(_, _to_coord) = m.description() {
-            if let Square::Occupied(_, _) = self.get_by_index(_to_coord.value()) {
-                return true;
-            }
-        }
-        false
-    }
-
     #[inline]
-    fn update_castle_for_piece(&mut self, player: Player, dragged_or_taken: Piece, origin_coord: &Coord) {
+    fn update_castle_state_hash_for_piece(&mut self, player: Player, dragged_or_taken: Piece, origin_coord: &Coord) {
         self.update_castle_state_hash(
             player, 
             dragged_or_taken == Piece::King || (dragged_or_taken == Piece::Rook && origin_coord.0 == 7),
@@ -321,13 +409,12 @@ impl Board {
         );
     }
 
-    /// Only turns on, can't turn off
+    /// Only turns on, can't turn off, idempotent
+    /// Some ridiculous branchless implementation
     fn update_castle_state_hash(&mut self, player: Player, moved_oo: bool, moved_ooo: bool) {
         let player_num = player as usize;
         let oo_key = RANDOM_NUMBER_KEYS.moved_castle_piece[0][player_num];
         let ooo_key = RANDOM_NUMBER_KEYS.moved_castle_piece[1][player_num];
-
-        // Some stupid branchless experiment to unset and reset castle state and hash
 
         let c: [u64; 2] = [0, !0];
 
@@ -344,23 +431,70 @@ impl Board {
         self.hash ^= ooo_key & c[self.get_player_state(player).moved_castle_piece[1] as usize];
     }
 
+    fn set_en_passant_state_hash(&mut self, double_jump_target: &Coord) {
+        self._clear_en_passant_state_hash();
+
+        let player = self.get_player_with_turn();
+        let delta: i8 = if player == Player::White { 1 } else { -1 };
+        self.en_passant_extra_target.set(double_jump_target.0, ((double_jump_target.1 as i8) + delta) as u8);
+
+        self.hash ^= Self::get_loc_hash_en_passant(&self.en_passant_extra_target);
+    }
+
+    #[inline]
+    fn _clear_en_passant_state_hash(&mut self) {
+        if self.en_passant_extra_target.has_target() {
+            self.hash ^= Self::get_loc_hash_en_passant(&self.en_passant_extra_target);
+            self.en_passant_extra_target.reset();
+        }
+    }
+
+    fn clear_en_passant_state_hash(&mut self) {
+        self._clear_en_passant_state_hash();
+        self.en_passant_extra_target.reset();
+    }
+
     /// All correctness checks will be move generation's responsibility.
     pub fn handle_move(&mut self, m: &MoveWithEval) -> RevertableMove {
         let old_hash = self.hash;
         let result = match m.description() {
-            MoveDescription::NormalMove(_from_coord, _to_coord) => {
+            MoveDescription::NormalMove(_from_coord, _to_coord, metadata) => {
 
                 let from_sq_copy = *self.get_by_index(_from_coord.value());
                 let to_sq_copy = *self.get_by_index(_to_coord.value());
 
-                let result = {
-                    let curr_player_state = self.get_player_state(self.get_player_with_turn());
-                    RevertableMove::NormalMove(
-                        [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
-                        old_hash,
-                        [self.get_player_state(Player::White).moved_castle_piece, self.get_player_state(Player::Black).moved_castle_piece],
-                        curr_player_state.king_location
-                    )
+                // Determine the result type based on metadata
+                let result = if let Square::Occupied(_, _) = from_sq_copy {
+                    match *metadata {
+                        MoveMetadata::DoublePawnJump => {
+                            RevertableMove::DoublePawnJump(
+                                [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
+                                old_hash,
+                                self.en_passant_extra_target.clone()
+                            )
+                        },
+                        MoveMetadata::EnPassant => {
+                            let captured_pawn_coord = FastCoord::from_xy(_to_coord.get_x(), _from_coord.get_y());
+                            let captured_pawn_square = BeforeSquare(captured_pawn_coord, *self.get_by_fast_coord(captured_pawn_coord));
+                            RevertableMove::EnPassant(
+                                [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy), captured_pawn_square], 
+                                old_hash,
+                                self.en_passant_extra_target.clone()
+                            )
+                        },
+                        _ => {
+                            let curr_player_state = self.get_player_state(self.get_player_with_turn());
+                            RevertableMove::NormalMove(
+                                [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
+                                old_hash,
+                                [self.get_player_state(Player::White).moved_castle_piece, self.get_player_state(Player::Black).moved_castle_piece],
+                                curr_player_state.king_location,
+                                self.en_passant_extra_target.clone()
+                            )
+                        }
+                    }
+                } else {
+                    panic!("Unexpected move from empty square");
                 };
 
                 if let Square::Occupied(dragged_piece, dragged_piece_player) = from_sq_copy {
@@ -373,22 +507,32 @@ impl Board {
 
                     if let Square::Occupied(target_piece, target_piece_player) = to_sq_copy {
                         assert!(target_piece_player == opponent, "Unexpected wrong target piece player");
-                        self.update_castle_for_piece(opponent, target_piece, &to_coord);
-                    } 
-                    self.update_castle_for_piece(curr_player, dragged_piece, &from_coord);
+                        self.update_castle_state_hash_for_piece(opponent, target_piece, &to_coord);
+                    }
+                    self.update_castle_state_hash_for_piece(curr_player, dragged_piece, &from_coord);
 
                     {
                         self.set_by_index(_from_coord.0, Square::Blank);
                         if dragged_piece == Piece::Pawn && to_coord.1 == dragged_piece_player.last_row() {
-                            // TODO Add a method which configures preferred piece
+                            // TODO (Promoting to queen) Add a method which configures preferred piece
                             self.set_by_index(_to_coord.0, Square::Occupied(Piece::Queen, dragged_piece_player));
                         } else {
                             self.set_by_index(_to_coord.0, from_sq_copy);
+                            if *metadata == MoveMetadata::EnPassant {
+                                let captured_pawn_coord = FastCoord::from_xy(_to_coord.get_x(), _from_coord.get_y());
+                                self.set_by_index(captured_pawn_coord.0, Square::Blank);
+                            }
                         }
 
                         if dragged_piece == Piece::King {
                             self.get_player_state_mut(curr_player).king_location = Bitboard::from_index(_to_coord.0);
                         }
+                    }
+
+                    if *metadata == MoveMetadata::DoublePawnJump {
+                        self.set_en_passant_state_hash(&to_coord);
+                    } else {
+                        self.clear_en_passant_state_hash();
                     }
                 } else {
                     console_error!("{}", self);
@@ -404,7 +548,13 @@ impl Board {
                 let curr_player_num = curr_player as usize;
                 let result = {
                     let curr_player_state = self.get_player_state(curr_player);
-                    RevertableMove::Castle(*castle_type, old_hash, curr_player_state.moved_castle_piece, curr_player_state.king_location)
+                    RevertableMove::Castle(
+                        *castle_type,
+                        old_hash,
+                        curr_player_state.moved_castle_piece,
+                        curr_player_state.king_location,
+                        self.en_passant_extra_target.clone()
+                    )
                 };
 
                 let sqs: &[BeforeAfterSquare];
@@ -473,7 +623,7 @@ impl Board {
         }
     }
 
-    /// Get moves for the current player
+    /// Get moves for the *current* player
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
 
         let curr_player = self.get_player_with_turn();
@@ -599,10 +749,10 @@ impl Board {
 
         match self.get_by_index(origin.0) {
             Square::Occupied(Piece::Pawn, Player::White) => {
-                write_white_pawn_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+                write_white_pawn_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs, &self.en_passant_extra_target.bitboard);
             }
             Square::Occupied(Piece::Pawn, Player::Black) => {
-                write_black_pawn_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs);
+                write_black_pawn_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs, &self.en_passant_extra_target.bitboard);
             }
             Square::Occupied(Piece::Queen, _) => write_queen_moves(result, origin, &curr_state.piece_locs, &opponent_state.piece_locs),
             Square::Occupied(Piece::Knight, _) => write_knight_moves(result, origin, &curr_state.piece_locs),
@@ -621,8 +771,8 @@ impl Board {
         match piece {
             Piece::Pawn => {
                 match player {
-                    Player::White => _write_white_pawn_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs),
-                    Player::Black => _write_black_pawn_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs)
+                    Player::White => _write_white_pawn_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs, &self.en_passant_extra_target.bitboard),
+                    Player::Black => _write_black_pawn_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs, &self.en_passant_extra_target.bitboard)
                 }
             },
             Piece::Queen => _write_queen_moves(origin, &curr_state.piece_locs, &opponent_state.piece_locs),
@@ -637,10 +787,10 @@ impl Board {
     fn get_checks_captures_at(&self, origin: FastCoord, params: &CheckCaptureParams, result: &mut MoveList) {
         match self.get_by_index(origin.0) {
             Square::Occupied(Piece::Pawn, Player::White) => {
-                write_white_pawn_ccs(result, origin, &params);
+                write_white_pawn_ccs(result, origin, &params, &self.en_passant_extra_target.bitboard);
             }
             Square::Occupied(Piece::Pawn, Player::Black) => {
-                write_black_pawn_ccs(result, origin, &params);
+                write_black_pawn_ccs(result, origin, &params, &self.en_passant_extra_target.bitboard);
             }
             Square::Occupied(Piece::Queen, _) => write_queen_ccs(result, origin, params),
             Square::Occupied(Piece::Knight, _) => write_knight_ccs(result, origin, params),
@@ -651,7 +801,10 @@ impl Board {
         };
     }
 
-    pub fn get_pseudo_moves_for(&self, player: Player, result: &mut MoveList) {
+    // ["Pseudo" Moves]
+    // Currently defined as not castling, and doesn't take into account illegally exposing king for capture.
+    // Just how the logic is currently split.
+    fn get_pseudo_moves_for(&self, player: Player, result: &mut MoveList) {
         let mut piece_locs_clone = self.get_player_state(player).piece_locs.clone();
         piece_locs_clone.consume_loop_indices(|index| {
             self._get_pseudo_moves_at(FastCoord(index), player, result);
@@ -708,7 +861,7 @@ mod test {
 
         let mut b = Bitboard(0);
         for m in ml.v() {
-            if let MoveDescription::NormalMove(_, _to) = m.description() {
+            if let MoveDescription::NormalMove(_, _to, _) = m.description() {
                 b.set_index(_to.0);
             }
         }
@@ -747,7 +900,7 @@ mod test {
         board.get_checks_captures_for(Player::Black, &mut temp, &mut result);
 
         for m in result.v() {
-            if let MoveDescription::NormalMove(_from, _to) = m.description() {
+            if let MoveDescription::NormalMove(_from, _to, _) = m.description() {
                 let mut b = Bitboard(0);
                 b.set_index(_from.0);
                 b.set_index(_to.0);
@@ -759,7 +912,7 @@ mod test {
     #[ignore]
     #[test]
     fn cc_eyeball_test2() {
-        let mut board = Board::empty();
+        let mut board = Board::with_kings_only();
         board.set_by_file_rank_test('d', 2, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('e', 5, Square::Occupied(Piece::King, Player::Black));
         board.set_by_file_rank_test('a', 1, Square::Occupied(Piece::King, Player::White));
@@ -771,12 +924,76 @@ mod test {
         board.get_checks_captures_for(Player::White, &mut temp, &mut result);
 
         for m in result.v() {
-            if let MoveDescription::NormalMove(_from, _to) = m.description() {
+            if let MoveDescription::NormalMove(_from, _to, _) = m.description() {
                 let mut b = Bitboard(0);
                 b.set_index(_from.0);
                 b.set_index(_to.0);
                 println!("{}", b);
             }
         }
+    }
+
+    #[test]
+    fn test_en_passant() {
+        let mut board = Board::with_kings_only();
+        assert_eq!(Player::White, board.get_player_with_turn(), "White should be default starting player");
+        
+        board.set_by_file_rank_test('e', 2, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Pawn, Player::Black));
+        
+        // Generate moves for white and find the double jump move
+
+        let mut temp = MoveList::new(10);
+        let mut result = MoveList::new(10);
+        board.get_moves(&mut temp, &mut result);
+
+        let mut double_jump_move = None;
+        for m in result.v() {
+            if let MoveDescription::NormalMove(from, to, metadata) = m.description() {
+                if *metadata == MoveMetadata::DoublePawnJump {
+                    let from_coord = from.to_coord();
+                    let to_coord = to.to_coord();
+                    // Should be e2 to e4
+                    if from_coord.0 == 4 && from_coord.1 == 6 && to_coord.0 == 4 && to_coord.1 == 4 {
+                        double_jump_move = Some(m.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(double_jump_move.is_some(), "Double pawn jump move should be available");
+        
+        // Execute the double jump move
+        assert!(board.en_passant_extra_target.bitboard.0 == 0, "En passant target is clear before double jump");
+        board.handle_move(&double_jump_move.unwrap());
+        assert!(board.en_passant_extra_target.bitboard.0 != 0, "En passant target is set after double jump");
+
+        // Now generate moves for black and find the en passant move
+
+        let mut temp = MoveList::new(10);
+        let mut result = MoveList::new(10);
+        board.get_moves(&mut temp, &mut result);
+
+        let mut en_passant_move = None;
+        for m in result.v() {
+            if let MoveDescription::NormalMove(from, to, metadata) = m.description() {
+                if *metadata == MoveMetadata::EnPassant {
+                    let from_coord = from.to_coord();
+                    let to_coord = to.to_coord();
+                    // Should be d4 to e3
+                    if from_coord.0 == 3 && from_coord.1 == 4 && to_coord.0 == 4 && to_coord.1 == 5 {
+                        en_passant_move = Some(m.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(en_passant_move.is_some(), "En passant move should be available");
+        
+        board.handle_move(&en_passant_move.unwrap());
+        assert!(matches!(board.get_by_file_rank_safe('d', 4), Ok(Square::Blank)), "Captured pawn at d4 should be gone");
+        assert!(matches!(board.get_by_file_rank_safe('e', 3), Ok(Square::Occupied(Piece::Pawn, Player::Black))), "Black pawn should be at e3");
+        assert!(matches!(board.get_by_file_rank_safe('e', 4), Ok(Square::Blank)), "White pawn at e4 should be gone");
+        assert!(board.en_passant_extra_target.bitboard.0 == 0, "En passant target is cleared after en passant move");
     }
 }

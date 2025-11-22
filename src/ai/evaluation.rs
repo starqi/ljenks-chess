@@ -132,7 +132,7 @@ pub fn add_captures_to_evals(
 ) {
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.eval();
-        if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
+        if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
                 if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
                     score += max(evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece), MOVE_ORDER_CAPTURE_MIN_VAL);
@@ -155,7 +155,7 @@ pub fn add_mobility_to_evals(
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.eval();
 
-        if let MoveDescription::NormalMove(_from_coord, _to_coord) = m.description() {
+        if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {
                 let atks = board.get_imaginary_pseudo_move_at(*_to_coord, *src_piece, *src_player);
                 score += atks.pop_count() as i32 * MOVE_ORDER_MOB_SQ_VAL;
@@ -196,7 +196,7 @@ mod test {
     #[ignore]
     #[test]
     fn control_eyeball_test() {
-        let mut board = Board::empty();
+        let mut board = Board::with_kings_only();
         let mut af = AttackFromBoards::new();
         board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Queen, Player::White));
         println!("{}", calculate_control(&board, &mut af));

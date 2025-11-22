@@ -1,5 +1,18 @@
-TODO
+### A basic chess engine
 
+Rust, WASM, messing around
+
+https://starqi.github.io/ljenks-chess/
+
+### TODO
+
+- Minor: Pointer jumps to &Bitboard worse than copying
+- TODO IMMEDIATE
+- PNG importer for testing
+- Profiler?
+- Check mobile, check UI after changing CSS
+- Clean up linter warnings
+    - Dead code
 - Evaluation
     - Moving pieces out of the way, similar to synergy
     - Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
@@ -26,17 +39,21 @@ TODO
 - Memo unit tests
 - Proper transposition table - stop clearing it
 - UI: Disallow fake premoves
-- En passant + old board state
 - Investigate Webpack Wasm generation
 - Debug build, put logs inside debug
 - Personal musings - recursive null-move-ish evaluations  
 - Abstract away 63 - X, and remove 63 part
 - Branchless tricks with repr u8 on data enum
 
+Read again
+- Debruijin indices
+- Wasm Bindgen
+- Rust lifetimes, macros
+
 --------------------------------------------------
 
 Usage
 
 - "npm run serve" is enough to compile everything: Rust and JS
-    - Doesn't work without if not serving from web server
-- Need syncWebAssembly
+    - Doesn't work if not serving from web server
+- ? Need syncWebAssembly

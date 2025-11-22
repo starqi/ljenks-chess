@@ -22,6 +22,7 @@ pub const SQUARES_LEN: usize = 64 * PER_SQUARE_LEN;
 
 pub struct RandomNumberKeys {
     pub squares: [u64; SQUARES_LEN],
+    pub locations: [u64; 64],
     /// First index: `CastleType` enum number. Second index: `Player` enum number.
     pub moved_castle_piece: [[u64; 2]; 2],
     pub is_white_to_play: u64
@@ -34,8 +35,17 @@ impl RandomNumberKeys {
         for i in 0..squares.len() {
             squares[i] = get_random_u64();
         }
+        let mut en_passant_file = [0u64; 9];
+        for i in 0..9 {
+            en_passant_file[i] = get_random_u64();
+        }
+        let mut locations = [0u64; 64];
+        for i in 0..64 {
+            locations[i] = get_random_u64();
+        }
         RandomNumberKeys {
             squares,
+            locations,
             moved_castle_piece: [[get_random_u64(), get_random_u64()], [get_random_u64(), get_random_u64()]],
             is_white_to_play: get_random_u64()
         }
