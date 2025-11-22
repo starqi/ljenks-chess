@@ -1,5 +1,8 @@
 TODO
 
+- Check mobile, check UI after changing CSS
+- Clean up linter warnings
+    - Dead code
 - Evaluation
     - Moving pieces out of the way, similar to synergy
     - Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
@@ -38,5 +41,5 @@ TODO
 Usage
 
 - "npm run serve" is enough to compile everything: Rust and JS
-    - Doesn't work without if not serving from web server
-- Need syncWebAssembly
+    - Doesn't work if not serving from web server
+- ? Need syncWebAssembly

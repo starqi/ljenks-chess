@@ -12,9 +12,7 @@ module.exports = {
     plugins: [
         new CopyWebpackPlugin({
             patterns: [
-                {
-                    from: path.resolve(__dirname, 'index.html'),
-                },
+                {from: path.resolve(__dirname, 'index.html')},
             ],
         }),
         new WasmPackPlugin({
@@ -23,6 +21,7 @@ module.exports = {
             //forceMode: "development",
         }),
         /*
+        TODO What is this?
         new webpack.ProvidePlugin({
             TextDecoder: ['text-encoding', 'TextDecoder'],
             TextEncoder: ['text-encoding', 'TextEncoder']
@@ -32,11 +31,11 @@ module.exports = {
     //mode: 'development',
     mode: 'production',
     experiments: {
-        syncWebAssembly: true
+        asyncWebAssembly: true // TODO Review
     },
     module: {
         rules: [
-            { test: /\.png$/i, use: 'file-loader' }
+            { test: /\.png$/i, type: 'asset/resource' }
         ]
     }
 };

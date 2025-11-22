@@ -72,13 +72,12 @@ impl Board {
 
     // TODO Can set up castle, but still disallow setting random squares
     pub fn empty() -> Self {
-        let mut board = Self {
+        return Self {
             d: [Square::Blank; 64],
             hash: 0,
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()]
         };
-        board
     }
 
     #[cfg(test)]
@@ -380,7 +379,7 @@ impl Board {
                     {
                         self.set_by_index(_from_coord.0, Square::Blank);
                         if dragged_piece == Piece::Pawn && to_coord.1 == dragged_piece_player.last_row() {
-                            // TODO Add a method which configures preferred piece
+                            // TODO (Promoting to queen) Add a method which configures preferred piece
                             self.set_by_index(_to_coord.0, Square::Occupied(Piece::Queen, dragged_piece_player));
                         } else {
                             self.set_by_index(_to_coord.0, from_sq_copy);
@@ -651,6 +650,9 @@ impl Board {
         };
     }
 
+    // ["Pseudo" Moves]
+    // Currently defined as not castling, and doesn't take into account illegally exposing king for capture.
+    // Just how the logic is currently split.
     pub fn get_pseudo_moves_for(&self, player: Player, result: &mut MoveList) {
         let mut piece_locs_clone = self.get_player_state(player).piece_locs.clone();
         piece_locs_clone.consume_loop_indices(|index| {

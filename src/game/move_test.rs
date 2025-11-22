@@ -283,7 +283,7 @@ fn _write_pawn_moves(
     let curr_player_num = curr_player as usize;
     let index = origin.value() as usize;
 
-    // Blockers which block pushes, ie. everyone's pieces, excluding the current pawn
+    // Blockers which block pushes, i.e. everyone's pieces, excluding the current pawn
     let push_blockers_without_pawn = Bitboard((curr_player_piece_locs.0 | opponent_piece_locs.0) & !(1u64 << (63 - origin.0))).0;
     // Do a "motion blur" of the blockers towards the opponent direction, and convert to a mask
     let push_blockers_without_pawn2_mask = !(slide_push_blockers(push_blockers_without_pawn) | push_blockers_without_pawn);
