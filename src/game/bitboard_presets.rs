@@ -6,6 +6,7 @@ pub enum RayDirection {
     Left = 0, LeftTop, Top, RightTop, Right, RightBottom, Bottom, LeftBottom
 }
 
+// 64 means 1 BitBoard per square, e.g. for A3, all pawn push target available at A3 (only 1 square)
 pub struct BitboardPresets {
     /// First index = `RayDirection` enum order
     pub rays: [[Bitboard; 64]; 8],

@@ -46,8 +46,30 @@ fn set_blockable_ray(
 
 pub fn consume_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
     b.consume_loop_indices(|dest| {
-        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest)), 0));
+        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest), MoveMetadata::None), 0));
     });
+}
+
+pub fn consume_white_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
+    let first = b.consume_one_index_lsb();
+    if b.0 == 0 {
+        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
+    } else {
+        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
+        let second = b.consume_one_index_lsb();
+        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::DoublePawnJump), 0));
+    }
+}
+
+pub fn consume_black_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
+    let first = b.consume_one_index_lsb();
+    if b.0 == 0 {
+        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
+    } else {
+        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::DoublePawnJump), 0));
+        let second = b.consume_one_index_lsb();
+        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::None), 0));
+    }
 }
 
 pub fn update_attack_from_boards(origin: FastCoord, b: &mut Bitboard, result: &mut AttackFromBoards) {
@@ -278,18 +300,21 @@ fn _write_pawn_moves(
     slide_push_blockers: impl FnOnce(u64) -> u64,
     curr_player: Player,
     curr_player_piece_locs: &Bitboard,
-    opponent_piece_locs: &Bitboard
+    opponent_piece_locs: &Bitboard,
+    en_passant_extra_target: &Bitboard
 ) -> Bitboard {
     let curr_player_num = curr_player as usize;
     let index = origin.value() as usize;
+    let origin_as_bitboard = Bitboard::from_index(origin.0);
 
-    // Blockers which block pushes, i.e. everyone's pieces, excluding the current pawn
-    let push_blockers_without_pawn = Bitboard((curr_player_piece_locs.0 | opponent_piece_locs.0) & !(1u64 << (63 - origin.0))).0;
-    // Do a "motion blur" of the blockers towards the opponent direction, and convert to a mask
+    // Blockers which block pushes, i.e. everyone's pieces, excluding the current pawn, b/c current pawn can't block itself.
+    let push_blockers_without_pawn = Bitboard((curr_player_piece_locs.0 | opponent_piece_locs.0) & !(origin_as_bitboard.0)).0;
+    // Convert to mask, blocker positions have 0, all else 1 -> masked against pawn_pushes -> cannot push pawn to blocked position.
+    // For 2 square jumps: confusing trick, but do a "motion blur" of the blockers towards the opponent direction,
+    // this doesn't make a difference for 1 square push, but lets the mask approach work for 2 square jumps.
     let push_blockers_without_pawn2_mask = !(slide_push_blockers(push_blockers_without_pawn) | push_blockers_without_pawn);
-    // This should handle blockers for pushes
     let push_locs = BITBOARD_PRESETS.pawn_pushes[curr_player_num][index].0 & push_blockers_without_pawn2_mask;
-    let capture_locs = _write_pawn_captures(origin, curr_player, opponent_piece_locs);
+    let capture_locs = _write_pawn_captures(origin, curr_player, &Bitboard(opponent_piece_locs.0 | en_passant_extra_target.0));
     Bitboard(push_locs | capture_locs.0)
 }
 
@@ -297,27 +322,35 @@ fn _write_pawn_moves(
 pub fn _write_white_pawn_moves(
     origin: FastCoord,
     piece_locs: &Bitboard,
-    opponent_piece_locs: &Bitboard
+    opponent_piece_locs: &Bitboard,
+    en_passant_extra_target: &Bitboard
 ) -> Bitboard {
-    _write_pawn_moves(origin, |blockers| blockers << 8, Player::White, piece_locs, opponent_piece_locs)
+    _write_pawn_moves(origin, |blockers| blockers << 8, Player::White, piece_locs, opponent_piece_locs, en_passant_extra_target)
 }
 
 #[inline]
-pub fn _write_white_pawn_captures(
+fn _write_white_pawn_captures(
     origin: FastCoord,
     opponent_piece_locs: &Bitboard
 ) -> Bitboard {
     _write_pawn_captures(origin, Player::White, opponent_piece_locs)
 }
 
-pub fn write_white_pawn_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
-    let mut b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+pub fn write_white_pawn_moves(
+    ml: &mut MoveList,
+    origin: FastCoord,
+    curr_player_piece_locs: &Bitboard,
+    opponent_piece_locs: &Bitboard,
+    en_passant_extra_target: &Bitboard
+) {
+    let mut b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
     consume_to_move_list(&mut b, origin, ml);
 }
 
-pub fn write_white_pawn_ccs(ml: &mut MoveList, origin: FastCoord, params: &CheckCaptureParams) {
+pub fn write_white_pawn_ccs(ml: &mut MoveList, origin: FastCoord, params: &CheckCaptureParams, en_passant_extra_target: &Bitboard) {
     let mut b = _write_white_pawn_captures(origin, &params.opponent_piece_locs);
-    b.0 |= _write_white_pawn_moves(origin, &params.curr_player_piece_locs, &params.opponent_piece_locs).0 & params.king_potential_pawn_atks.0;
+    b.0 |= _write_white_pawn_moves(
+        origin, &params.curr_player_piece_locs, &params.opponent_piece_locs, en_passant_extra_target).0 & params.king_potential_pawn_atks.0;
     consume_to_move_list(&mut b, origin, ml);
 }
 
@@ -327,7 +360,7 @@ pub fn update_white_pawn_af(origin: FastCoord, opponent_piece_locs: &Bitboard, r
 }
 
 pub fn white_pawn_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
-    let b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    let b = _write_white_pawn_captures(origin, opponent_piece_locs);
     hits_king(&b, opponent_king_location)
 }
 
@@ -335,27 +368,35 @@ pub fn white_pawn_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard
 pub fn _write_black_pawn_moves(
     origin: FastCoord,
     piece_locs: &Bitboard,
-    opponent_piece_locs: &Bitboard
+    opponent_piece_locs: &Bitboard,
+    en_passant_extra_target: &Bitboard
 ) -> Bitboard {
-    _write_pawn_moves(origin, |blockers| blockers >> 8, Player::Black, piece_locs, opponent_piece_locs)
+    _write_pawn_moves(origin, |blockers| blockers >> 8, Player::Black, piece_locs, opponent_piece_locs, en_passant_extra_target)
 }
 
 #[inline]
-pub fn _write_black_pawn_captures(
+fn _write_black_pawn_captures(
     origin: FastCoord,
     opponent_piece_locs: &Bitboard
 ) -> Bitboard {
     _write_pawn_captures(origin, Player::Black, opponent_piece_locs)
 }
 
-pub fn write_black_pawn_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
-    let mut b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+pub fn write_black_pawn_moves(
+    ml: &mut MoveList,
+    origin: FastCoord,
+    curr_player_piece_locs: &Bitboard,
+    opponent_piece_locs: &Bitboard,
+    en_passant_extra_target: &Bitboard
+) {
+    let mut b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
     consume_to_move_list(&mut b, origin, ml);
 }
 
-pub fn write_black_pawn_ccs(ml: &mut MoveList, origin: FastCoord, params: &CheckCaptureParams) {
+pub fn write_black_pawn_ccs(ml: &mut MoveList, origin: FastCoord, params: &CheckCaptureParams, en_passant_extra_target: &Bitboard) {
     let mut b = _write_black_pawn_captures(origin, &params.opponent_piece_locs);
-    b.0 |= _write_black_pawn_moves(origin, &params.curr_player_piece_locs, &params.opponent_piece_locs).0 & params.king_potential_pawn_atks.0;
+    b.0 |= _write_black_pawn_moves(
+        origin, &params.curr_player_piece_locs, &params.opponent_piece_locs, en_passant_extra_target).0 & params.king_potential_pawn_atks.0;
     consume_to_move_list(&mut b, origin, ml);
 }
 
@@ -365,7 +406,7 @@ pub fn update_black_pawn_af(origin: FastCoord, opponent_piece_locs: &Bitboard, r
 }
 
 pub fn black_pawn_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard, opponent_king_location: &Bitboard) -> bool {
-    let b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs);
+    let b = _write_black_pawn_captures(origin, opponent_piece_locs);
     hits_king(&b, opponent_king_location)
 }
 

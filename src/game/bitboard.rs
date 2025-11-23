@@ -100,6 +100,12 @@ impl Bitboard {
         }
     }
 
+    pub fn consume_one_index_lsb(&mut self) -> u8 {
+        let index = self._lsb_to_index();
+        self.unset_index(index);
+        index
+    }
+
     pub fn consume_loop_indices2(&mut self, mut cb: impl FnMut(u8) -> bool) -> bool {
         while self.0 != 0 {
             let index = self._lsb_to_index();

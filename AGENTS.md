@@ -11,3 +11,4 @@ Basic chess engine compiling to WASM, with browser frontend.
 
 ### Architecture
 - Tests are in the same file as the implementation under "mod test".
+- Chess engines are highly performance sensitive, and code should reflect this: e.g. bitboard use, cache locality, avoiding branches and copying

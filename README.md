@@ -1,5 +1,8 @@
 TODO
 
+- En passant + old board state
+    - During double jump move gen, include bitboard with 1 square marked, the only square en passant retaliator can go to, use that as "did they double jump"
+    - If so, then response is ternary trick with "if en passant != null then |= the 1 square else |= 0"
 - Check mobile, check UI after changing CSS
 - Clean up linter warnings
     - Dead code
@@ -29,12 +32,16 @@ TODO
 - Memo unit tests
 - Proper transposition table - stop clearing it
 - UI: Disallow fake premoves
-- En passant + old board state
 - Investigate Webpack Wasm generation
 - Debug build, put logs inside debug
 - Personal musings - recursive null-move-ish evaluations  
 - Abstract away 63 - X, and remove 63 part
 - Branchless tricks with repr u8 on data enum
+
+Read again
+- Debruijin indices
+- Wasm Bindgen
+- Rust lifetimes, macros
 
 --------------------------------------------------
 
