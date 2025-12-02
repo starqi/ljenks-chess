@@ -50,27 +50,28 @@ pub fn consume_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut Mo
     });
 }
 
-pub fn consume_white_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
-    let first = b.consume_one_index_lsb();
-    if b.0 == 0 {
-        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
-    } else {
-        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
-        let second = b.consume_one_index_lsb();
-        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::DoublePawnJump), 0));
-    }
-}
-
-pub fn consume_black_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
-    let first = b.consume_one_index_lsb();
-    if b.0 == 0 {
-        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
-    } else {
-        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::DoublePawnJump), 0));
-        let second = b.consume_one_index_lsb();
-        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::None), 0));
-    }
-}
+//TODO Delete, right?
+//pub fn consume_white_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
+//    let first = b.consume_one_index_lsb();
+//    if b.0 == 0 {
+//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
+//    } else {
+//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
+//        let second = b.consume_one_index_lsb();
+//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::DoublePawnJump), 0));
+//    }
+//}
+//
+//pub fn consume_black_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
+//    let first = b.consume_one_index_lsb();
+//    if b.0 == 0 {
+//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
+//    } else {
+//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::DoublePawnJump), 0));
+//        let second = b.consume_one_index_lsb();
+//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::None), 0));
+//    }
+//}
 
 pub fn update_attack_from_boards(origin: FastCoord, b: &mut Bitboard, result: &mut AttackFromBoards) {
     b.consume_loop_indices(|dest| {
@@ -286,11 +287,12 @@ pub fn king_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, oppo
 fn _write_pawn_captures(
     origin: FastCoord,
     curr_player: Player,
-    opponent_piece_locs: &Bitboard
+    // Just think of en passant as 1 pawn in 2 squares due to motion blur
+    opponent_piece_locs_inc_en_passant: &Bitboard
 ) -> Bitboard {
     let curr_player_num = curr_player as usize;
     let index = origin.value() as usize;
-    Bitboard(BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs.0)
+    Bitboard(BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs_inc_en_passant.0)
 }
 
 // Not public, don't expose `slide_push_blockers` internal,
@@ -309,7 +311,7 @@ fn _write_pawn_moves(
 
     // Blockers which block pushes, i.e. everyone's pieces, excluding the current pawn, b/c current pawn can't block itself.
     let push_blockers_without_pawn = Bitboard((curr_player_piece_locs.0 | opponent_piece_locs.0) & !(origin_as_bitboard.0)).0;
-    // Convert to mask, blocker positions have 0, all else 1 -> masked against pawn_pushes -> cannot push pawn to blocked position.
+    // Convert to mask, blocker positions have 0, all else 1 -> masked against BITBOARD_PRESETS.pawn_pushes -> cannot push pawn to blocked position.
     // For 2 square jumps: confusing trick, but do a "motion blur" of the blockers towards the opponent direction,
     // this doesn't make a difference for 1 square push, but lets the mask approach work for 2 square jumps.
     let push_blockers_without_pawn2_mask = !(slide_push_blockers(push_blockers_without_pawn) | push_blockers_without_pawn);
@@ -343,12 +345,14 @@ pub fn write_white_pawn_moves(
     opponent_piece_locs: &Bitboard,
     en_passant_extra_target: &Bitboard
 ) {
+    // TODO IMMEDIATE Can't identify metadata...  
     let mut b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
     consume_to_move_list(&mut b, origin, ml);
 }
 
 pub fn write_white_pawn_ccs(ml: &mut MoveList, origin: FastCoord, params: &CheckCaptureParams, en_passant_extra_target: &Bitboard) {
     let mut b = _write_white_pawn_captures(origin, &params.opponent_piece_locs);
+    // TODO Slowness. Double counting capture + check? If capture, we don't need to see it's also a check
     b.0 |= _write_white_pawn_moves(
         origin, &params.curr_player_piece_locs, &params.opponent_piece_locs, en_passant_extra_target).0 & params.king_potential_pawn_atks.0;
     consume_to_move_list(&mut b, origin, ml);

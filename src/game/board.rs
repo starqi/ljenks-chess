@@ -817,25 +817,23 @@ mod test {
         }
     }
 
-    /*
     #[test]
     fn test_en_passant() {
         let mut board = Board::empty();
         
-        // Set up white pawn on e2, black pawn on d4
         board.set_by_file_rank_test('e', 2, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Pawn, Player::Black));
-        
-        // Set up kings to avoid check issues
         board.set_by_file_rank_test('a', 1, Square::Occupied(Piece::King, Player::White));
         board.set_by_file_rank_test('a', 8, Square::Occupied(Piece::King, Player::Black));
+        board.get_player_state_mut(Player::White).moved_castle_piece = [true, true];
+        board.get_player_state_mut(Player::Black).moved_castle_piece = [true, true];
         board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(0, 7).0);
         board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(0, 0).0);
         
         // White to move - make 2-square pawn move from e2 to e4
         let from_coord = FastCoord::from_xy(4, 6); // e2
         let to_coord = FastCoord::from_xy(4, 4);   // e4
-        let move_desc = MoveDescription::NormalMove(from_coord, to_coord);
+        let move_desc = MoveDescription::NormalMove(from_coord, to_coord, MoveMetadata::DoublePawnJump);
         let move_with_eval = MoveWithEval(move_desc, 0);
         
         let revertable = board.handle_move(&move_with_eval);
@@ -893,5 +891,4 @@ mod test {
         board.revert_move(&revertable);
         assert_eq!(board.get_en_passant_file(), 8);
     }
-*/
 }

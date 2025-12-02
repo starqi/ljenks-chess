@@ -25,7 +25,7 @@ impl SearchableMoves {
             let m = &move_list.v()[i];
 
             match m.description() {
-                MoveDescription::NormalMove(from, to) => {
+                MoveDescription::NormalMove(from, to, _) => {
                     self.map.insert(SearchableMoveKey(*from, *to), m.clone());
                 }
                 MoveDescription::Castle(castle_type) => {

@@ -1,8 +1,8 @@
 TODO
 
 - En passant + old board state
-    - During double jump move gen, include bitboard with 1 square marked, the only square en passant retaliator can go to, use that as "did they double jump"
-    - If so, then response is ternary trick with "if en passant != null then |= the 1 square else |= 0"
+    - Performant way to associate metadata with move in move generation...
+    - During double jump move EXECUTION, add to board state new bitboard with 1 square marked, the only square en passant retaliator can go to, use that as "did they double jump"
 - Check mobile, check UI after changing CSS
 - Clean up linter warnings
     - Dead code
