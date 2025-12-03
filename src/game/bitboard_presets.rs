@@ -6,6 +6,13 @@ pub enum RayDirection {
     Left = 0, LeftTop, Top, RightTop, Right, RightBottom, Bottom, LeftBottom
 }
 
+#[derive(Copy, Clone)]
+pub struct PawnMoveMasks {
+    pub single_push: Bitboard,
+    pub double_push: Bitboard,
+    pub captures: Bitboard
+}
+
 // 64 means 1 BitBoard per square, e.g. for A3, all pawn push target available at A3 (only 1 square)
 pub struct BitboardPresets {
     /// First index = `RayDirection` enum order
@@ -15,6 +22,8 @@ pub struct BitboardPresets {
     pub pawn_pushes: [[Bitboard; 64]; 2],
     /// First index = `Player` enum order
     pub pawn_captures: [[Bitboard; 64]; 2],
+    /// Combined pawn move masks for optimized move generation
+    pub pawn_move_masks: [[PawnMoveMasks; 64]; 2],
     pub king_moves: [Bitboard; 64],
     /// Index = LSB, MSB
     pub ensure_blocker: [Bitboard; 2],
@@ -27,6 +36,9 @@ pub struct BitboardPresets {
 
 impl BitboardPresets {
     pub fn new() -> BitboardPresets {
+        let white_pawn_masks = make_pawn_move_masks(-1, 6);
+        let black_pawn_masks = make_pawn_move_masks(1, 1);
+        
         BitboardPresets {
             rays: [
                 make_ray_lookup(-1, 0), make_ray_lookup(-1, -1), make_ray_lookup(0, -1), make_ray_lookup(1, -1),
@@ -35,6 +47,7 @@ impl BitboardPresets {
             knight_jumps: make_knight_jump_lookup(),
             pawn_pushes: [make_pawn_lookup(-1, 6), make_pawn_lookup(1, 1)],
             pawn_captures: [make_pawn_capture_lookup(-1), make_pawn_capture_lookup(1)],
+            pawn_move_masks: [white_pawn_masks, black_pawn_masks],
             king_moves: make_king_lookup(),
             ensure_blocker: [Bitboard(1u64 << 63), Bitboard(1)],
             opponent_squares: [bitboard_union!(make_line(0) , make_line(1) , make_line(2)), bitboard_union!(make_line(7), make_line(6), make_line(5))],
@@ -107,6 +120,39 @@ fn make_pawn_lookup(dy: i8, jump_y: i8) -> [Bitboard; 64] {
                 b.slow_safe_set(x, y + dy + dy);
             }
             result[(y * 8 + x) as usize].0 = b.0;
+        }
+    }
+    result
+}
+
+fn make_pawn_move_masks(dy: i8, jump_y: i8) -> [PawnMoveMasks; 64] {
+    let mut result = [PawnMoveMasks { 
+        single_push: Bitboard(0), 
+        double_push: Bitboard(0), 
+        captures: Bitboard(0) 
+    }; 64];
+    
+    for x in 0..8 {
+        for y in 0..8 {
+            let index = (y * 8 + x) as usize;
+            
+            // Single push
+            let mut single_push = Bitboard(0);
+            single_push.slow_safe_set(x, y + dy);
+            result[index].single_push = single_push;
+            
+            // Double push (only from starting rank)
+            if y == jump_y {
+                let mut double_push = Bitboard(0);
+                double_push.slow_safe_set(x, y + dy + dy);
+                result[index].double_push = double_push;
+            }
+            
+            // Captures
+            let mut captures = Bitboard(0);
+            captures.slow_safe_set(x - 1, y + dy);
+            captures.slow_safe_set(x + 1, y + dy);
+            result[index].captures = captures;
         }
     }
     result

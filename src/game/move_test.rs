@@ -50,6 +50,43 @@ pub fn consume_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut Mo
     });
 }
 
+/// Branchless, staged pawn move consumption with proper metadata
+/// Order: Double jumps first (for move ordering), then en passant, then normal moves
+pub fn consume_pawn_moves_staged(
+    b: Bitboard,
+    origin: FastCoord,
+    result: &mut MoveList,
+    double_push_mask: Bitboard,
+    en_passant_mask: Bitboard
+) {
+    // Stage 1: Double pawn jumps (highest priority for move ordering)
+    let double_moves = b & double_push_mask;
+    if double_moves.0 != 0 {
+        let mut temp = double_moves;
+        temp.consume_loop_indices(|dest| {
+            result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest), MoveMetadata::DoublePawnJump), 0));
+        });
+    }
+    
+    // Stage 2: En passant captures
+    let en_passant_moves = b & en_passant_mask;
+    if en_passant_moves.0 != 0 {
+        let mut temp = en_passant_moves;
+        temp.consume_loop_indices(|dest| {
+            result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest), MoveMetadata::EnPassant), 0));
+        });
+    }
+    
+    // Stage 3: All remaining moves (single pushes + captures)
+    let remaining_moves = b & !(double_push_mask | en_passant_mask);
+    if remaining_moves.0 != 0 {
+        let mut temp = remaining_moves;
+        temp.consume_loop_indices(|dest| {
+            result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(dest), MoveMetadata::None), 0));
+        });
+    }
+}
+
 //TODO Delete, right?
 //pub fn consume_white_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
 //    let first = b.consume_one_index_lsb();
@@ -345,9 +382,13 @@ pub fn write_white_pawn_moves(
     opponent_piece_locs: &Bitboard,
     en_passant_extra_target: &Bitboard
 ) {
-    // TODO IMMEDIATE Can't identify metadata...  
-    let mut b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
-    consume_to_move_list(&mut b, origin, ml);
+    let b = _write_white_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
+    let player_num = Player::White as usize;
+    let origin_index = origin.value() as usize;
+    
+    let double_push_mask = BITBOARD_PRESETS.pawn_move_masks[player_num][origin_index].double_push;
+    
+    consume_pawn_moves_staged(b, origin, ml, double_push_mask, *en_passant_extra_target);
 }
 
 pub fn write_white_pawn_ccs(ml: &mut MoveList, origin: FastCoord, params: &CheckCaptureParams, en_passant_extra_target: &Bitboard) {
@@ -393,8 +434,16 @@ pub fn write_black_pawn_moves(
     opponent_piece_locs: &Bitboard,
     en_passant_extra_target: &Bitboard
 ) {
-    let mut b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
-    consume_to_move_list(&mut b, origin, ml);
+    let b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
+
+    println!("QQ\n{}", b);
+    println!("QQ2\n{}", *en_passant_extra_target);
+    let player_num = Player::Black as usize;
+    let origin_index = origin.value() as usize;
+    
+    let double_push_mask = BITBOARD_PRESETS.pawn_move_masks[player_num][origin_index].double_push;
+    
+    consume_pawn_moves_staged(b, origin, ml, double_push_mask, *en_passant_extra_target);
 }
 
 pub fn write_black_pawn_ccs(ml: &mut MoveList, origin: FastCoord, params: &CheckCaptureParams, en_passant_extra_target: &Bitboard) {
