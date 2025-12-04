@@ -436,8 +436,6 @@ pub fn write_black_pawn_moves(
 ) {
     let b = _write_black_pawn_moves(origin, curr_player_piece_locs, opponent_piece_locs, en_passant_extra_target);
 
-    println!("QQ\n{}", b);
-    println!("QQ2\n{}", *en_passant_extra_target);
     let player_num = Player::Black as usize;
     let origin_index = origin.value() as usize;
     

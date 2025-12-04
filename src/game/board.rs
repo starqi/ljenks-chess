@@ -7,8 +7,13 @@ use super::super::*;
 use super::bitboard::*;
 
 pub enum RevertableMove {
+    // TODO Better style?
     /// (old squares, old hash to revert to, moved_castle_piece - first index is `Player` enum number, old king location)
     NormalMove([BeforeSquare; 2], u64, [[bool; 2]; 2], Bitboard),
+    /// (from, to squares, old hash) - simplified for pawn moves, no castle rights or king tracking needed
+    DoublePawnJump([BeforeSquare; 2], u64),
+    /// (from, to, captured_pawn_square, old hash, old en_passant_extra_target) - simplified for en passant, no castle rights needed
+    EnPassant([BeforeSquare; 3], u64, Bitboard),
     /// (oo/ooo, old hash to revert to, moved_castle_piece, old king location),
     Castle(CastleType, u64, [bool; 2], Bitboard),
     NoOp(u64)
@@ -322,6 +327,26 @@ impl Board {
 
                 self.hash = *old_hash;
             }
+            RevertableMove::DoublePawnJump(snapshot, old_hash) => {
+                for BeforeSquare(fast_coord, square) in snapshot.iter() {
+                    self.set_by_index_no_hash(fast_coord.0, *square);
+                }
+                
+                // Clear en passant target since we're reverting the double jump
+                self.clear_en_passant_extra_target();
+                
+                self.hash = *old_hash;
+            },
+            RevertableMove::EnPassant(snapshot, old_hash, old_en_passant_target) => {
+                for BeforeSquare(fast_coord, square) in snapshot.iter() {
+                    self.set_by_index_no_hash(fast_coord.0, *square);
+                }
+                
+                // Restore en passant target since we're reverting the en passant capture
+                self.en_passant_extra_target = *old_en_passant_target;
+                
+                self.hash = *old_hash;
+            },
             RevertableMove::NoOp(old_hash) => {
                 self.hash = *old_hash;
             }
@@ -378,7 +403,41 @@ impl Board {
                 let from_sq_copy = *self.get_by_index(_from_coord.value());
                 let to_sq_copy = *self.get_by_index(_to_coord.value());
 
-                let result = {
+                // Determine the result type based on metadata
+                let result = if let Square::Occupied(dragged_piece, _) = from_sq_copy {
+                    match *metadata {
+                        MoveMetadata::DoublePawnJump => {
+                            RevertableMove::DoublePawnJump(
+                                [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
+                                old_hash
+                            )
+                        },
+                        MoveMetadata::EnPassant => {
+                            // For en passant, we need to capture the 3 squares: from, to, and captured pawn
+                            // The captured pawn is on the same file as the to_coord, but on the same rank as the from_coord
+                            let from_coord = _from_coord.to_coord();
+                            let to_coord = _to_coord.to_coord();
+                            // TODO IMMEDIATE Slightly faster
+                            let captured_pawn_coord = FastCoord::from_xy(to_coord.0, from_coord.1);
+                            let captured_pawn_square = BeforeSquare(captured_pawn_coord, *self.get_by_index(captured_pawn_coord.0));
+                            RevertableMove::EnPassant(
+                                [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy), captured_pawn_square], 
+                                old_hash,
+                                self.en_passant_extra_target
+                            )
+                        },
+                        _ => {
+                            let curr_player_state = self.get_player_state(self.get_player_with_turn());
+                            RevertableMove::NormalMove(
+                                [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
+                                old_hash,
+                                [self.get_player_state(Player::White).moved_castle_piece, self.get_player_state(Player::Black).moved_castle_piece],
+                                curr_player_state.king_location
+                            )
+                        }
+                    }
+                } else {
+                    // TODO IMMEDIATE When is this?
                     let curr_player_state = self.get_player_state(self.get_player_with_turn());
                     RevertableMove::NormalMove(
                         [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
@@ -410,7 +469,13 @@ impl Board {
                         } else {
                             self.set_by_index(_to_coord.0, from_sq_copy);
                             if *metadata == MoveMetadata::EnPassant {
-                                // FIXME Capture piece in other location
+                                // Capture the pawn that jumped two squares ago
+                                // The captured pawn is on the same file as the to_coord, but on the same rank as the from_coord
+                                let from_coord = _from_coord.to_coord();
+                                let to_coord = _to_coord.to_coord();
+                                // TODO IMMEDIATE Faster
+                                let captured_pawn_coord = FastCoord::from_xy(to_coord.0, from_coord.1);
+                                self.set_by_index(captured_pawn_coord.0, Square::Blank);
                             }
                         }
 
@@ -830,93 +895,62 @@ mod test {
         board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(0, 7).0);
         board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(0, 0).0);
         
-        // White to move - make 2-square pawn move from e2 to e4
-        let from_coord = FastCoord::from_xy(4, 6); // e2
-        let to_coord = FastCoord::from_xy(4, 4);   // e4
-        let move_desc = MoveDescription::NormalMove(from_coord, to_coord, MoveMetadata::DoublePawnJump);
-        let move_with_eval = MoveWithEval(move_desc, 0);
-        
-        assert!(board.en_passant_extra_target.0 == 0);
-        let revertable = board.handle_move(&move_with_eval);
-        assert!(board.en_passant_extra_target.0 != 0);
-
+        // Generate moves for white and find the double jump move
         let mut temp = MoveList::new(10);
         let mut result = MoveList::new(10);
         board.get_moves(&mut temp, &mut result);
 
-        let mut found = false;
+        let mut double_jump_move = None;
         for m in result.v() {
             if let MoveDescription::NormalMove(from, to, metadata) = m.description() {
-                print!("HELLO {} {}", from, to);
-                if *metadata == MoveMetadata::EnPassant {
-                    if found { assert!(false); }
-
+                if *metadata == MoveMetadata::DoublePawnJump {
                     let from_coord = from.to_coord();
                     let to_coord = to.to_coord();
-                    // e3
-                    assert_eq!(to_coord.0, 4);
-                    assert_eq!(to_coord.1, 5);
-                    // d4
-                    assert_eq!(from_coord.0, 3);
-                    assert_eq!(from_coord.1, 4);
-
-                    found = true;
+                    // Should be e2 to e4
+                    if from_coord.0 == 4 && from_coord.1 == 6 && to_coord.0 == 4 && to_coord.1 == 4 {
+                        double_jump_move = Some(m.clone());
+                        break;
+                    }
                 }
             }
         }
-        assert!(found);
+        assert!(double_jump_move.is_some(), "Double pawn jump move should be available");
         
-        //// Now it's black's turn, en passant should be available on e file
-        //println!("En passant file: {}", board.get_en_passant_file());
-        //assert_eq!(board.get_en_passant_file(), 4); // e file
-        //
-        //// Check that en passant capture is available for black pawn on d5
-        //let mut temp = MoveList::new(10);
-        //let mut result = MoveList::new(10);
-        //board.get_moves(&mut temp, &mut result);
-        //
-        //let mut found_en_passant = false;
-        //println!("Generated moves for black:");
-        //for m in result.v() {
-        //    if let MoveDescription::NormalMove(from, to) = m.description() {
-        //        let from_coord = from.to_coord();
-        //        let to_coord = to.to_coord();
-        //        println!("Move from {}{} to {}{} (from: {}, to: {})", 
-        //            (from_coord.0 + b'a') as char, 8 - from_coord.1,
-        //            (to_coord.0 + b'a') as char, 8 - to_coord.1,
-        //            from.0, to.0);
-        //        // Check if this is en passant move (d4 to e3)
-        //        // d4 should be index 35, e3 should be index 44
-        //        if from.0 == 35 && to.0 == 44 {
-        //            found_en_passant = true;
-        //            break;
-        //        }
-        //    }
-        //}
-        //assert!(found_en_passant, "En passant move should be available");
-        //
-        //// Execute the en passant capture
-        //let from_coord = FastCoord::from_xy(3, 4); // d4 (index 35)
-        //let to_coord = FastCoord::from_xy(4, 5);   // e3 (index 44)
-        //let move_desc = MoveDescription::NormalMove(from_coord, to_coord);
-        //let move_with_eval = MoveWithEval(move_desc, 0);
-        //
-        //board.handle_move(&move_with_eval);
-        //
-        //// Verify the black pawn moved to e3 after en passant capture
-        //match board.get_by_index(44) {
-        //    Square::Occupied(piece, player) => {
-        //        assert!(*piece == Piece::Pawn);
-        //        assert!(*player == Player::Black);
-        //    },
-        //    _ => panic!("Expected black pawn on e3 after en passant capture")
-        //}
-        //
-        //// Verify the en passant file is reset
-        //assert_eq!(board.get_en_passant_file(), 8);
-        //
-        //// Revert the move and verify state is restored
-        //board.revert_move(&revertable);
-        //assert_eq!(board.get_en_passant_file(), 8);
+        // Execute the double jump move
+        assert!(board.en_passant_extra_target.0 == 0);
+        let revertable = board.handle_move(&double_jump_move.unwrap());
+        assert!(board.en_passant_extra_target.0 != 0);
+
+        // Now generate moves for black and find the en passant move
+        let mut temp = MoveList::new(10);
+        let mut result = MoveList::new(10);
+        board.get_moves(&mut temp, &mut result);
+
+        let mut en_passant_move = None;
+        for m in result.v() {
+            if let MoveDescription::NormalMove(from, to, metadata) = m.description() {
+                if *metadata == MoveMetadata::EnPassant {
+                    let from_coord = from.to_coord();
+                    let to_coord = to.to_coord();
+                    // Should be d4 to e3
+                    if from_coord.0 == 3 && from_coord.1 == 4 && to_coord.0 == 4 && to_coord.1 == 5 {
+                        en_passant_move = Some(m.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(en_passant_move.is_some(), "En passant move should be available");
+        
+        // Execute the en passant move and verify the end state
+        let revertable_en_passant = board.handle_move(&en_passant_move.unwrap());
+        
+        // Verify the captured pawn is gone and the moving pawn is in the correct position
+        assert!(matches!(board.get_by_file_rank_safe('d', 4), Ok(Square::Blank)), "Captured pawn at d4 should be gone");
+        assert!(matches!(board.get_by_file_rank_safe('e', 3), Ok(Square::Occupied(Piece::Pawn, Player::Black))), "Black pawn should be at e3");
+        assert!(matches!(board.get_by_file_rank_safe('e', 4), Ok(Square::Blank)), "White pawn at e4 should be gone");
+        
+        // Verify en passant target is cleared after the move
+        assert!(board.en_passant_extra_target.0 == 0);
     }
 }
