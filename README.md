@@ -1,11 +1,11 @@
 TODO
 
 - Minor: Pointer jumps to &Bitboard worse than copying
-- En passant + old board state
+/ En passant + old board state
     / Performant way to associate metadata with move in move generation...
     - Clean up AI
-    - PNG importer for testing
-    - During double jump move EXECUTION, add to board state new bitboard with 1 square marked, the only square en passant retaliator can go to, use that as "did they double jump"
+- PNG importer for testing
+- Profiler?
 - Check mobile, check UI after changing CSS
 - Clean up linter warnings
     - Dead code

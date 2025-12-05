@@ -10,16 +10,27 @@ impl FastCoord {
         self.0
     }
 
+    #[inline]
     pub fn to_coord(&self) -> Coord {
-        let y = (self.0 / 8) as u8;
-        let x = self.0 % 8;
-        Coord(x, y)
+        Coord(self.get_x(), self.get_y())
     }
 
+    #[inline]
+    pub fn get_y(&self) -> u8 {
+        (self.0 / 8) as u8
+    }
+
+    #[inline]
+    pub fn get_x(&self) -> u8 {
+        self.0 % 8
+    }
+
+    #[inline]
     pub fn from_xy(x: u8, y: u8) -> FastCoord {
         FastCoord(y * 8 + x)
     }
 
+    #[inline]
     pub fn from_coord(coord: &Coord) -> FastCoord {
         FastCoord(coord.1 * 8 + coord.0)
     }

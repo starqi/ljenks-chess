@@ -196,7 +196,7 @@ mod test {
     #[ignore]
     #[test]
     fn control_eyeball_test() {
-        let mut board = Board::empty();
+        let mut board = Board::with_kings_only();
         let mut af = AttackFromBoards::new();
         board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Queen, Player::White));
         println!("{}", calculate_control(&board, &mut af));

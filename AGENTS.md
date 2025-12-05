@@ -1,4 +1,5 @@
 Basic chess engine compiling to WASM, with browser frontend.
+Think: You are a chess engine developer and this is a shitty engine to review.
 
 ### Basics
 - Run "cargo check" to find compile errors and warnings.

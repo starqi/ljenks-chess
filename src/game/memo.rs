@@ -24,8 +24,7 @@ pub struct RandomNumberKeys {
     pub squares: [u64; SQUARES_LEN],
     /// First index: `CastleType` enum number. Second index: `Player` enum number.
     pub moved_castle_piece: [[u64; 2]; 2],
-    pub is_white_to_play: u64,
-    pub last_move_was_double_pawn_jump: u64
+    pub is_white_to_play: u64
 }
 
 impl RandomNumberKeys {
@@ -42,8 +41,7 @@ impl RandomNumberKeys {
         RandomNumberKeys {
             squares,
             moved_castle_piece: [[get_random_u64(), get_random_u64()], [get_random_u64(), get_random_u64()]],
-            is_white_to_play: get_random_u64(),
-            last_move_was_double_pawn_jump: get_random_u64()
+            is_white_to_play: get_random_u64()
         }
     }
 }
