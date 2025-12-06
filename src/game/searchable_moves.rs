@@ -17,7 +17,7 @@ impl SearchableMoves {
         SearchableMoves { map }
     }
 
-    pub fn reset(&mut self, curr_player: Player, move_list: &MoveList, start: usize, end_exclusive: usize) {
+    pub fn reset_from_move_list(&mut self, curr_player: Player, move_list: &MoveList, start: usize, end_exclusive: usize) {
 
         self.map.clear();
 

@@ -7,16 +7,17 @@ use super::super::*;
 use super::bitboard::*;
 
 pub enum RevertableMove {
-    // TODO IMMEDIATE Better style?
+    // TODO IMMEDIATE Better style? Params are accessible outside module...
+
     /// (old squares, old hash to revert to, moved_castle_piece - first index is `Player` enum number, old king location)
-    NormalMove([BeforeSquare; 2], u64, [[bool; 2]; 2], Bitboard),
+    NormalMove([BeforeSquare; 2], u64, [[bool; 2]; 2], Bitboard, TargetSquare),
 
     /// (old squares, old hash to revert to, en passant target)
     DoublePawnJump([BeforeSquare; 2], u64, TargetSquare),
     EnPassant([BeforeSquare; 3], u64, TargetSquare),
 
     /// (oo/ooo, old hash to revert to, moved_castle_piece, old king location),
-    Castle(CastleType, u64, [bool; 2], Bitboard),
+    Castle(CastleType, u64, [bool; 2], Bitboard, TargetSquare),
     NoOp(u64)
 }
 
@@ -41,7 +42,7 @@ impl PlayerState {
 }
 
 #[derive(Clone)]
-struct TargetSquare {
+pub struct TargetSquare {
     bitboard: Bitboard,
     index: u8
 }
@@ -209,11 +210,6 @@ impl Board {
     }
 
     #[inline]
-    pub fn get_loc_hash_en_passant(en_passant_extra_target: &TargetSquare) -> u64 {
-        Self::get_loc_hash(en_passant_extra_target.index)
-    }
-
-    #[inline]
     pub fn get_hash(&self) -> u64 {
         self.hash
     }
@@ -223,14 +219,18 @@ impl Board {
     }
 
     #[inline]
+    fn get_loc_hash_en_passant(en_passant_extra_target: &TargetSquare) -> u64 {
+        Self::get_loc_hash(en_passant_extra_target.index)
+    }
+
+    #[inline]
     fn get_square_hash(i: usize, piece: Piece, player: Player) -> u64 {
         RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
     }
 
     #[inline]
     fn get_loc_hash(index: u8) -> u64 {
-        TODO;
-        panic!("TODO")
+        RANDOM_NUMBER_KEYS.locations[index as usize]
     }
 
     //////////////////////////////////////////////////
@@ -324,7 +324,7 @@ impl Board {
     pub fn revert_move(&mut self, m: &RevertableMove) {
         let opponent = self.get_player_with_turn().other_player();
         match m {
-            RevertableMove::NormalMove(snapshot, old_hash, old_moved_castle_piece, old_king_location) => {
+            RevertableMove::NormalMove(snapshot, old_hash, old_moved_castle_piece, old_king_location, old_en_passant_target) => {
                 for BeforeSquare(fast_coord, square) in snapshot.iter() {
                     self.set_by_index_no_hash(fast_coord.0, *square);
                 }
@@ -335,11 +335,12 @@ impl Board {
                 let opponent_state = self.get_player_state_mut(opponent);
                 opponent_state.king_location = *old_king_location;
 
+                self.en_passant_extra_target = old_en_passant_target.clone();
                 self.hash = *old_hash;
                 // Reset en passant file to what it was before the move
                 // This is handled by restoring the old hash, which includes the en passant state
             },
-            RevertableMove::Castle(castle_type, old_hash, old_moved_castle_piece, old_king_location) => {
+            RevertableMove::Castle(castle_type, old_hash, old_moved_castle_piece, old_king_location, old_en_passant_target) => {
                 let sqs: &[BeforeAfterSquare] = if *castle_type == CastleType::Oo {
                     &CASTLE_UTILS.oo_sqs[opponent as usize]
                 } else {
@@ -352,9 +353,10 @@ impl Board {
                 opponent_state.king_location = *old_king_location;
                 opponent_state.is_castled = false;
 
+                self.en_passant_extra_target = old_en_passant_target.clone();
                 self.hash = *old_hash;
             }
-            // TODO IMMEDIATE Simplify, refactor?
+            // TODO IMMEDIATE Simplify, refactor this method?
             RevertableMove::DoublePawnJump(snapshot, old_hash, old_en_passant_target) => {
                 for BeforeSquare(fast_coord, square) in snapshot.iter() {
                     self.set_by_index_no_hash(fast_coord.0, *square);
@@ -431,11 +433,12 @@ impl Board {
 
     fn set_en_passant_state_hash(&mut self, double_jump_target: &Coord) {
         self._clear_en_passant_state_hash();
-        self.hash ^= Self::get_loc_hash_en_passant(&self.en_passant_extra_target);
 
         let player = self.get_player_with_turn();
         let delta: i8 = if player == Player::White { 1 } else { -1 };
         self.en_passant_extra_target.set(double_jump_target.0, ((double_jump_target.1 as i8) + delta) as u8);
+
+        self.hash ^= Self::get_loc_hash_en_passant(&self.en_passant_extra_target);
     }
 
     #[inline]
@@ -485,7 +488,8 @@ impl Board {
                                 [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
                                 old_hash,
                                 [self.get_player_state(Player::White).moved_castle_piece, self.get_player_state(Player::Black).moved_castle_piece],
-                                curr_player_state.king_location
+                                curr_player_state.king_location,
+                                self.en_passant_extra_target.clone()
                             )
                         }
                     }
@@ -544,7 +548,13 @@ impl Board {
                 let curr_player_num = curr_player as usize;
                 let result = {
                     let curr_player_state = self.get_player_state(curr_player);
-                    RevertableMove::Castle(*castle_type, old_hash, curr_player_state.moved_castle_piece, curr_player_state.king_location)
+                    RevertableMove::Castle(
+                        *castle_type,
+                        old_hash,
+                        curr_player_state.moved_castle_piece,
+                        curr_player_state.king_location,
+                        self.en_passant_extra_target.clone()
+                    )
                 };
 
                 let sqs: &[BeforeAfterSquare];

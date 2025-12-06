@@ -77,8 +77,10 @@ class Application {
             this.squareImages.push(imageRow);
         }
 
-        this.isPlayerWhite = Math.random() > 0.5;
-        if (!this.isPlayerWhite) {
+        this.isWhiteCameraPosition = Math.random() > 0.5;
+        console.log('Is white camera position?', this.isWhiteCameraPosition);
+        // TODO (Feature Req) Commenting first 3 lines here = play vs self
+        if (!this.isWhiteCameraPosition) {
             this.main.make_ai_move();
         }
         this.main.refresh_player_moves();
@@ -128,7 +130,7 @@ class Application {
         this.dragged.style.visibility = 'hidden';
 
         const sqCoords = this.getSquareCoordsFromClientCoords(clientX, clientY);
-        if (this.isPlayerWhite) {
+        if (this.isWhiteCameraPosition) {
             if (!this.main.try_move(
                 this.draggedSqX,
                 this.draggedSqY,
@@ -149,6 +151,7 @@ class Application {
         this.boardLock = true;
         console.log('Locked board');
         setTimeout(() => {
+            // TODO (Feature Req) Commenting first 2 lines here = play vs self
             this.main.make_ai_move();
             this.updateFromWasm();
             this.main.refresh_player_moves();
@@ -201,7 +204,7 @@ class Application {
 
     setSquareFromWasm(row, col) {
         const existing = this.wasmData[row * 8 + col];
-        const num = this.isPlayerWhite ? this.main.get_piece(col, row) : this.main.get_piece(7 - col, 7 - row);
+        const num = this.isWhiteCameraPosition ? this.main.get_piece(col, row) : this.main.get_piece(7 - col, 7 - row);
         if (existing === num) {
             this.colorSquare(row, col, false);
         } else {

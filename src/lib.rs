@@ -81,7 +81,7 @@ impl Main {
         console_log!("{} moves", end_exclusive);
         console_log!("White King\n{}", self.board.get_player_state(Player::White).king_location);
         console_log!("Black King\n{}", self.board.get_player_state(Player::Black).king_location);
-        self.searchable.reset(self.board.get_player_with_turn(), &mut self.move_list, 0, end_exclusive);
+        self.searchable.reset_from_move_list(self.board.get_player_with_turn(), &mut self.move_list, 0, end_exclusive);
     }
 
     pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> bool {
