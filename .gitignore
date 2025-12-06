@@ -2,3 +2,4 @@ www/dist/
 target/
 node_modules/
 pkg/
+.DS_Store

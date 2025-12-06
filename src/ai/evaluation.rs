@@ -30,8 +30,9 @@ static PIECE_VALUES_FOR_CONTROL: [i32; 6] = [
 static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 
 // TODO Array
+/// Controlling enemy territory = good, controlling own territory = useless, control center = good
 #[inline]
-pub fn get_base_sq_worth_white(x: i32, y: i32) -> i32 {
+pub fn get_positional_sq_worth_white(x: i32, y: i32) -> i32 {
     if y <= 1 { 100 }
     else if y <= 2 { 75 }
     else if y >= 6 { 10 }
@@ -83,9 +84,10 @@ fn evaluate_player(board: &Board, player: Player) -> i32 {
     value * player.multiplier()
 }
 
+// TODO Finish docs for this
 fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
 
-    board.rewrite_af_boards(prepared_af_boards);
+    board.rewrite_af_boards_both_players(prepared_af_boards);
 
     let mut white_square_surplus: i32 = 0;
     for y in 0..8 {
@@ -106,10 +108,13 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
             });
 
             let one_or_neg_one_or_zero = (lowest_attacker_worth[1] - lowest_attacker_worth[0]).signum();
-            let zero_if_white = (one_or_neg_one_or_zero != 1) as i32;
-            let square_worth = get_base_sq_worth_white(x as i32, zero_if_white * 7 + one_or_neg_one_or_zero * (y as i32)) *
-                PIECE_VALUE_TO_CONTROL_MULTIPLIER[lowest_attacker_worth[zero_if_white as usize] as usize];
-            // TODO Two arrays for black and white
+            let zero_if_white_controlled = (one_or_neg_one_or_zero != 1) as i32; // Equal worth between both players -> black controlled
+            let square_worth = get_positional_sq_worth_white(
+                x as i32,
+                // Branchless way: If white controlled, normal coordinates. If black controlled, 7 - y
+                zero_if_white_controlled * 7 + one_or_neg_one_or_zero * (y as i32)
+            ) * PIECE_VALUE_TO_CONTROL_MULTIPLIER[lowest_attacker_worth[zero_if_white_controlled as usize] as usize];
+            // TODO (???) Two arrays for black and white
             white_square_surplus += one_or_neg_one_or_zero * square_worth;
         }
     }

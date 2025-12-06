@@ -3,6 +3,8 @@ use super::coords::*;
 use super::bitboard::*;
 use super::super::*;
 
+/// For each square, expand into a bitboard, which contains piece locations attacking that square.
+/// One player's pieces, or both players, depends on who's using the class.
 pub struct AttackFromBoards {
     pub data: [Bitboard; 64]
 }
@@ -86,29 +88,6 @@ pub fn consume_pawn_moves_staged(
         });
     }
 }
-
-//TODO Delete, right?
-//pub fn consume_white_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
-//    let first = b.consume_one_index_lsb();
-//    if b.0 == 0 {
-//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
-//    } else {
-//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
-//        let second = b.consume_one_index_lsb();
-//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::DoublePawnJump), 0));
-//    }
-//}
-//
-//pub fn consume_black_pawn_targets_to_move_list(b: &mut Bitboard, origin: FastCoord, result: &mut MoveList) {
-//    let first = b.consume_one_index_lsb();
-//    if b.0 == 0 {
-//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::None), 0));
-//    } else {
-//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(first), MoveMetadata::DoublePawnJump), 0));
-//        let second = b.consume_one_index_lsb();
-//        result.write(MoveWithEval(MoveDescription::NormalMove(origin, FastCoord(second), MoveMetadata::None), 0));
-//    }
-//}
 
 pub fn update_attack_from_boards(origin: FastCoord, b: &mut Bitboard, result: &mut AttackFromBoards) {
     b.consume_loop_indices(|dest| {

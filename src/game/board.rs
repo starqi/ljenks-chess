@@ -703,7 +703,8 @@ impl Board {
         })
     }
 
-    pub fn rewrite_af_boards(&self, result: &mut AttackFromBoards) {
+    /// Builds up the `AttackFromBoards` for both players.
+    pub fn rewrite_af_boards_both_players(&self, result: &mut AttackFromBoards) {
         result.reset();
         let mut piece_locs_clone = self.get_player_state(Player::White).piece_locs.clone();
         piece_locs_clone.consume_loop_indices(|index| {
@@ -715,7 +716,8 @@ impl Board {
         });
     }
 
-    /// Precondition: `origin` piece is `player`'s piece
+    /// Precondition: `origin` piece is `player`'s piece.
+    /// Builds up the `AttackFromBoards` for one piece at `origin` owned by `player`.
     fn update_af_board_at(&self, origin: FastCoord, player: Player, result: &mut AttackFromBoards) {
         let curr_state = self.get_player_state(player);
         let opponent_state = self.get_player_state(player.other_player());
@@ -876,7 +878,7 @@ mod test {
         board.set_uniform_row(7, Square::Blank);
 
         let mut af = AttackFromBoards::new();
-        board.rewrite_af_boards(&mut af);
+        board.rewrite_af_boards_both_players(&mut af);
         for y in 0..8 {
             for x in 0..8 {
                 println!("{},{}\n{}", x, y, af.data[y * 8 + x]);

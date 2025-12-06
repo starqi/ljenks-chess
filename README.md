@@ -4,6 +4,10 @@ Rust, WASM, messing around
 
 https://starqi.github.io/ljenks-chess/
 
+#### Deployment
+
+Copy www/assets/dist/* to gh-pages branch. 
+
 ### TODO
 
 - Minor: Pointer jumps to &Bitboard worse than copying
