@@ -10,6 +10,9 @@ Copy www/assets/dist/* to gh-pages branch.
 
 ### TODO
 
+- Saw one illegal move king moving into rook file?
+- Move str: Duplicate piece resolution: Raa4
+- Write notes on how wasm works, check versions
 - Minor: Pointer jumps to &Bitboard worse than copying
 - TODO IMMEDIATE
 - PNG importer for testing

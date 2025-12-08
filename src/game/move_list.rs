@@ -20,7 +20,7 @@ pub enum MoveMetadata {
     None = 0, DoublePawnJump, EnPassant, Promotion
 }
 
-/// Keep minimal in size, to make move generation fast, and move execution slower
+// Keep minimal in size, to make move generation fast, and move execution slower
 #[derive(Clone)]
 pub enum MoveDescription {
     NormalMove(FastCoord, FastCoord, MoveMetadata),
@@ -34,7 +34,8 @@ impl Default for MoveDescription {
     }
 }
 
-/// Put all AI info here, such as eval and metadata (is capture or not), but lazily when AI needs it
+// Put all AI info here, such as eval and metadata (is capture or not)
+// 
 #[derive(Clone, Default)]
 pub struct MoveWithEval(pub MoveDescription, pub i32);
 
@@ -65,7 +66,6 @@ impl MoveList {
         &mut self.v[i]
     }
 
-    // TODO Operators?
     #[inline]
     pub fn v(&self) -> &Vec<MoveWithEval> {
         &self.v

@@ -65,7 +65,7 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, depth: i8, ms_till_terminate: u128, real_board: &mut Board) {
+    pub fn make_move(&mut self, depth: i8, ms_till_terminate: u128, real_board: &mut Board) -> Option<String> {
 
         self.test_board.clone_from(real_board);
 
@@ -80,7 +80,7 @@ impl Ai {
 
             let leading_move = self.get_leading_move();
             if let Some((m, depth)) = leading_move {
-                console_log!("{}, d={}", self.test_board.stringify_move(m), depth);
+                console_log!("{}, d={}", self.test_board.stringify_move_for_js_logs(m), depth);
             } else {
                 console_log!("No leading move");
             }
@@ -96,12 +96,35 @@ impl Ai {
         self.assert_king_pos(Player::Black);
 
         let leading_move = self.get_leading_move();
-        if let Some((m, e)) = leading_move {
-            console_log!("Making move: {} ({})", self.test_board.stringify_move(m), e);
+        let notation = if let Some((m, e)) = leading_move {
+            console_log!("Making move: {} ({})", self.test_board.stringify_move_for_js_logs(m), e);
+
+            let before_info = BeforeMoveInfoForStringify {
+                is_capture: real_board.is_capture(m),
+                piece: match m.description() {
+                    MoveDescription::NormalMove(from_coord, _, _) => {
+                        if let Square::Occupied(p, _) = real_board.get_by_index(from_coord.value()) {
+                            Some(*p)
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None,
+                },
+            };
+
             real_board.handle_move(m);
+
+            let opponent = real_board.get_player_with_turn().other_player();
+            let is_check = real_board.is_checking(opponent);
+            let is_checkmate = is_check && real_board.has_no_legal_moves(opponent);
+            let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
+
+            Some(real_board.stringify_move_standard(m, &before_info, &after_info))
         } else {
             console_log!("No move");
-        }
+            None
+        };
         console_log!("Memo hits - {}, size - {}, fast found - {}", self.memo_hits, self.memo.len(), self.fast_found_hits);
         console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
 
@@ -109,6 +132,8 @@ impl Ai {
         self.memo_hits = 0;
         self.fast_found_hits = 0;
         self.memo.clear();
+
+        notation
     }
 
     fn assert_king_pos(&self, player: Player) {

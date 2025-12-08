@@ -21,7 +21,6 @@ use game::searchable_moves::*;
 use game::move_list::*;
 use wasm_bindgen::prelude::*;
 
-// TODO Review
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
 #[cfg(feature = "wee_alloc")]
@@ -41,7 +40,8 @@ pub struct Main {
 
     temp: MoveList,
     move_list: MoveList,
-    searchable: SearchableMoves
+    searchable: SearchableMoves,
+    last_move: Option<String>
 }
 
 #[wasm_bindgen]
@@ -61,17 +61,18 @@ impl Main {
 
         let board = Board::new();
         Main {
-            board, 
+            board,
             ai: Ai::new(),
 
             temp: MoveList::new(50),
             move_list: MoveList::new(50),
-            searchable: SearchableMoves::new()
+            searchable: SearchableMoves::new(),
+            last_move: None
         }
     }
 
     pub fn make_ai_move(&mut self) {
-        self.ai.make_move(9, 10000, &mut self.board);
+        self.last_move = self.ai.make_move(9, 10000, &mut self.board);
     }
 
     pub fn refresh_player_moves(&mut self) {
@@ -90,8 +91,30 @@ impl Main {
 
         let _m = self.searchable.get_move(&Coord(from_x as u8, from_y as u8), &Coord(to_x as u8, to_y as u8));
         if let Some(m) = _m {
+            let before_info = BeforeMoveInfoForStringify {
+                is_capture: self.board.is_capture(m),
+                piece: match m.description() {
+                    MoveDescription::NormalMove(from_coord, _, _) => {
+                        if let Square::Occupied(p, _) = self.board.get_by_index(from_coord.value()) {
+                            Some(*p)
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None,
+                },
+            };
+
             self.board.handle_move(m);
             self.board.assert_hash();
+
+            let opponent = self.board.get_player_with_turn().other_player();
+            let is_check = self.board.is_checking(opponent);
+            let is_checkmate = is_check && self.board.has_no_legal_moves(opponent);
+            let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
+
+            let notation = self.board.stringify_move_standard(m, &before_info, &after_info);
+            self.last_move = Some(notation);
             true
         } else {
             false
@@ -106,5 +129,32 @@ impl Main {
         } else {
             -99
         }
+    }
+
+    pub fn get_last_move_notation(&self) -> String {
+        self.last_move.clone().unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_notation_basic_moves() {
+        let mut main = Main::new();
+        main.refresh_player_moves();
+
+        // Test pawn move e2-e4
+        assert!(main.try_move(4, 6, 4, 4)); // e2 to e4
+        assert_eq!(main.get_last_move_notation(), "e4");
+
+        // Reset for next test
+        let mut main = Main::new();
+        main.refresh_player_moves();
+
+        // Test knight move g1-f3
+        assert!(main.try_move(6, 7, 5, 5)); // g1 to f3
+        assert_eq!(main.get_last_move_notation(), "Nf3");
     }
 }

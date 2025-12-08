@@ -6,6 +6,18 @@ use super::move_test::*;
 use super::super::*;
 use super::bitboard::*;
 
+#[derive(Clone)]
+pub struct BeforeMoveInfoForStringify {
+    pub is_capture: bool,
+    pub piece: Option<Piece>,
+}
+
+#[derive(Clone)]
+pub struct AfterMoveInfoForStringify {
+    pub is_check: bool,
+    pub is_checkmate: bool,
+}
+
 pub enum RevertableMove {
     // TODO IMMEDIATE Better style? Params are accessible outside module...
 
@@ -132,7 +144,8 @@ impl Board {
     //////////////////////////////////////////////////
     // Misc
 
-    pub fn stringify_move(&self, m: &MoveWithEval) -> String {
+    // TODO (Minor) If proper stringify implemented for standard notation, then use that here
+    pub fn stringify_move_for_js_logs(&self, m: &MoveWithEval) -> String {
         match m.description() {
             MoveDescription::NormalMove(_from_coord, _to_coord, metadata) => {
                 // TODO metadata
@@ -154,6 +167,62 @@ impl Board {
         }
     }
 
+    pub fn stringify_move_standard(&self, m: &MoveWithEval, before: &BeforeMoveInfoForStringify, after: &AfterMoveInfoForStringify) -> String {
+        let mut result = match m.description() {
+            MoveDescription::NormalMove(_from_coord, _to_coord, _metadata) => {
+                let to_coord = _to_coord.to_coord();
+                let piece = before.piece.expect("Piece required for normal move");
+
+                let piece_str = match piece {
+                    Piece::Pawn => "",
+                    Piece::Knight => "N",
+                    Piece::Bishop => "B",
+                    Piece::Rook => "R",
+                    Piece::Queen => "Q",
+                    Piece::King => "K",
+                };
+
+                let to_file = (b'a' + to_coord.0) as char;
+                let to_rank = (b'0' + (8 - to_coord.1)) as char;
+                let to_str = format!("{}{}", to_file, to_rank);
+
+                if piece == Piece::Pawn {
+                    if before.is_capture {
+                        let from_coord = _from_coord.to_coord();
+                        let from_file = (b'a' + from_coord.0) as char;
+                        format!("{}x{}", from_file, to_str)
+                    } else {
+                        to_str
+                    }
+                } else {
+                    if before.is_capture {
+                        format!("{}x{}", piece_str, to_str)
+                    } else {
+                        format!("{}{}", piece_str, to_str)
+                    }
+                }
+            },
+            MoveDescription::Castle(castle_type) => {
+                if *castle_type == CastleType::Oo {
+                    "O-O".to_string()
+                } else {
+                    "O-O-O".to_string()
+                }
+            },
+            MoveDescription::SkipMove => {
+                String::new()
+            }
+        };
+
+        if after.is_checkmate {
+            result.push('#');
+        } else if after.is_check {
+            result.push('+');
+        }
+
+        result
+    }
+
     pub fn print_move_list(&self, ml: &MoveList, start: usize, _end_exclusive: usize) {
         let end_exclusive = if _end_exclusive < ml.v().len() {
             _end_exclusive
@@ -163,7 +232,7 @@ impl Board {
 
         console_log!("[Moves, {}-{}]", start, end_exclusive);
         for i in start..end_exclusive {
-            console_log!("{}", self.stringify_move(&ml.v()[i]));
+            console_log!("{}", self.stringify_move_for_js_logs(&ml.v()[i]));
         }
         console_log!("");
     }
@@ -843,6 +912,13 @@ impl Board {
         self.set_uniform_row(2, Square::Occupied(Piece:: Pawn, Player::White));
         self.set_main_row(8, Player::Black);
         self.set_uniform_row(7, Square::Occupied(Piece::Pawn, Player::Black));
+    }
+
+    pub fn has_no_legal_moves(&mut self, player: Player) -> bool {
+        let mut temp_moves = MoveList::new(50);
+        let mut result_moves = MoveList::new(50);
+        self.get_moves(&mut temp_moves, &mut result_moves);
+        result_moves.write_index == 0
     }
 }
 

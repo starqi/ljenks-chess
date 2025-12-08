@@ -26,6 +26,9 @@ class Application {
         this.draggedSqX = 0;
         this.draggedSqY = 0;
 
+        this.moveHistory = [];
+        this.moveNumber = 1;
+
         this.main = wasm.Main.new();
         this.LEN = (0.9 * Math.min(window.innerWidth, window.innerHeight - document.getElementById('title').getBoundingClientRect().height) / 8) >>> 0;
 
@@ -147,6 +150,12 @@ class Application {
         }
 
         this.updateFromWasm();
+        
+        // Add move to list
+        const notation = this.main.get_last_move_notation();
+        if (notation) {
+            this.addMove(notation);
+        }
 
         this.boardLock = true;
         console.log('Locked board');
@@ -154,6 +163,13 @@ class Application {
             // TODO (Feature Req) Commenting first 2 lines here = play vs self
             this.main.make_ai_move();
             this.updateFromWasm();
+            
+            // Add AI move to list
+            const notation = this.main.get_last_move_notation();
+            if (notation) {
+                this.addMove(notation);
+            }
+            
             this.main.refresh_player_moves();
             this.boardLock = false;
             console.log('Unlocked board');
@@ -260,6 +276,38 @@ class Application {
                 this.setSquareFromWasm(j, i);
             }
         }
+    }
+
+    updateMoveList() {
+        const moveListContent = document.getElementById('move-list-content');
+        moveListContent.innerHTML = '';
+        
+        for (let i = 0; i < this.moveHistory.length; i += 2) {
+            const moveDiv = document.createElement('div');
+            moveDiv.style.marginBottom = '5px';
+            
+            const moveNumber = Math.floor(i / 2) + 1;
+            let text = `${moveNumber}. `;
+            
+            if (this.moveHistory[i]) {
+                text += this.moveHistory[i];
+            }
+            
+            if (this.moveHistory[i + 1]) {
+                text += ` ${this.moveHistory[i + 1]}`;
+            }
+            
+            moveDiv.textContent = text;
+            moveListContent.appendChild(moveDiv);
+        }
+        
+        // Auto-scroll to bottom
+        moveListContent.scrollTop = moveListContent.scrollHeight;
+    }
+
+    addMove(notation) {
+        this.moveHistory.push(notation);
+        this.updateMoveList();
     }
 
     //////////////////////////////////////////////////

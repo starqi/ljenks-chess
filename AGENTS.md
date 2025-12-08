@@ -1,5 +1,4 @@
 Basic chess engine compiling to WASM, with browser frontend.
-Think: You are a chess engine developer and this is a shitty engine to review.
 
 ### Basics
 - Run "cargo check" to find compile errors and warnings.
@@ -12,4 +11,5 @@ Think: You are a chess engine developer and this is a shitty engine to review.
 
 ### Architecture
 - Tests are in the same file as the implementation under "mod test".
-- Chess engines are highly performance sensitive, and code should reflect this: e.g. bitboard use, cache locality, avoiding branches and copying
+- Chess engines are highly performance sensitive, and code should reflect this: e.g. bitboard use, cache locality, avoiding branches and copying.
+  Use your expert chess engine skills to analyze this crappy version.
