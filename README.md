@@ -10,10 +10,14 @@ Copy www/assets/dist/* to gh-pages branch.
 
 ### TODO
 
-- Saw one illegal move king moving into rook file?
+- Saw one illegal move king moving into rook file? Another illegal queen d3 self capture...
+- Scrolling issues
 - Move str: Duplicate piece resolution: Raa4
 - Write notes on how wasm works, check versions
 - Minor: Pointer jumps to &Bitboard worse than copying
+- ! Choose an opening which forces tactical lines?!
+- Pure square control counterexamples: 
+    - Long range bishop with all target squares pawn controlled -> not valued
 - TODO IMMEDIATE
 - PNG importer for testing
 - Profiler?

@@ -7,7 +7,7 @@ pub enum Piece {
 }
 
 impl Piece {
-    fn custom_fmt(&self, f: &mut Formatter<'_>, is_lower: bool) -> Result<(), FmtError> {
+    pub fn custom_fmt(&self, f: &mut Formatter<'_>, is_lower: bool) -> Result<(), FmtError> {
         let s = match self {
             Piece::Pawn => "P",
             Piece::Rook => "R",

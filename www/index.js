@@ -85,9 +85,10 @@ class Application {
         // TODO (Feature Req) Commenting first 3 lines here = play vs self
         if (!this.isWhiteCameraPosition) {
             this.main.make_ai_move();
+            this.addLastMoveToHistory();
         }
         this.main.refresh_player_moves();
-        this.updateFromWasm();
+        this.refreshBoardFromWasmState();
     }
 
     //////////////////////////////////////////////////
@@ -149,26 +150,16 @@ class Application {
             )) return;
         }
 
-        this.updateFromWasm();
-        
-        // Add move to list
-        const notation = this.main.get_last_move_notation();
-        if (notation) {
-            this.addMove(notation);
-        }
+        this.refreshBoardFromWasmState();
+        this.addLastMoveToHistory();
 
         this.boardLock = true;
         console.log('Locked board');
         setTimeout(() => {
             // TODO (Feature Req) Commenting first 2 lines here = play vs self
             this.main.make_ai_move();
-            this.updateFromWasm();
-            
-            // Add AI move to list
-            const notation = this.main.get_last_move_notation();
-            if (notation) {
-                this.addMove(notation);
-            }
+            this.refreshBoardFromWasmState();
+            this.addLastMoveToHistory();
             
             this.main.refresh_player_moves();
             this.boardLock = false;
@@ -270,7 +261,7 @@ class Application {
         }
     }
 
-    updateFromWasm() {
+    refreshBoardFromWasmState() {
         for (let i = 0; i < 8; ++i) {
             for (let j = 0; j < 8; ++j) {
                 this.setSquareFromWasm(j, i);
@@ -278,7 +269,7 @@ class Application {
         }
     }
 
-    updateMoveList() {
+    redrawMoveList() {
         const moveListContent = document.getElementById('move-list-content');
         moveListContent.innerHTML = '';
         
@@ -305,9 +296,11 @@ class Application {
         moveListContent.scrollTop = moveListContent.scrollHeight;
     }
 
-    addMove(notation) {
-        this.moveHistory.push(notation);
-        this.updateMoveList();
+    addLastMoveToHistory() {
+        const moveStr = this.main.get_last_move_notation();
+        if (!moveStr) moveStr = '<Error>';
+        this.moveHistory.push(moveStr);
+        this.redrawMoveList();
     }
 
     //////////////////////////////////////////////////

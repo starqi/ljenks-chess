@@ -91,26 +91,14 @@ impl Main {
 
         let _m = self.searchable.get_move(&Coord(from_x as u8, from_y as u8), &Coord(to_x as u8, to_y as u8));
         if let Some(m) = _m {
-            let before_info = BeforeMoveInfoForStringify {
-                is_capture: self.board.is_capture(m),
-                piece: match m.description() {
-                    MoveDescription::NormalMove(from_coord, _, _) => {
-                        if let Square::Occupied(p, _) = self.board.get_by_index(from_coord.value()) {
-                            Some(*p)
-                        } else {
-                            None
-                        }
-                    },
-                    _ => None,
-                },
-            };
+            let before_info = BeforeMoveInfoForStringify::new(&self.board, m);
+            let original_player = self.board.get_player_with_turn();
 
             self.board.handle_move(m);
             self.board.assert_hash();
 
-            let opponent = self.board.get_player_with_turn().other_player();
-            let is_check = self.board.is_checking(opponent);
-            let is_checkmate = is_check && self.board.has_no_legal_moves(opponent);
+            let is_check = self.board.is_checking(original_player);
+            let is_checkmate = is_check && self.board.has_no_legal_moves(original_player);
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
 
             let notation = self.board.stringify_move_standard(m, &before_info, &after_info);

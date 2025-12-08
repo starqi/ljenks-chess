@@ -12,6 +12,24 @@ pub struct BeforeMoveInfoForStringify {
     pub piece: Option<Piece>,
 }
 
+impl BeforeMoveInfoForStringify {
+    pub fn new(board: &Board, m: &MoveWithEval) -> Self {
+        Self {
+            is_capture: board.is_capture(m),
+            piece: match m.description() {
+                MoveDescription::NormalMove(from_coord, _, _) => {
+                    if let Square::Occupied(p, _) = board.get_by_index(from_coord.value()) {
+                        Some(*p)
+                    } else {
+                        None
+                    }
+                },
+                _ => None,
+            },
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AfterMoveInfoForStringify {
     pub is_check: bool,
@@ -171,7 +189,7 @@ impl Board {
         let mut result = match m.description() {
             MoveDescription::NormalMove(_from_coord, _to_coord, _metadata) => {
                 let to_coord = _to_coord.to_coord();
-                let piece = before.piece.expect("Piece required for normal move");
+                let piece = before.piece.expect("Illegal state: Found normal move without a piece during stringify");
 
                 let piece_str = match piece {
                     Piece::Pawn => "",
@@ -182,14 +200,13 @@ impl Board {
                     Piece::King => "K",
                 };
 
-                let to_file = (b'a' + to_coord.0) as char;
-                let to_rank = (b'0' + (8 - to_coord.1)) as char;
+                let (to_file, to_rank) = xy_to_file_rank(to_coord.0, to_coord.1);
                 let to_str = format!("{}{}", to_file, to_rank);
 
                 if piece == Piece::Pawn {
                     if before.is_capture {
                         let from_coord = _from_coord.to_coord();
-                        let from_file = (b'a' + from_coord.0) as char;
+                        let (from_file, _) = xy_to_file_rank(from_coord.0, from_coord.1);
                         format!("{}x{}", from_file, to_str)
                     } else {
                         to_str
@@ -210,7 +227,7 @@ impl Board {
                 }
             },
             MoveDescription::SkipMove => {
-                String::new()
+                "<Skip>".to_string()
             }
         };
 
