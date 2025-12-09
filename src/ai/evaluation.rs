@@ -11,16 +11,16 @@ static PIECE_VALUES: [i32; 6] = [
     100, 500, 300, 300, 900, 1000
 ];
 
-static PAWN_PUSH_BONUS: i32 = 10;
-static MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
-static CASTLE_BONUS: i32 = 50;
-static MOVE_ORDER_ATTACK_BONUS: i32 = 30;
-static MOVE_ORDER_CASTLE_VAL: i32 = 50;
-static MOVE_ORDER_CAPTURE_MIN_VAL: i32 = 100;
-static MOVE_ORDER_MOB_SQ_VAL: i32 = 3;
-static MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 3;
-static PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
-static CONTROL_SURPLUS_TO_EVAL_LSHIFT: i32 = 8;
+const PAWN_PUSH_BONUS: i32 = 10;
+const MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
+const CASTLE_BONUS: i32 = 50;
+const MOVE_ORDER_ATTACK_BONUS: i32 = 30;
+const MOVE_ORDER_CASTLE_VAL: i32 = 50;
+const MOVE_ORDER_CAPTURE_MIN_VAL: i32 = 100;
+const MOVE_ORDER_MOB_SQ_VAL: i32 = 3;
+const MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 3;
+const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
+const CONTROL_SURPLUS_TO_EVAL_LSHIFT: i32 = 8;
 
 /// Matches `Piece` enum number
 static PIECE_VALUES_FOR_CONTROL: [i32; 6] = [
@@ -85,6 +85,7 @@ fn evaluate_player(board: &Board, player: Player) -> i32 {
 }
 
 // TODO Finish docs for this
+// TODO Review performance  -- Turn it off and check NPS
 fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
 
     board.rewrite_af_boards_both_players(prepared_af_boards);
@@ -120,6 +121,48 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
     }
 
     white_square_surplus >> CONTROL_SURPLUS_TO_EVAL_LSHIFT
+}
+
+pub fn get_pawndefended_pawn_count(board: &Board) -> u8 {
+    let p = board.get_player_with_turn();
+    let mut piece_locs_clone = board.get_player_state(p).piece_locs.clone();
+    let mut player_pawn_bb = Bitboard(0);
+    //let mut pawn_count = 0;
+    piece_locs_clone.consume_loop_indices(|index| {
+        if let Square::Occupied(Piece::Pawn, _) = board.get_by_index(index) {
+            player_pawn_bb.set_index(index);
+            //pawn_count += 1;
+        }
+    });
+
+    const GLIDER: u64 = (1u64 << 63) + (1u64 << 61);
+    const GLIDER_MASK_CENTER: u64 = 0b01111110_01111110_01111110_01111110_01111110_01111110_01111110_00000000;
+    const GLIDER_MASK_LEFT_EDGE: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_00000000;
+    const GLIDER_MASK_RIGHT_EDGE: u64 = 0b00000001_00000001_00000001_00000001_00000001_00000001_00000001_00000000;
+
+    let player_pawn_center_bb = Bitboard(player_pawn_bb.0 & GLIDER_MASK_CENTER);
+    let player_pawn_left_bb = Bitboard(player_pawn_bb.0 & GLIDER_MASK_LEFT_EDGE);
+    let player_pawn_right_bb = Bitboard(player_pawn_bb.0 & GLIDER_MASK_RIGHT_EDGE);
+
+    let mut defended_count: u8 = 0;
+
+    let mut x = player_pawn_center_bb.clone();
+    x.consume_loop_indices(|index| {
+        let pawn_defended = ((GLIDER >> (index - 1) + 8) & player_pawn_bb.0) != 0;
+        defended_count += pawn_defended as u8;
+    });
+    x = player_pawn_left_bb.clone();
+    x.consume_loop_indices(|index| {
+        let pawn_defended = ((1u64 << (63 - index - 9)) & player_pawn_bb.0) != 0;
+        defended_count += pawn_defended as u8;
+    });
+    x = player_pawn_right_bb.clone();
+    x.consume_loop_indices(|index| {
+        let pawn_defended = ((1u64 << (63 - index - 7)) & player_pawn_bb.0) != 0;
+        defended_count += pawn_defended as u8;
+    });
+
+    defended_count
 }
 
 pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
@@ -231,4 +274,30 @@ mod test {
         println!("b {}", white_control_surplus);
         assert!(white_control_surplus > 0);
     }
+
+    #[test]
+    fn standard_pawndefended_some_chain_some_not() {
+        let mut board = Board::new();
+        board.set_by_file_rank_test('e', 3, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('c', 5, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('c', 4, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('c', 6, Square::Occupied(Piece::Pawn, Player::White));
+        assert_eq!(3, get_pawndefended_pawn_count(&board));
+    }
+
+    #[test]
+    fn long_pawn_chain_pawndefended_pawn_count() {
+        let mut board = Board::with_kings_only();
+        board.set_by_file_rank_test('h', 4, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('g', 3, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('f', 2, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('e', 3, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('c', 5, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('b', 6, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('a', 7, Square::Occupied(Piece::Pawn, Player::White));
+        assert_eq!(7, get_pawndefended_pawn_count(&board));
+    }
 }
+

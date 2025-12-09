@@ -10,6 +10,8 @@ Copy www/assets/dist/* to gh-pages branch.
 
 ### TODO
 
+- Review wasm bindgen tutorial, ./pkg, not ./node_modules
+- async web assembly how? premoves.
 - Saw one illegal move king moving into rook file? Another illegal queen d3 self capture...
 - Scrolling issues
 - Move str: Duplicate piece resolution: Raa4
