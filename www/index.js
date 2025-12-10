@@ -82,11 +82,11 @@ class Application {
 
         this.isWhiteCameraPosition = Math.random() > 0.5;
         console.log('Is white camera position?', this.isWhiteCameraPosition);
-        // TODO (Feature Req) Commenting first 3 lines here = play vs self
-        if (!this.isWhiteCameraPosition) {
-            this.main.make_ai_move();
-            this.addLastMoveToHistory();
-        }
+        // TODO (Feature Req) Commenting if statement here = play vs self
+        //if (!this.isWhiteCameraPosition) {
+        //    this.main.make_ai_move();
+        //    this.addLastMoveToHistory();
+        //}
         this.main.refresh_player_moves();
         this.refreshBoardFromWasmState();
     }
@@ -121,8 +121,8 @@ class Application {
     trySyncDragged(clientX, clientY) {
         const boardCoords = this.getBoardCoordsFromClientCoords(clientX, clientY);
         if (this.draggedImage !== null) {
-            this.dragged.style.left = boardCoords.x - this.LEN / 2.0;
-            this.dragged.style.top = boardCoords.y - this.LEN / 2.0;
+            this.dragged.style.left = (boardCoords.x - this.LEN / 2.0).toString();
+            this.dragged.style.top = (boardCoords.y - this.LEN / 2.0).toString();
         }
     }
 
@@ -156,10 +156,10 @@ class Application {
         this.boardLock = true;
         console.log('Locked board');
         setTimeout(() => {
-            // TODO (Feature Req) Commenting first 2 lines here = play vs self
-            this.main.make_ai_move();
-            this.refreshBoardFromWasmState();
-            this.addLastMoveToHistory();
+            // TODO (Feature Req) Commenting first 3 lines here = play vs self
+            //this.main.make_ai_move();
+            //this.refreshBoardFromWasmState();
+            //this.addLastMoveToHistory();
             
             this.main.refresh_player_moves();
             this.boardLock = false;
@@ -297,10 +297,14 @@ class Application {
     }
 
     addLastMoveToHistory() {
-        const moveStr = this.main.get_last_move_notation();
-        if (!moveStr) moveStr = '<Error>';
-        this.moveHistory.push(moveStr);
-        this.redrawMoveList();
+        let moveStr = this.main.get_last_move_notation();
+        if (moveStr) {
+            this.moveHistory.push(moveStr);
+            this.redrawMoveList();
+        } else {
+            // This will happen if you checkmate the AI
+            console.log('No more last move');
+        }
     }
 
     //////////////////////////////////////////////////

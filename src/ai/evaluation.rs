@@ -20,27 +20,38 @@ const MOVE_ORDER_CAPTURE_MIN_VAL: i32 = 100;
 const MOVE_ORDER_MOB_SQ_VAL: i32 = 3;
 const MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 3;
 const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
-const CONTROL_SURPLUS_TO_EVAL_LSHIFT: i32 = 8;
+const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
+const DEFENDED_PAWN_BONUS: i32 = 10;
 
-/// Matches `Piece` enum number
-static PIECE_VALUES_FOR_CONTROL: [i32; 6] = [
+/// Index is `Piece` enum number.
+/// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
+static PIECE_TO_CONTROL_BADNESS: [i32; 6] = [
     1, 5, 3, 3, 9, 10
 ];
 
 static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 
-// TODO Array
-/// Controlling enemy territory = good, controlling own territory = useless, control center = good
-#[inline]
-pub fn get_positional_sq_worth_white(x: i32, y: i32) -> i32 {
-    if y <= 1 { 100 }
-    else if y <= 2 { 75 }
-    else if y >= 6 { 10 }
-    else { 10 + ((35 - (35 - x * 10).abs()) << 2) }
+/// Controlling enemy territory = good, controlling own territory = useless, control center = good.
+static POSITIONAL_SQUARE_WORTH_WHITE: [i32; 64] = [
+    100,  100,  100,  100,  100,  100,  100,  100,
+    100,  100,  100,  100,  100,  100,  100,  100,
+    80,    80,   90,   90,   90,   90,   80,   80,
+    80,    80,   90,  100,  100,   90,   80,   80,
+    50,    50,   60,   80,   80,   60,   50,   50,
+    30,    30,   40,   40,   40,   40,   30,   30,
+    10,    10,   10,   10,   10,   10,   10,   10,
+    10,    10,   10,   10,   10,   10,   10,   10,
+];
+
+fn get_positional_sq_worth_white(x: i32, y: i32) -> i32 {
+    POSITIONAL_SQUARE_WORTH_WHITE[(y * 8 + x) as usize]
 }
 
+/// Maps `PIECE_VALUES_FOR_CONTROL` number as index to higher-the-better control score. 
 static PIECE_VALUE_TO_CONTROL_MULTIPLIER: [i32; 11] = [
-    0, 9, 0, 3, 0, 2, 0, 0, 0, 0, 1
+    // I think I was setting queen control mult to 0 to stop sending the queen out?
+    //0, 9, 0, 3, 0, 2, 0, 0, 0, 0, 1
+    0, 4, 0, 3, 0, 3, 0, 0, 0, 1, 1
 ];
 
 #[inline]
@@ -49,8 +60,8 @@ pub fn evaluate_piece(piece: Piece) -> i32 {
 }
 
 #[inline]
-pub fn evaluate_piece_for_control(piece: Piece) -> i32 {
-    PIECE_VALUES_FOR_CONTROL[piece as usize] as i32
+pub fn piece_to_control_badness(piece: Piece) -> i32 {
+    PIECE_TO_CONTROL_BADNESS[piece as usize] as i32
 }
 
 /// Precondition: `prepared_af_boards` is filled in with attacked from map
@@ -80,12 +91,17 @@ fn evaluate_player(board: &Board, player: Player) -> i32 {
         });
     }
 
+    let defended_pawn_count = get_pawndefended_pawn_count(board, player);
+    value += defended_pawn_count as i32 * DEFENDED_PAWN_BONUS;
+
     value += -(ps.is_castled as i32) & CASTLE_BONUS;
     value * player.multiplier()
 }
 
-// TODO Finish docs for this
-// TODO Review performance  -- Turn it off and check NPS
+// TODO Review general eval performance reqs... Turn it off and check NPS
+
+/// Returns how much more white controls all squares than black, where control belongs to the side controlling with a lower valued piece.
+/// A square is scaled by position (favouring center, enemy side) and piece value (lower better).
 fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
 
     board.rewrite_af_boards_both_players(prepared_af_boards);
@@ -100,69 +116,55 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
             b2.consume_loop_indices(|index| {
                 match board.get_by_index(index) {
                     Square::Occupied(attacking_piece, attacking_player) => {
-                        let value = evaluate_piece_for_control(*attacking_piece);
+                        let badness = piece_to_control_badness(*attacking_piece);
                         let ref mut lowest_ref = lowest_attacker_worth[*attacking_player as usize];
-                        *lowest_ref = min(*lowest_ref, value);
+                        *lowest_ref = min(*lowest_ref, badness);
                     },
                     Square::Blank => panic!("Unexpected empty square when attacker is expected")
                 };
             });
 
             let one_or_neg_one_or_zero = (lowest_attacker_worth[1] - lowest_attacker_worth[0]).signum();
-            let zero_if_white_controlled = (one_or_neg_one_or_zero != 1) as i32; // Equal worth between both players -> black controlled
-            let square_worth = get_positional_sq_worth_white(
-                x as i32,
-                // Branchless way: If white controlled, normal coordinates. If black controlled, 7 - y
-                zero_if_white_controlled * 7 + one_or_neg_one_or_zero * (y as i32)
-            ) * PIECE_VALUE_TO_CONTROL_MULTIPLIER[lowest_attacker_worth[zero_if_white_controlled as usize] as usize];
-            // TODO (???) Two arrays for black and white
-            white_square_surplus += one_or_neg_one_or_zero * square_worth;
+            if one_or_neg_one_or_zero != 0 { // If one side controls more than another
+                let zero_if_white_controlled = (one_or_neg_one_or_zero != 1) as i32;
+                let square_worth = get_positional_sq_worth_white(
+                    x as i32,
+                    // Branchless way: If white controlled, normal coordinates. If black controlled, 7 - y
+                    zero_if_white_controlled * 7 + one_or_neg_one_or_zero * (y as i32)
+                ) * PIECE_VALUE_TO_CONTROL_MULTIPLIER[lowest_attacker_worth[zero_if_white_controlled as usize] as usize];
+                // TODO (???) Two arrays for black and white
+                white_square_surplus += one_or_neg_one_or_zero * square_worth;
+            }
         }
     }
 
-    white_square_surplus >> CONTROL_SURPLUS_TO_EVAL_LSHIFT
+    white_square_surplus >> CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT // Chess way of multiplying by (1/256)
 }
 
-pub fn get_pawndefended_pawn_count(board: &Board) -> u8 {
-    let p = board.get_player_with_turn();
-    let mut piece_locs_clone = board.get_player_state(p).piece_locs.clone();
+pub fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
+    let ps = board.get_player_state(player);
+    let mut piece_locs_clone = ps.piece_locs.clone();
     let mut player_pawn_bb = Bitboard(0);
-    //let mut pawn_count = 0;
     piece_locs_clone.consume_loop_indices(|index| {
         if let Square::Occupied(Piece::Pawn, _) = board.get_by_index(index) {
             player_pawn_bb.set_index(index);
-            //pawn_count += 1;
         }
     });
 
-    const GLIDER: u64 = (1u64 << 63) + (1u64 << 61);
-    const GLIDER_MASK_CENTER: u64 = 0b01111110_01111110_01111110_01111110_01111110_01111110_01111110_00000000;
     const GLIDER_MASK_LEFT_EDGE: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_00000000;
     const GLIDER_MASK_RIGHT_EDGE: u64 = 0b00000001_00000001_00000001_00000001_00000001_00000001_00000001_00000000;
 
-    let player_pawn_center_bb = Bitboard(player_pawn_bb.0 & GLIDER_MASK_CENTER);
-    let player_pawn_left_bb = Bitboard(player_pawn_bb.0 & GLIDER_MASK_LEFT_EDGE);
-    let player_pawn_right_bb = Bitboard(player_pawn_bb.0 & GLIDER_MASK_RIGHT_EDGE);
+    let not_a_file = !GLIDER_MASK_LEFT_EDGE;
+    let not_h_file = !GLIDER_MASK_RIGHT_EDGE;
 
-    let mut defended_count: u8 = 0;
+    let attacks = if player == Player::White {
+        ((player_pawn_bb.0 & not_h_file) << 7) | ((player_pawn_bb.0 & not_a_file) << 9)
+    } else {
+        ((player_pawn_bb.0 & not_h_file) >> 9) | ((player_pawn_bb.0 & not_a_file) >> 7)
+    };
 
-    let mut x = player_pawn_center_bb.clone();
-    x.consume_loop_indices(|index| {
-        let pawn_defended = ((GLIDER >> (index - 1) + 8) & player_pawn_bb.0) != 0;
-        defended_count += pawn_defended as u8;
-    });
-    x = player_pawn_left_bb.clone();
-    x.consume_loop_indices(|index| {
-        let pawn_defended = ((1u64 << (63 - index - 9)) & player_pawn_bb.0) != 0;
-        defended_count += pawn_defended as u8;
-    });
-    x = player_pawn_right_bb.clone();
-    x.consume_loop_indices(|index| {
-        let pawn_defended = ((1u64 << (63 - index - 7)) & player_pawn_bb.0) != 0;
-        defended_count += pawn_defended as u8;
-    });
-
-    defended_count
+    let defended_bb = Bitboard(player_pawn_bb.0 & attacks);
+    defended_bb.pop_count() as u8
 }
 
 pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
@@ -221,7 +223,7 @@ pub fn add_mobility_to_evals(
         score
     });
 }
-
+    
 #[cfg(test)]
 mod test {
 
@@ -252,6 +254,8 @@ mod test {
 
     #[test]
     fn basic_square_control() {
+        // TODO IMMEDIATE Generate routine to visualize control of each square and pass this test
+
         let mut board = Board::new();
         board.set_uniform_row_test(2, Square::Blank);
         board.set_uniform_row_test(7, Square::Blank);
@@ -283,7 +287,7 @@ mod test {
         board.set_by_file_rank_test('c', 5, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('c', 4, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('c', 6, Square::Occupied(Piece::Pawn, Player::White));
-        assert_eq!(3, get_pawndefended_pawn_count(&board));
+        assert_eq!(3, get_pawndefended_pawn_count(&board, Player::White));
     }
 
     #[test]
@@ -297,7 +301,54 @@ mod test {
         board.set_by_file_rank_test('c', 5, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('b', 6, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('a', 7, Square::Occupied(Piece::Pawn, Player::White));
-        assert_eq!(7, get_pawndefended_pawn_count(&board));
+        assert_eq!(7, get_pawndefended_pawn_count(&board, Player::White));
+    }
+
+    #[test]
+    fn pawndefended_no_pawns_on_board() {
+        let mut board = Board::new();
+        assert_eq!(0, get_pawndefended_pawn_count(&board, Player::White));
+        assert_eq!(0, get_pawndefended_pawn_count(&board, Player::Black));
+    }
+
+    #[test]
+    fn pawns_on_board_edges() {
+        let mut board = Board::new();
+        board.set_by_file_rank_test('a', 2, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('b', 3, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('h', 7, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set_by_file_rank_test('g', 6, Square::Occupied(Piece::Pawn, Player::Black));
+        assert_eq!(1, get_pawndefended_pawn_count(&board, Player::White));
+        assert_eq!(1, get_pawndefended_pawn_count(&board, Player::Black));
+    }
+
+    #[test]
+    fn mixed_players_pawns() {
+        let mut board = Board::new();
+        board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('c', 5, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('e', 3, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set_by_file_rank_test('f', 2, Square::Occupied(Piece::Pawn, Player::Black));
+        assert_eq!(1, get_pawndefended_pawn_count(&board, Player::White));
+        assert_eq!(1, get_pawndefended_pawn_count(&board, Player::Black));
+    }
+
+    #[test]
+    fn isolated_pawns() {
+        let mut board = Board::new();
+        board.set_by_file_rank_test('c', 4, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('f', 5, Square::Occupied(Piece::Pawn, Player::Black));
+        assert_eq!(0, get_pawndefended_pawn_count(&board, Player::White));
+        assert_eq!(0, get_pawndefended_pawn_count(&board, Player::Black));
+    }
+
+    #[test]
+    fn overlapping_pawn_defenses() {
+        let mut board = Board::new();
+        board.set_by_file_rank_test('d', 4, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('c', 5, Square::Occupied(Piece::Pawn, Player::White));
+        board.set_by_file_rank_test('e', 5, Square::Occupied(Piece::Pawn, Player::White));
+        assert_eq!(2, get_pawndefended_pawn_count(&board, Player::White));
     }
 }
 
