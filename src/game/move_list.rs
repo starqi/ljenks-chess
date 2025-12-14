@@ -23,6 +23,7 @@ pub enum MoveMetadata {
 // Keep minimal in size, to make move generation fast, and move execution slower
 #[derive(Clone)]
 pub enum MoveDescription {
+    // (From, to, metadata)
     NormalMove(FastCoord, FastCoord, MoveMetadata),
     Castle(CastleType),
     SkipMove

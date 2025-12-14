@@ -99,7 +99,7 @@ impl Ai {
         let notation = if let Some((m, e)) = leading_move {
             console_log!("Making move: {} ({})", self.test_board.stringify_move_for_js_logs(m), e);
 
-            let before_info = BeforeMoveInfoForStringify::new(real_board, m);
+            let before_info = BeforeMoveInfoForStringify::slow_new(real_board, m);
             let original_player = real_board.get_player_with_turn();
 
             real_board.handle_move(m);
@@ -108,7 +108,7 @@ impl Ai {
             let is_checkmate = is_check && real_board.has_no_legal_moves(original_player);
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
 
-            Some(real_board.stringify_move_standard(m, &before_info, &after_info))
+            Some(real_board.slow_stringify_move_standard(m, &before_info, &after_info))
         } else {
             console_log!("No move");
             None

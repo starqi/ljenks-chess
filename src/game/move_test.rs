@@ -108,18 +108,26 @@ pub fn unset_own_pieces(b: &mut Bitboard, curr_player_piece_locs: &Bitboard) {
 //////////////////////////////////////////////////
 // Rook 
 
-#[inline]
-pub fn _write_rook_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
-    let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
-    
-    let mut b = Bitboard(0);
-    set_blockable_ray(&mut b, origin, RayDirection::Left, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
-    unset_own_pieces(&mut b, curr_player_piece_locs);
-    b
+macro_rules! define_write_rook_moves {
+    ($name:ident, $unset:expr) => {
+        pub fn $name(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
+            let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
+
+            let mut b = Bitboard(0);
+            set_blockable_ray(&mut b, origin, RayDirection::Left, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
+            if $unset {
+                unset_own_pieces(&mut b, curr_player_piece_locs);
+            }
+            b
+        }
+    }
 }
+
+define_write_rook_moves!(_write_rook_moves, true);
+define_write_rook_moves!(_write_rook_moves_self_capture, false);
 
 pub fn write_rook_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_rook_moves(origin, curr_player_piece_locs, opponent_piece_locs);
@@ -145,18 +153,26 @@ pub fn rook_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, oppo
 //////////////////////////////////////////////////
 // Bishop 
 
-#[inline]
-pub fn _write_bishop_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
-    let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
+macro_rules! define_write_bishop_moves {
+    ($name:ident, $unset:expr) => {
+        pub fn $name(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
+            let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
 
-    let mut b = Bitboard(0);
-    set_blockable_ray(&mut b, origin, RayDirection::LeftTop, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
-    unset_own_pieces(&mut b, curr_player_piece_locs);
-    b
+            let mut b = Bitboard(0);
+            set_blockable_ray(&mut b, origin, RayDirection::LeftTop, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
+            if $unset {
+                unset_own_pieces(&mut b, curr_player_piece_locs);
+            }
+            b
+        }
+    }
 }
+
+define_write_bishop_moves!(_write_bishop_moves, true);
+define_write_bishop_moves!(_write_bishop_moves_self_capture, false);
 
 pub fn write_bishop_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_bishop_moves(origin, curr_player_piece_locs, opponent_piece_locs);
@@ -182,23 +198,31 @@ pub fn bishop_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, op
 //////////////////////////////////////////////////
 // Queen 
 
-#[inline]
-pub fn _write_queen_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
-    let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
+macro_rules! define_write_queen_moves {
+    ($name:ident, $unset:expr) => {
+        pub fn $name(origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) -> Bitboard {
+            let blockers = Bitboard(curr_player_piece_locs.0 | opponent_piece_locs.0);
 
-    let mut b = Bitboard(0);
-    set_blockable_ray(&mut b, origin, RayDirection::LeftTop, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
-    
-    set_blockable_ray(&mut b, origin, RayDirection::Left, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
-    set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
-    unset_own_pieces(&mut b, curr_player_piece_locs);
-    b
+            let mut b = Bitboard(0);
+            set_blockable_ray(&mut b, origin, RayDirection::LeftTop, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::RightTop, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::RightBottom, 1, Bitboard::_msb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::LeftBottom, 1, Bitboard::_msb_to_index, &blockers);
+
+            set_blockable_ray(&mut b, origin, RayDirection::Left, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::Top, 0, Bitboard::_lsb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::Right, 1, Bitboard::_msb_to_index, &blockers);
+            set_blockable_ray(&mut b, origin, RayDirection::Bottom, 1, Bitboard::_msb_to_index, &blockers);
+            if $unset {
+                unset_own_pieces(&mut b, curr_player_piece_locs);
+            }
+            b
+        }
+    }
 }
+
+define_write_queen_moves!(_write_queen_moves, true);
+define_write_queen_moves!(_write_queen_moves_self_capture, false);
 
 pub fn write_queen_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard, opponent_piece_locs: &Bitboard) {
     let mut b = _write_queen_moves(origin, curr_player_piece_locs, opponent_piece_locs);
@@ -235,6 +259,11 @@ pub fn _write_knight_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard)
     let mut jumps = Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0);
     unset_own_pieces(&mut jumps, curr_player_piece_locs);
     jumps
+}
+
+#[inline]
+pub fn _write_knight_moves_self_capture(origin: FastCoord) -> Bitboard {
+    Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0)
 }
 
 pub fn write_knight_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {

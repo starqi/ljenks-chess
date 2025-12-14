@@ -64,7 +64,17 @@ impl Display for Coord {
 }
 
 pub fn xy_to_file_rank(x: u8, y: u8) -> (char, u8) {
-    (std::char::from_u32(x as u32 + ('a' as u32)).unwrap(), 8 - (y as u8))
+    (x_to_file(x), y_to_rank(y))
+}
+
+#[inline]
+pub fn x_to_file(x: u8) -> char {
+    std::char::from_u32(x as u32 + ('a' as u32)).unwrap()
+}
+
+#[inline]
+pub fn y_to_rank(y: u8) -> u8 {
+    8 - (y as u8)
 }
 
 #[inline]

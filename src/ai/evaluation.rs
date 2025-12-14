@@ -141,6 +141,8 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
     white_square_surplus >> CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT // Chess way of multiplying by (1/256)
 }
 
+/// For a player, gets number of pawns defended by another pawn, pawns counted once.
+/// For eval purposes, does not count attackers on top or bottom rank, pointless edge case.
 pub fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
     let ps = board.get_player_state(player);
     let mut piece_locs_clone = ps.piece_locs.clone();
@@ -151,16 +153,14 @@ pub fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
         }
     });
 
-    const GLIDER_MASK_LEFT_EDGE: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_00000000;
-    const GLIDER_MASK_RIGHT_EDGE: u64 = 0b00000001_00000001_00000001_00000001_00000001_00000001_00000001_00000000;
+    const NOT_A_FILE: u64 = 0b00000000_01111111_01111111_01111111_01111111_01111111_01111111_00000000;
+    const NOT_H_FILE: u64 = 0b00000000_11111110_11111110_11111110_11111110_11111110_11111110_00000000;
 
-    let not_a_file = !GLIDER_MASK_LEFT_EDGE;
-    let not_h_file = !GLIDER_MASK_RIGHT_EDGE;
-
+    // Union right and left attacks
     let attacks = if player == Player::White {
-        ((player_pawn_bb.0 & not_h_file) << 7) | ((player_pawn_bb.0 & not_a_file) << 9)
+        ((player_pawn_bb.0 & NOT_H_FILE) << 7) | ((player_pawn_bb.0 & NOT_A_FILE) << 9)
     } else {
-        ((player_pawn_bb.0 & not_h_file) >> 9) | ((player_pawn_bb.0 & not_a_file) >> 7)
+        ((player_pawn_bb.0 & NOT_H_FILE) >> 9) | ((player_pawn_bb.0 & NOT_A_FILE) >> 7)
     };
 
     let defended_bb = Bitboard(player_pawn_bb.0 & attacks);
