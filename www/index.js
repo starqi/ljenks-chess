@@ -18,10 +18,11 @@ const imageUrls = {
 };
 
 class Application {
-    constructor() {
-        const moveListContent2 = document.getElementById('move-list-content');
-        moveListContent2.value = '';
 
+    static TEMP_DEPTH = 7;
+
+    constructor() {
+        this.isWhiteCameraPosition = true;
         this.boardLock = false;
 
         this.draggedImage = null;
@@ -30,6 +31,8 @@ class Application {
 
         this.moveHistory = [];
         this.moveNumber = 1;
+
+        this.selfPlayTimeoutId = null;
 
         this.main = wasm.Main.new();
         this.LEN = (0.9 * Math.min(window.innerWidth, window.innerHeight - document.getElementById('title').getBoundingClientRect().height) / 8) >>> 0;
@@ -46,6 +49,13 @@ class Application {
         this.board.addEventListener('touchstart', this.onTouchStart.bind(this));
         this.board.addEventListener('touchmove', this.onTouchMove.bind(this));
         this.board.addEventListener('touchend', this.onTouchEnd.bind(this));
+
+        document.getElementById('self-play-btn').addEventListener('click', () => {
+            this.resetAndSelfPlay();
+        });
+        document.getElementById('play-btn').addEventListener('click', () => {
+            this.resetAndPlay();
+        });
 
         this.dragged = document.getElementById('dragged');
         this.dragged.width = this.LEN;
@@ -82,31 +92,58 @@ class Application {
             this.squareImages.push(imageRow);
         }
 
-        this.isWhiteCameraPosition = true;//Math.random() > 0.5;
-        console.log('Is white camera position?', this.isWhiteCameraPosition);
-
-        this.selfPlayTest(7);
-        //// TODO (Feature Req) Commenting if statement here = play vs self
-        //if (!this.isWhiteCameraPosition) {
-        //    this.main.make_ai_move(9);
-        //    this.addLastMoveToHistory();
-        //}
-        //// TODO (Minor) Emphasize that "player" here could be AI or human...
-        //this.main.refresh_player_moves();
-        //this.refreshBoardFromWasmState();
+        this.resetAndPlay();
     }
 
-    selfPlayTest(depth) {
+    resetAndPlay() {
+        this.reset();
+
         setTimeout(() => {
-            this.main.make_ai_move(depth);
+            if (!this.isWhiteCameraPosition) {
+                this.main.make_ai_move(Application.TEMP_DEPTH);
+                this.addLastMoveToHistory();
+                // TODO (Minor) Emphasize that "player" here could be AI or human...
+                this.main.refresh_player_moves();
+                this.refreshBoardFromWasmState();
+            }
+        });
+    }
+
+    resetAndSelfPlay() {
+        this.reset();
+        setTimeout(() => {
+            this.scheduleSelfPlayChain();
+        });
+    }
+
+    scheduleSelfPlayChain() {
+        this.selfPlayTimeoutId = setTimeout(() => {
+            this.main.make_ai_move(Application.TEMP_DEPTH);
+
             const added = this.addLastMoveToHistory();
             if (!added) {
-                console.log('SELF PLAY END');
-                return;
+                this.selfPlayTimeoutId = null;
+            } else {
+                this.refreshBoardFromWasmState();
+                this.scheduleSelfPlayChain();
             }
-            this.refreshBoardFromWasmState();
-            this.selfPlayTest(depth);
-        }, 250);
+        }, 0);
+    }
+
+    reset() {
+        if (this.selfPlayTimeoutId) {
+            clearTimeout(this.selfPlayTimeoutId);
+            this.selfPlayTimeoutId = null;
+        }
+        this.main.reset();
+
+        this.isWhiteCameraPosition = Math.random() > 0.5;
+        this.refreshBoardFromWasmState();
+        this.refreshBoardFromWasmState();
+
+        this.moveHistory = [];
+        this.moveNumber = 1;
+        this.redrawMoveList();
     }
 
     //////////////////////////////////////////////////
@@ -175,7 +212,7 @@ class Application {
         console.log('Locked board');
         setTimeout(() => {
             // TODO (Feature Req) Commenting first 3 lines here = play vs self
-            this.main.make_ai_move(9);
+            this.main.make_ai_move(Application.TEMP_DEPTH);
             this.refreshBoardFromWasmState();
             this.addLastMoveToHistory();
             
@@ -288,8 +325,8 @@ class Application {
     }
 
     redrawMoveList() {
-        const moveListContent2 = document.getElementById('move-list-content');
-        moveListContent2.value = '';
+        const moveListContent = document.getElementById('move-list-content');
+        moveListContent.value = '';
         for (let i = 0; i < this.moveHistory.length; i += 2) {
             
             const moveNumber = Math.floor(i / 2) + 1;
@@ -302,12 +339,11 @@ class Application {
             if (this.moveHistory[i + 1]) {
                 text += ` ${this.moveHistory[i + 1]}`;
             }
-            moveListContent2.value += text;
-            moveListContent2.value += '\n';
+            moveListContent.value += text;
+            moveListContent.value += '\n';
         }
         
-        //// Auto-scroll to bottom
-        //moveListContent.scrollTop = moveListContent.scrollHeight;
+        moveListContent.scrollTop = moveListContent.scrollHeight;
     }
 
     addLastMoveToHistory() {
