@@ -71,8 +71,9 @@ impl Main {
         }
     }
 
-    pub fn make_ai_move(&mut self) {
-        self.last_move = self.ai.make_move(9, 10000, &mut self.board);
+    // TODO IMMEDIATE Rust default params???
+    pub fn make_ai_move(&mut self, depth: i8) {
+        self.last_move = self.ai.make_move(depth, 10000, &mut self.board);
     }
 
     pub fn refresh_player_moves(&mut self) {

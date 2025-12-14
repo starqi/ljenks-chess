@@ -19,6 +19,8 @@ const imageUrls = {
 
 class Application {
     constructor() {
+        const moveListContent2 = document.getElementById('move-list-content');
+        moveListContent2.value = '';
 
         this.boardLock = false;
 
@@ -80,15 +82,31 @@ class Application {
             this.squareImages.push(imageRow);
         }
 
-        this.isWhiteCameraPosition = Math.random() > 0.5;
+        this.isWhiteCameraPosition = true;//Math.random() > 0.5;
         console.log('Is white camera position?', this.isWhiteCameraPosition);
-        // TODO (Feature Req) Commenting if statement here = play vs self
+
+        this.selfPlayTest(7);
+        //// TODO (Feature Req) Commenting if statement here = play vs self
         //if (!this.isWhiteCameraPosition) {
-        //    this.main.make_ai_move();
+        //    this.main.make_ai_move(9);
         //    this.addLastMoveToHistory();
         //}
-        this.main.refresh_player_moves();
-        this.refreshBoardFromWasmState();
+        //// TODO (Minor) Emphasize that "player" here could be AI or human...
+        //this.main.refresh_player_moves();
+        //this.refreshBoardFromWasmState();
+    }
+
+    selfPlayTest(depth) {
+        setTimeout(() => {
+            this.main.make_ai_move(depth);
+            const added = this.addLastMoveToHistory();
+            if (!added) {
+                console.log('SELF PLAY END');
+                return;
+            }
+            this.refreshBoardFromWasmState();
+            this.selfPlayTest(depth);
+        }, 250);
     }
 
     //////////////////////////////////////////////////
@@ -157,9 +175,9 @@ class Application {
         console.log('Locked board');
         setTimeout(() => {
             // TODO (Feature Req) Commenting first 3 lines here = play vs self
-            //this.main.make_ai_move();
-            //this.refreshBoardFromWasmState();
-            //this.addLastMoveToHistory();
+            this.main.make_ai_move(9);
+            this.refreshBoardFromWasmState();
+            this.addLastMoveToHistory();
             
             this.main.refresh_player_moves();
             this.boardLock = false;
@@ -270,12 +288,9 @@ class Application {
     }
 
     redrawMoveList() {
-        const moveListContent = document.getElementById('move-list-content');
-        moveListContent.innerHTML = '';
-        
+        const moveListContent2 = document.getElementById('move-list-content');
+        moveListContent2.value = '';
         for (let i = 0; i < this.moveHistory.length; i += 2) {
-            const moveDiv = document.createElement('div');
-            moveDiv.style.marginBottom = '5px';
             
             const moveNumber = Math.floor(i / 2) + 1;
             let text = `${moveNumber}. `;
@@ -287,13 +302,12 @@ class Application {
             if (this.moveHistory[i + 1]) {
                 text += ` ${this.moveHistory[i + 1]}`;
             }
-            
-            moveDiv.textContent = text;
-            moveListContent.appendChild(moveDiv);
+            moveListContent2.value += text;
+            moveListContent2.value += '\n';
         }
         
-        // Auto-scroll to bottom
-        moveListContent.scrollTop = moveListContent.scrollHeight;
+        //// Auto-scroll to bottom
+        //moveListContent.scrollTop = moveListContent.scrollHeight;
     }
 
     addLastMoveToHistory() {
@@ -301,9 +315,11 @@ class Application {
         if (moveStr) {
             this.moveHistory.push(moveStr);
             this.redrawMoveList();
+            return true;
         } else {
             // This will happen if you checkmate the AI
             console.log('No more last move');
+            return false;
         }
     }
 

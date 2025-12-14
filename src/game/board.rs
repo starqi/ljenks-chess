@@ -10,7 +10,6 @@ use super::bitboard::*;
 pub struct BeforeMoveInfoForStringify {
     pub is_capture: bool,
     pub piece: Option<Piece>,
-    pub player: Player,
     pub player_piece_locs: Bitboard,
     pub opponent_piece_locs: Bitboard,
     pub player_same_piece_locs: Option<Bitboard>
@@ -35,7 +34,6 @@ impl BeforeMoveInfoForStringify {
                 },
                 _ => None,
             },
-            player: player,
             player_piece_locs: player_state.piece_locs,
             opponent_piece_locs: opponent_state.piece_locs,
             player_same_piece_locs: match m.description() {

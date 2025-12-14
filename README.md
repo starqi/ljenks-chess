@@ -11,11 +11,15 @@ Copy www/assets/dist/* to gh-pages branch.
 ### TODO
 
 - Review wasm bindgen tutorial, ./pkg, not ./node_modules
+- Review thread local macro
 - async web assembly how? premoves.
-- Saw one illegal move king moving into rook file? Another illegal queen d3 self capture...
-    - It's ambiguous rooks 
+- AI scan for major inefficiencies
+- Randomization option... more copying others...
+/ Saw one illegal move king moving into rook file? Another illegal queen d3 self capture...
+    / It's ambiguous rooks 
+        / Move str: Duplicate piece resolution: Raa4
+- Have to do repetition detection at engine level to avoid self-play perma loop (saw it while up a gazillion material)
 - Scrolling issues
-- Move str: Duplicate piece resolution: Raa4
 - Write notes on how wasm works, check versions
 - Minor: Pointer jumps to &Bitboard worse than copying
 - ! Choose an opening which forces tactical lines?!

@@ -8,7 +8,7 @@ use super::super::game::move_list::*;
 
 /// Matches `Piece` enum number
 static PIECE_VALUES: [i32; 6] = [
-    100, 500, 300, 300, 900, 1000
+    100, 500, 300, 300, 900, 0 // Pretty sure king can be zero for this engine
 ];
 
 const PAWN_PUSH_BONUS: i32 = 10;

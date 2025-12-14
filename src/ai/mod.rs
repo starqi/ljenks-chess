@@ -6,7 +6,7 @@ use super::game::entities::*;
 use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
-use super::extern_funcs::now;
+use super::extern_funcs::{random, now};
 use crate::{console_log};
 
 pub struct Ai {
@@ -23,8 +23,10 @@ pub struct Ai {
     terminated: bool
 }
 
+// TODO (Minor) Rename this, NoEffect -> Fail low
 enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 
+// TODO Rename to GT LT?
 #[derive(Clone)]
 enum MemoType { Low(MoveWithEval), Exact(MoveWithEval), High(MoveWithEval) }
 
@@ -154,6 +156,7 @@ impl Ai {
         self.terminated
     }
 
+    // TODO Refactor
     /// First tuple entry = the memoized result if any
     /// Second tuple entry = if this value exists, we can stop recursing because the full result is memoized, including the score sign
     fn find_memo_score(&mut self, remaining_depth: i8, alpha: i32, beta: i32) -> (Option<&MemoType>, Option<i32>) {
@@ -205,7 +208,7 @@ impl Ai {
         // Evaluation is always maximizing for white. Black is also maximizing, so whenever it's black's turn, black's 'score definition" is negative of white's score definition.
         let score_multiplier = self.test_board.get_player_with_turn().multiplier();
 
-        if self.increment_node_check_termination() { return initial_alpha; } // See (2)
+        if self.increment_node_check_termination() { return initial_alpha; } // See (2) FIXME WTF IS (2)
 
         let mut alpha = initial_alpha;
 
@@ -359,11 +362,18 @@ impl Ai {
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
 
         for i in (moves_start..moves_end_exclusive).rev() {
+            // TODO Review borrowing again
+            // First, review Vec again, and [] being immutable ref
+            // Then, is the problem: move itself obv immutable but chain cascades into self (too much), 
+            // if self is immutable, that makes no sense as a recursive algo with potentially mutable buffers
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
             let m_score = (*m).1;
-            let mut less_depth_amount = (-((remaining_depth > 3) as i32)) & min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3);
+            // TODO Extract this if trick as macrorules. Unit tests.
+            let mut less_depth_amount = (-((remaining_depth > 3 && new_alpha_i != NEW_ALPHA_I_NEVER_SET) as i32)) 
+                & min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3);
 
+            // TODO Statistics for research
             loop {
                 let r = self.negamax_try_move(
                     remaining_depth - (less_depth_amount as i8), 
@@ -374,12 +384,14 @@ impl Ai {
                     moves_end_exclusive
                 );
 
+                // TODO IMMEDIATE FIX COMMENT
                 // If we reduce depth, then try again with real depth if guessed wrong, and recursive call is not a fail-low
                 if let SingleMoveResult::NewAlpha(score) = r {
-                    assert!(!self.terminated);
+                    assert!(!self.terminated); // TODO Why?
                     if less_depth_amount <= 0 {
                         alpha = score;
                         new_alpha_i = i as i32;
+                        break;
                     } else {
                         less_depth_amount = 0;
                     }
