@@ -1,5 +1,3 @@
-import * as wasm from './node_modules/ljenks-chess';
-
 import bb from './assets/bb.png';
 import bw from './assets/bw.png';
 import kb from './assets/kb.png';
@@ -22,8 +20,11 @@ class Application {
     static TEMP_DEPTH = 7;
 
     constructor() {
+        // Rust code is thought of from white perspective, then conversion is made in JS if playing as black.
         this.isWhiteCameraPosition = true;
-        this.boardLock = false;
+        // If engine is thinking, lock all moves, cannot simply buffer multiple human actions because engine needs to respond  
+        // between each premove and then redraw.
+        this.boardActionLock = true;
 
         this.draggedImage = null;
         this.draggedSqX = 0;
@@ -32,10 +33,7 @@ class Application {
         this.moveHistory = [];
         this.moveNumber = 1;
 
-        this.selfPlayTimeoutId = null;
-
-        this.main = wasm.Main.new();
-        this.LEN = (0.9 * Math.min(window.innerWidth, window.innerHeight - document.getElementById('title').getBoundingClientRect().height) / 8) >>> 0;
+        this.SQUARE_LENGTH = (0.9 * Math.min(window.innerWidth, window.innerHeight - document.getElementById('title').getBoundingClientRect().height) / 8) >>> 0;
 
         // Pawn = 0, Rook, Knight, Bishop, Queen, King
         this.numToLetter = [
@@ -51,18 +49,18 @@ class Application {
         this.board.addEventListener('touchend', this.onTouchEnd.bind(this));
 
         document.getElementById('self-play-btn').addEventListener('click', () => {
-            this.resetAndSelfPlay();
+            this.onSelfPlayButtonClick();
         });
         document.getElementById('play-btn').addEventListener('click', () => {
-            this.resetAndPlay();
+            this.onPlayButtonClick();
         });
 
         this.dragged = document.getElementById('dragged');
-        this.dragged.width = this.LEN;
-        this.dragged.height = this.LEN;
+        this.dragged.width = this.SQUARE_LENGTH;
+        this.dragged.height = this.SQUARE_LENGTH;
 
         this.squareImages = [];
-        this.wasmData = new Array(64);
+        this.lastBoardState = new Array(64);
 
         for (let i = 0; i < 8; ++i) {
             const rowElement = document.createElement('div');
@@ -71,15 +69,15 @@ class Application {
 
             for (let i = 0; i < 8; ++i) {
                 const square = document.createElement('span');
-                square.style.width = this.LEN;
-                square.style.height = this.LEN;
+                square.style.width = this.SQUARE_LENGTH;
+                square.style.height = this.SQUARE_LENGTH;
                 square.style.display = 'inline-block';
                 square.style.backgroundColor = (i + delta) % 2 === 0 ? '#eeeeee' : '#915355';
                 square.dataset.backgroundColor = square.style.backgroundColor;
 
                 const image = new Image();
-                image.width = this.LEN;
-                image.height = this.LEN;
+                image.width = this.SQUARE_LENGTH;
+                image.height = this.SQUARE_LENGTH;
                 image.style.visibility = 'hidden';
                 image.src = '';
 
@@ -92,64 +90,95 @@ class Application {
             this.squareImages.push(imageRow);
         }
 
-        this.resetAndPlay();
+        this.worker = null;
+        this.onPlayButtonClick();
     }
 
-    resetAndPlay() {
-        this.reset();
+    //////////////////////////////////////////////////
+    // Web worker interface
 
-        setTimeout(() => {
+    reset(onReady) {
+        if (this.worker) {
+            this.worker.terminate();
+            this.worker = null;
+        }
+        this.boardActionLock = true;
+
+        console.log('Creating new worker');
+        this.worker = new Worker(new URL('worker.js', import.meta.url));
+        this.worker.onerror = (e) => {
+            console.error('Worker error: ', e);
+        };
+        let cbCalled = false;
+        this.worker.onmessage = (e) => {
+            console.log('Worker response', e.data);
+
+            if (e.data.type === 'ready') {
+                if (!cbCalled) {
+                    this.isWhiteCameraPosition = Math.random() > 0.5;
+                    // Twice to get rid of board "diffs" between old and new boards
+                    this.refreshBoardFromWasmData(e.data.board);
+                    this.refreshBoardFromWasmData(e.data.board);
+
+                    this.moveHistory = [];
+                    this.moveNumber = 1;
+                    this.redrawMoveList();
+
+                    onReady();
+                    cbCalled = true;
+                    this.boardActionLock = false;
+                }
+            } else if (e.data.type === 'ai_move_done') {
+                this.addLastMoveToHistory(e.data.lastMoveStr);
+                this.refreshBoardFromWasmData(e.data.board);
+                this.boardActionLock = false;
+
+                if (e.data.isAutoPlay) this.scheduleSelfPlayChain();
+            } else if (e.data.type === 'human_move_done') {
+                this.addLastMoveToHistory(e.data.lastMoveStr);
+                this.refreshBoardFromWasmData(e.data.board);
+                this.boardActionLock = false;
+
+                if (e.data.isAutoPlay) this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
+            } else {
+                // For errors and other unknown cases, don't perma lock the board
+                this.boardActionLock = false;
+            }
+        };
+    }
+
+    makeAiMoveAsync(depth, isAutoPlay) {
+        this.boardActionLock = true;
+        this.worker.postMessage({type: 'make_ai_move', depth, isAutoPlay});
+    }
+
+    makeHumanMoveAsync(fromX, fromY, toX, toY, isAutoPlay) {
+        this.boardActionLock = true;
+        this.worker.postMessage({type: 'make_human_move', fromX, fromY, toX, toY, isAutoPlay});
+    }
+
+    onPlayButtonClick() {
+        this.reset(() => {
             if (!this.isWhiteCameraPosition) {
-                this.main.make_ai_move(Application.TEMP_DEPTH);
-                this.addLastMoveToHistory();
-                // TODO (Minor) Emphasize that "player" here could be AI or human...
-                this.main.refresh_player_moves();
-                this.refreshBoardFromWasmState();
+                this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
             }
         });
     }
 
-    resetAndSelfPlay() {
-        this.reset();
-        setTimeout(() => {
+    onSelfPlayButtonClick() {
+        this.reset(() => {
             this.scheduleSelfPlayChain();
         });
     }
 
     scheduleSelfPlayChain() {
-        this.selfPlayTimeoutId = setTimeout(() => {
-            this.main.make_ai_move(Application.TEMP_DEPTH);
-
-            const added = this.addLastMoveToHistory();
-            if (!added) {
-                this.selfPlayTimeoutId = null;
-            } else {
-                this.refreshBoardFromWasmState();
-                this.scheduleSelfPlayChain();
-            }
-        }, 0);
-    }
-
-    reset() {
-        if (this.selfPlayTimeoutId) {
-            clearTimeout(this.selfPlayTimeoutId);
-            this.selfPlayTimeoutId = null;
-        }
-        this.main.reset();
-
-        this.isWhiteCameraPosition = Math.random() > 0.5;
-        this.refreshBoardFromWasmState();
-        this.refreshBoardFromWasmState();
-
-        this.moveHistory = [];
-        this.moveNumber = 1;
-        this.redrawMoveList();
+        this.makeAiMoveAsync(Application.TEMP_DEPTH, true);
     }
 
     //////////////////////////////////////////////////
+    // Generic piece move (touch, mouse) code
 
     onGenericDragStart(clientX, clientY) {
-        if (this.boardLock) return;
 
         if (this.draggedImage !== null) {
             // Contract = draggedImage is synced to null if mouse up
@@ -176,8 +205,8 @@ class Application {
     trySyncDragged(clientX, clientY) {
         const boardCoords = this.getBoardCoordsFromClientCoords(clientX, clientY);
         if (this.draggedImage !== null) {
-            this.dragged.style.left = (boardCoords.x - this.LEN / 2.0).toString();
-            this.dragged.style.top = (boardCoords.y - this.LEN / 2.0).toString();
+            this.dragged.style.left = (boardCoords.x - this.SQUARE_LENGTH / 2.0).toString();
+            this.dragged.style.top = (boardCoords.y - this.SQUARE_LENGTH / 2.0).toString();
         }
     }
 
@@ -189,40 +218,28 @@ class Application {
         this.dragged.style.visibility = 'hidden';
 
         const sqCoords = this.getSquareCoordsFromClientCoords(clientX, clientY);
+        if (this.boardActionLock) return; // TODO Premoves
         if (this.isWhiteCameraPosition) {
-            if (!this.main.try_move(
+            this.makeHumanMoveAsync(
                 this.draggedSqX,
                 this.draggedSqY,
                 sqCoords.x,
-                sqCoords.y
-            )) return;
+                sqCoords.y,
+                true
+            );
         } else {
-            if (!this.main.try_move(
+            this.makeHumanMoveAsync(
                 7 - this.draggedSqX,
                 7 - this.draggedSqY,
                 7 - sqCoords.x,
-                7 - sqCoords.y
-            )) return;
+                7 - sqCoords.y,
+                true
+            );
         }
-
-        this.refreshBoardFromWasmState();
-        this.addLastMoveToHistory();
-
-        this.boardLock = true;
-        console.log('Locked board');
-        setTimeout(() => {
-            // TODO (Feature Req) Commenting first 3 lines here = play vs self
-            this.main.make_ai_move(Application.TEMP_DEPTH);
-            this.refreshBoardFromWasmState();
-            this.addLastMoveToHistory();
-            
-            this.main.refresh_player_moves();
-            this.boardLock = false;
-            console.log('Unlocked board');
-        }, 250);
     }
 
     //////////////////////////////////////////////////
+    // Mouse code
 
     onBoardMouseDown(e) {
         e.preventDefault();
@@ -240,6 +257,7 @@ class Application {
     }
 
     //////////////////////////////////////////////////
+    // Touch code
 
     onTouchStart(e) {
         if (e.touches.length === 1) {
@@ -263,10 +281,11 @@ class Application {
     }
 
     //////////////////////////////////////////////////
+    // Purely UI code
 
-    setSquareFromWasm(row, col) {
-        const existing = this.wasmData[row * 8 + col];
-        const num = this.isWhiteCameraPosition ? this.main.get_piece(col, row) : this.main.get_piece(7 - col, 7 - row);
+    setSquareFromWasmData(row, col, data) {
+        const existing = this.lastBoardState[row * 8 + col];
+        const num = this.isWhiteCameraPosition ? data[row * 8 + col] : data[(7 - row) * 8 + (7 - col)];
         if (existing === num) {
             this.colorSquare(row, col, false);
         } else {
@@ -277,7 +296,7 @@ class Application {
                 const letter = this.numToLetter[Math.abs(num) - 1];
                 if (letter !== undefined) this.setSquare(row, col, letter, isWhite);
             }
-            this.wasmData[row * 8 + col] = num;
+            this.lastBoardState[row * 8 + col] = num;
             if (existing !== undefined) this.colorSquare(row, col, true); // Don't color on first sync from undefined -> number
         }
         return num;
@@ -316,10 +335,10 @@ class Application {
         }
     }
 
-    refreshBoardFromWasmState() {
-        for (let i = 0; i < 8; ++i) {
-            for (let j = 0; j < 8; ++j) {
-                this.setSquareFromWasm(j, i);
+    refreshBoardFromWasmData(data) {
+        for (let y = 0; y < 8; ++y) {
+            for (let x = 0; x < 8; ++x) {
+                this.setSquareFromWasmData(x, y, data);
             }
         }
     }
@@ -346,10 +365,9 @@ class Application {
         moveListContent.scrollTop = moveListContent.scrollHeight;
     }
 
-    addLastMoveToHistory() {
-        let moveStr = this.main.get_last_move_notation();
-        if (moveStr) {
-            this.moveHistory.push(moveStr);
+    addLastMoveToHistory(lastMoveStr) {
+        if (lastMoveStr) {
+            this.moveHistory.push(lastMoveStr);
             this.redrawMoveList();
             return true;
         } else {
@@ -360,6 +378,7 @@ class Application {
     }
 
     //////////////////////////////////////////////////
+    // Coordinate utils
 
     getBoardCoordsFromClientCoords(clientX, clientY) {
         const r = this.board.getBoundingClientRect();
@@ -368,8 +387,8 @@ class Application {
 
     getSquareCoordsFromClientCoords(clientX, clientY) {
         const r = this.getBoardCoordsFromClientCoords(clientX, clientY);
-        r.x = (r.x / this.LEN) >>> 0;
-        r.y = (r.y / this.LEN) >>> 0;
+        r.x = (r.x / this.SQUARE_LENGTH) >>> 0;
+        r.y = (r.y / this.SQUARE_LENGTH) >>> 0;
         return r;
     }
 }

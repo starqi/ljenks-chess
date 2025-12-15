@@ -13,6 +13,7 @@ module.exports = {
         new CopyWebpackPlugin({
             patterns: [
                 {from: path.resolve(__dirname, 'index.html')},
+                {from: path.resolve(__dirname, 'worker.js')},
             ],
         }),
         new WasmPackPlugin({
@@ -30,6 +31,8 @@ module.exports = {
     ],
     //mode: 'development',
     mode: 'production',
+    // Enabling this slowed down NPS by 4x
+    //devtool: 'source-map',
     experiments: {
         asyncWebAssembly: true // TODO Review
     },
