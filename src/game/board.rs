@@ -658,10 +658,22 @@ impl Board {
         self.en_passant_extra_target.reset();
     }
 
+    #[inline]
+    pub fn handle_move_no_revert(&mut self, m: &MoveWithEval) {
+        let mut revertable_result = RevertableMove::NoOp(0);
+        self.handle_move(m, &mut revertable_result);
+    }
+
     /// All correctness checks will be move generation's responsibility.
-    pub fn handle_move(&mut self, m: &MoveWithEval) -> RevertableMove {
+    pub fn handle_move(
+        &mut self,
+        m: &MoveWithEval,
+        // This means this board class will not be responsible for the stack of revertable moves during search.
+        // Also, use output variable to look more obviously like a copy elision optimization target.
+        revertable_result: &mut RevertableMove
+    ) {
         let old_hash = self.hash;
-        let result = match m.description() {
+        match m.description() {
             MoveDescription::NormalMove(_from_coord, _to_coord, metadata) => {
 
                 let from_sq_copy = *self.get_by_index(_from_coord.value());
@@ -671,7 +683,7 @@ impl Board {
                 let result = if let Square::Occupied(_, _) = from_sq_copy {
                     match *metadata {
                         MoveMetadata::DoublePawnJump => {
-                            RevertableMove::DoublePawnJump(
+                            *revertable_result = RevertableMove::DoublePawnJump(
                                 [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
                                 old_hash,
                                 self.en_passant_extra_target.clone()
@@ -680,7 +692,7 @@ impl Board {
                         MoveMetadata::EnPassant => {
                             let captured_pawn_coord = FastCoord::from_xy(_to_coord.get_x(), _from_coord.get_y());
                             let captured_pawn_square = BeforeSquare(captured_pawn_coord, *self.get_by_fast_coord(captured_pawn_coord));
-                            RevertableMove::EnPassant(
+                            *revertable_result = RevertableMove::EnPassant(
                                 [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy), captured_pawn_square], 
                                 old_hash,
                                 self.en_passant_extra_target.clone()
@@ -688,7 +700,7 @@ impl Board {
                         },
                         _ => {
                             let curr_player_state = self.get_player_state(self.get_player_with_turn());
-                            RevertableMove::NormalMove(
+                            *revertable_result = RevertableMove::NormalMove(
                                 [BeforeSquare(*_from_coord, from_sq_copy), BeforeSquare(*_to_coord, to_sq_copy)], 
                                 old_hash,
                                 [self.get_player_state(Player::White).moved_castle_piece, self.get_player_state(Player::Black).moved_castle_piece],
@@ -752,7 +764,7 @@ impl Board {
                 let curr_player_num = curr_player as usize;
                 let result = {
                     let curr_player_state = self.get_player_state(curr_player);
-                    RevertableMove::Castle(
+                    *revertable_result = RevertableMove::Castle(
                         *castle_type,
                         old_hash,
                         curr_player_state.moved_castle_piece,
@@ -778,14 +790,12 @@ impl Board {
                 result
             }
             _ => {
-                RevertableMove::NoOp(old_hash)
+                *revertable_result = RevertableMove::NoOp(old_hash)
             }
         };
 
         self.hash ^= RANDOM_NUMBER_KEYS.is_white_to_play;
         self.player_with_turn = self.player_with_turn.other_player();
-
-        result
     }
 
     /// Does not check if a castle piece has moved
@@ -837,7 +847,8 @@ impl Board {
  
         for i in 0..temp_moves.write_index {
             let m = &temp_moves.v()[i];
-            let revertable = self.handle_move(m);
+            let mut revertable = RevertableMove::NoOp(0);
+            self.handle_move(m, &mut revertable);
             let is_checking = self.is_checking(self.get_player_with_turn());
             self.revert_move(&revertable);
             if !is_checking { result.write(m.clone()); }
@@ -872,7 +883,8 @@ impl Board {
  
         for i in 0..temp_moves.write_index {
             let m = &temp_moves.v()[i];
-            let revertable = self.handle_move(m);
+            let mut revertable = RevertableMove::NoOp(0);
+            self.handle_move(m, &mut revertable);
             let is_checking = self.is_checking(self.get_player_with_turn());
             self.revert_move(&revertable);
             if !is_checking { result.write(m.clone()); }
@@ -1179,7 +1191,9 @@ mod test {
         
         // Execute the double jump move
         assert!(board.en_passant_extra_target.bitboard.0 == 0, "En passant target is clear before double jump");
-        board.handle_move(&double_jump_move.unwrap());
+
+        let mut revertable = RevertableMove::NoOp(0);
+        board.handle_move(&double_jump_move.unwrap(), &mut revertable);
         assert!(board.en_passant_extra_target.bitboard.0 != 0, "En passant target is set after double jump");
 
         // Now generate moves for black and find the en passant move
@@ -1204,7 +1218,7 @@ mod test {
         }
         assert!(en_passant_move.is_some(), "En passant move should be available");
         
-        board.handle_move(&en_passant_move.unwrap());
+        board.handle_move_no_revert(&en_passant_move.unwrap());
         assert!(matches!(board.get_by_file_rank_safe('d', 4), Ok(Square::Blank)), "Captured pawn at d4 should be gone");
         assert!(matches!(board.get_by_file_rank_safe('e', 3), Ok(Square::Occupied(Piece::Pawn, Player::Black))), "Black pawn should be at e3");
         assert!(matches!(board.get_by_file_rank_safe('e', 4), Ok(Square::Blank)), "White pawn at e4 should be gone");

@@ -81,8 +81,8 @@ impl Main {
         self.board.get_moves(&mut self.temp, &mut self.move_list);
         let end_exclusive = self.move_list.write_index;
         console_log!("{} moves", end_exclusive);
-        console_log!("White King\n{}", self.board.get_player_state(Player::White).king_location);
-        console_log!("Black King\n{}", self.board.get_player_state(Player::Black).king_location);
+        //console_log!("White King\n{}", self.board.get_player_state(Player::White).king_location);
+        //console_log!("Black King\n{}", self.board.get_player_state(Player::Black).king_location);
         self.searchable.reset_from_move_list(self.board.get_player_with_turn(), &mut self.move_list, 0, end_exclusive);
     }
 
@@ -95,7 +95,7 @@ impl Main {
             let before_info = BeforeMoveInfoForStringify::slow_new(&self.board, m);
             let original_player = self.board.get_player_with_turn();
 
-            self.board.handle_move(m);
+            self.board.handle_move_no_revert(m);
             self.board.assert_hash();
 
             let is_check = self.board.is_checking(original_player);

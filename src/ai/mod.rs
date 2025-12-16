@@ -26,9 +26,8 @@ pub struct Ai {
 // TODO (Minor) Rename this, NoEffect -> Fail low
 enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 
-// TODO Rename to GT LT?
 #[derive(Clone)]
-enum MemoType { Low(MoveWithEval), Exact(MoveWithEval), High(MoveWithEval) }
+enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
 
 // TODO Evaluation is redundant
 #[derive(Clone)]
@@ -58,7 +57,7 @@ impl Ai {
     fn get_leading_move(&self) -> Option<(&MoveWithEval, i8)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
-            Some(MemoData(eval, depth, MemoType::High(best_move) | MemoType::Exact(best_move) | MemoType::Low(best_move))) => {
+            Some(MemoData(eval, depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move))) => {
                 Some((best_move, *depth))
             },
             _ => {
@@ -104,7 +103,7 @@ impl Ai {
             let before_info = BeforeMoveInfoForStringify::slow_new(real_board, m);
             let original_player = real_board.get_player_with_turn();
 
-            real_board.handle_move(m);
+            real_board.handle_move_no_revert(m);
 
             let is_check = real_board.is_checking(original_player);
             let is_checkmate = is_check && real_board.has_no_legal_moves(original_player);
@@ -165,13 +164,13 @@ impl Ai {
             // If the memoized move has the precision we want, use its score
             if *saved_depth >= remaining_depth {
                 match memo_type {
-                    MemoType::Low(_) => {
+                    MemoType::LessThan(_) => {
                         if *saved_num <= alpha {
                             self.memo_hits += 1;
                             return (Some(memo_type), Some(alpha));
                         }
                     },
-                    MemoType::High(_) => {
+                    MemoType::GreaterThan(_) => {
                         if *saved_num >= beta { 
                             self.memo_hits += 1;
                             return (Some(memo_type), Some(beta));
@@ -239,7 +238,8 @@ impl Ai {
 
         for i in (moves_start..moves_end_exclusive).rev() {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
-            let revertable = self.test_board.handle_move(&*m);
+            let mut revertable = RevertableMove::NoOp(0);
+            self.test_board.handle_move(&*m, &mut revertable);
 
             let r = -self.qsearch(
                 remaining_depth_opt - 1, 
@@ -292,7 +292,7 @@ impl Ai {
             (Some(memo_type), None) => { // Memoized move is not precise enough, try using it as the first best move
 
                 // Clone the move, unlike if the move is on move list, because memo updates will overwrite the same memory. Also, we can move it into the memo.
-                let move_clone = if let MemoType::Exact(m) | MemoType::High(m) = memo_type {
+                let move_clone = if let MemoType::Exact(m) | MemoType::GreaterThan(m) = memo_type {
                     Some(m.clone())
                 } else {
                     // (1) For fail low memo entries, currently the move is a random move so we can't use it as the best move (but it doesn't have to be that way TODO)
@@ -306,7 +306,7 @@ impl Ai {
                             if self.terminated {
                                 return initial_alpha; // See (2)
                             } else {
-                                self.insert_memo(MemoData(score, remaining_depth, MemoType::High(m)));
+                                self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan(m)));
                                 return beta;
                             }
                         },
@@ -406,7 +406,7 @@ impl Ai {
                         return initial_alpha; // See (2)
                     } else {
                         if less_depth_amount <= 0 {
-                            self.insert_memo(MemoData(score, remaining_depth, MemoType::High((*m).clone())));
+                            self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan((*m).clone())));
                             return beta;
                         } else {
                             less_depth_amount = 0;
@@ -425,7 +425,7 @@ impl Ai {
             self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone())));
         } else {
             // See (1)
-            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Low(self.moves_buf.v()[0].clone())));
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::LessThan(self.moves_buf.v()[0].clone())));
         }
 
         alpha
@@ -441,7 +441,8 @@ impl Ai {
         m: *const MoveWithEval,
         moves_start: usize
     ) -> SingleMoveResult {
-        let revertable = self.test_board.handle_move(&*m);
+        let mut revertable = RevertableMove::NoOp(0);
+        self.test_board.handle_move(&*m, &mut revertable);
 
         let mut fast_found_score: i32 = 0;
         let mut fast_found = false;

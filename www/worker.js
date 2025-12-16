@@ -29,7 +29,6 @@ self.onmessage = (e) => {
             if (!isAutoPlay) main.refresh_player_moves();
             postMessage({type: 'human_move_done', isAutoPlay, board, lastMoveStr});
         } else {
-            // TODO IMMEDIATE Handle
             postMessage({type: 'move_invalid'});
         }
     }
