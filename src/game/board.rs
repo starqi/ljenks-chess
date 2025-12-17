@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter, self};
+
 use super::coords::*;
 use super::entities::*;
 use super::move_list::*;
@@ -141,6 +142,8 @@ impl Display for Board {
 // TODO (Feature Req) Outside ability to set the board to mostly anything without breaking hash,
 // right now tests have responsibilty to maintain proper state
 
+/// Will not track full game end conditions such as stalemate, or 50 move rule, or repetitions,
+/// will only know whether there exist moves or not (e.g. none during checkmate). Caller must handle this.
 impl Board {
 
     /// Sets up a standard board
@@ -207,88 +210,6 @@ impl Board {
         }
     }
 
-    pub fn slow_stringify_move_standard(
-        &self,
-        m: &MoveWithEval,
-        before: &BeforeMoveInfoForStringify,
-        after: &AfterMoveInfoForStringify
-    ) -> String {
-        let mut result = match m.description() {
-            MoveDescription::NormalMove(_from_coord, _to_coord, _metadata) => {
-                let to_coord = _to_coord.to_coord();
-                let piece = before.piece.expect("Illegal state: Found normal move without a piece during stringify");
-
-                let piece_str = match piece {
-                    Piece::Pawn => "",
-                    Piece::Knight => "N",
-                    Piece::Bishop => "B",
-                    Piece::Rook => "R",
-                    Piece::Queen => "Q",
-                    Piece::King => "K",
-                };
-
-                let (to_file, to_rank) = xy_to_file_rank(to_coord.0, to_coord.1);
-                let to_str = format!("{}{}", to_file, to_rank);
-
-                let from_coord = _from_coord.to_coord();
-                let (from_file, from_rank) = xy_to_file_rank(from_coord.0, from_coord.1);
-                if piece == Piece::Pawn {
-                    if before.is_capture {
-                        format!("{}x{}", from_file, to_str)
-                    } else {
-                        to_str
-                    }
-                } else {
-                    if before.is_capture {
-                        format!("{}{}x{}", 
-                            piece_str, 
-                            self.slow_stringify_unambiguous_coord(
-                                from_coord,
-                                *_to_coord,
-                                piece,
-                                &before.player_same_piece_locs.unwrap(), // TODO IMMEDIATE Exception message
-                                &before.player_piece_locs,
-                                &before.opponent_piece_locs
-                            ),
-                            to_str
-                        )
-                    } else {
-                        format!("{}{}{}", 
-                            piece_str,
-                            self.slow_stringify_unambiguous_coord(
-                                from_coord,
-                                *_to_coord,
-                                piece,
-                                &before.player_same_piece_locs.unwrap(),
-                                &before.player_piece_locs,
-                                &before.opponent_piece_locs
-                            ),
-                            to_str
-                        )
-                    }
-                }
-            },
-            MoveDescription::Castle(castle_type) => {
-                if *castle_type == CastleType::Oo {
-                    "O-O".to_string()
-                } else {
-                    "O-O-O".to_string()
-                }
-            },
-            MoveDescription::SkipMove => {
-                "<Skip>".to_string()
-            }
-        };
-
-        if after.is_checkmate {
-            result.push('#');
-        } else if after.is_check {
-            result.push('+');
-        }
-
-        result
-    }
-
     fn slow_create_piece_player_bitboard(&self, player: Player, piece: Piece) -> Bitboard {
         let mut bb = Bitboard(0);
         self.get_player_state(player).piece_locs.clone().consume_loop_indices(|index| {
@@ -301,62 +222,6 @@ impl Board {
         bb
     }
 
-    // TODO IMMEDIATE Nc5xe4 is a thing right?
-    /// e.g. For Nxe4, fills in Nc5xe4, or the c part of Ra1 -> Rac1.
-    /// Does not handle pawns, do that elsewhere.
-    /// Does not handle castle or special moves, that's why `piece` is required.
-    /// King move will always return empty string.
-    /// Note this does not anything in the post-move "after" board state. 
-    fn slow_stringify_unambiguous_coord(
-        &self, // FIXME IMMEDIATE (Refactor) Static method, move out of board, why is any of this in board?
-        from_coord: Coord,
-        to_coord: FastCoord,
-        piece: Piece,
-        player_before_same_pieces: &Bitboard,
-        player_before_pieces: &Bitboard,
-        opponent_before_pieces: &Bitboard,
-    ) -> String {
-        let reverse_move_gen = match piece { // Because chess movements are "commutative"
-            Piece::King => return String::new(),
-            Piece::Queen => _write_queen_moves_self_capture(to_coord, player_before_pieces, opponent_before_pieces),
-            Piece::Knight => _write_knight_moves_self_capture(to_coord),
-            Piece::Bishop => _write_bishop_moves_self_capture(to_coord, player_before_pieces, opponent_before_pieces),
-            Piece::Rook => _write_rook_moves_self_capture(to_coord, player_before_pieces, opponent_before_pieces),
-            _ => {
-                panic!("Cannot call this method with piece {}", piece);
-            }
-        };
-        //println!("{}", reverse_move_gen);
-        //println!("{}", player_before_same_pieces);
-        let candidates_bb = Bitboard(reverse_move_gen.0 & player_before_same_pieces.0);
-        //println!("{}", candidates_bb);
-        if candidates_bb.0 == 0 {
-            panic!("Could not find piece being moved during move stringify, piece = {}", piece);
-        }
-        if candidates_bb.pop_count() == 1 { // The piece name ("R", "rook") is enough to identify location
-            return String::new();
-        }
-
-
-        let x = from_coord.0;
-        let y = from_coord.1;
-
-        let mut count = 0;
-        for j in 0..8 {
-            if candidates_bb.is_set(x, j) { count += 1; }
-        }
-        //println!("Count along y {}", count);
-        if count <= 1 { return x_to_file(x).to_string(); }
-
-        count = 0;
-        for i in 0..8 {
-            if candidates_bb.is_set(i, y) { count += 1; }
-        }
-        //println!("Count along x {}", count);
-        if count <= 1 { return y_to_rank(x).to_string(); }
-
-        format!("{}{}", x_to_file(x), y_to_rank(y))
-    }
 
     pub fn print_move_list(&self, ml: &MoveList, start: usize, _end_exclusive: usize) {
         let end_exclusive = if _end_exclusive < ml.v().len() {
@@ -668,7 +533,9 @@ impl Board {
     pub fn handle_move(
         &mut self,
         m: &MoveWithEval,
-        // This means this board class will not be responsible for the stack of revertable moves during search.
+        // This board class will not be responsible for tracking the STACK of revertable moves during search, delegate to caller.
+        // Therefore, the caller will also track which positions were reached for draw by repetition. 
+        //
         // Also, use output variable to look more obviously like a copy elision optimization target.
         revertable_result: &mut RevertableMove
     ) {
@@ -1061,7 +928,7 @@ impl Board {
         self.set_uniform_row(7, Square::Occupied(Piece::Pawn, Player::Black));
     }
 
-    pub fn has_no_legal_moves(&mut self, player: Player) -> bool {
+    pub fn has_no_legal_moves(&mut self) -> bool {
         let mut temp_moves = MoveList::new(50);
         let mut result_moves = MoveList::new(50);
         self.get_moves(&mut temp_moves, &mut result_moves);
@@ -1248,7 +1115,7 @@ mod test {
 
         assert_eq!(
             "c3", 
-            board.slow_stringify_unambiguous_coord(
+            slow_stringify_unambiguous_coord(
                 file_rank_to_xy_safe('c', 3).unwrap(),
                 FastCoord::from_coord(&file_rank_to_xy_safe('e', 4).unwrap()),
                 Piece::Knight, 
@@ -1277,7 +1144,7 @@ mod test {
 
         assert_eq!(
             "4",
-            board.slow_stringify_unambiguous_coord(
+            slow_stringify_unambiguous_coord(
                 file_rank_to_xy_safe('e', 4).unwrap(),
                 FastCoord::from_coord(&file_rank_to_xy_safe('e', 3).unwrap()),
                 Piece::Rook, 

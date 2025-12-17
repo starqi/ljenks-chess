@@ -21,6 +21,8 @@ use game::searchable_moves::*;
 use game::move_list::*;
 use wasm_bindgen::prelude::*;
 
+use crate::game::stringify::slow_stringify_move_standard;
+
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
 #[cfg(feature = "wee_alloc")]
@@ -34,6 +36,10 @@ lazy_static! {
 }
 
 #[wasm_bindgen]
+#[derive(Clone)]
+pub enum GameEndState { Checkmate = 0, Stalemate = 1, RepetitionCalled = 2 }
+
+#[wasm_bindgen]
 pub struct Main {
     board: Board,
     ai: Ai,
@@ -41,7 +47,9 @@ pub struct Main {
     temp: MoveList,
     move_list: MoveList,
     searchable: SearchableMoves,
-    last_move: Option<String>
+    last_move: Option<String>,
+    game_end_state: Option<GameEndState>,
+    position_hashes: Vec<u64>
 }
 
 #[wasm_bindgen]
@@ -60,6 +68,7 @@ impl Main {
         let _ = &BITBOARD_PRESETS.rays;
 
         let board = Board::new();
+        let initial_hash = board.get_hash();
         Main {
             board,
             ai: Ai::new(),
@@ -67,13 +76,42 @@ impl Main {
             temp: MoveList::new(50),
             move_list: MoveList::new(50),
             searchable: SearchableMoves::new(),
-            last_move: None
+            last_move: None,
+            game_end_state: None,
+            position_hashes: vec![initial_hash]
         }
     }
 
-    // TODO IMMEDIATE Rust default params???
-    pub fn make_ai_move(&mut self, depth: i8) {
+    pub fn get_game_end_state(&self) -> Option<GameEndState> {
+        self.game_end_state.clone()
+    }
+
+    pub fn make_ai_move(&mut self, depth: i8) -> bool {
+        if self.game_end_state.is_some() {
+            console_log!("Game has ended, cannot make AI move");
+            return false;
+        }
+
         self.last_move = self.ai.make_move(depth, 10000, &mut self.board);
+
+        let is_check = self.board.is_checking(self.board.get_player_with_turn().other_player());
+        let has_no_legal_moves = self.board.has_no_legal_moves();
+        let is_checkmate = is_check && has_no_legal_moves;
+        let is_stalemate = !is_check && has_no_legal_moves;
+
+        let current_hash = self.board.get_hash();
+        self.position_hashes.push(current_hash);
+        let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
+        self.game_end_state = if is_checkmate {
+            Some(GameEndState::Checkmate)
+        } else if is_stalemate {
+            Some(GameEndState::Stalemate)
+        } else if repetition_count >= 3 {
+            Some(GameEndState::RepetitionCalled)
+        } else {
+            None
+        };
+        true
     }
 
     pub fn refresh_player_moves(&mut self) {
@@ -87,6 +125,11 @@ impl Main {
     }
 
     pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> bool {
+        if self.game_end_state.is_some() {
+            console_log!("Game has ended, cannot make AI move");
+            return false;
+        }
+
         if check_i32_xy(from_x, from_y).is_err() { return false; }
         if check_i32_xy(to_x, to_y).is_err() { return false; }
 
@@ -99,11 +142,26 @@ impl Main {
             self.board.assert_hash();
 
             let is_check = self.board.is_checking(original_player);
-            let is_checkmate = is_check && self.board.has_no_legal_moves(original_player);
+            let has_no_legal_moves = self.board.has_no_legal_moves();
+            let is_checkmate = is_check && has_no_legal_moves;
+            let is_stalemate = !is_check && has_no_legal_moves;
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
 
-            let notation = self.board.slow_stringify_move_standard(m, &before_info, &after_info);
+            let notation = slow_stringify_move_standard(m, &before_info, &after_info);
             self.last_move = Some(notation);
+
+            let current_hash = self.board.get_hash();
+            self.position_hashes.push(current_hash);
+            let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
+            self.game_end_state = if is_checkmate {
+                Some(GameEndState::Checkmate)
+            } else if is_stalemate {
+                Some(GameEndState::Stalemate)
+            } else if repetition_count >= 3 {
+                Some(GameEndState::RepetitionCalled)
+            } else {
+                None
+            };
             true
         } else {
             false
@@ -130,6 +188,7 @@ impl Main {
         self.move_list = MoveList::new(50);
         self.searchable = SearchableMoves::new();
         self.last_move = None;
+        self.position_hashes = vec![self.board.get_hash()];
         self.refresh_player_moves();
     }
 }

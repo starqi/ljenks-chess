@@ -16,18 +16,21 @@ self.onmessage = (e) => {
     console.log('Worker received', e.data);
     if (e.data.type === 'make_ai_move') {
         const {depth, isAutoPlay} = e.data;
-        main.make_ai_move(depth);
+        if (!main.make_ai_move(depth)) {
+            postMessage({type: 'move_invalid'});
+            return;
+        }
         const board = getBoardState();
         const lastMoveStr = main.get_last_move_notation();
         if (!isAutoPlay) main.refresh_player_moves();
-        postMessage({type: 'ai_move_done', isAutoPlay, board, lastMoveStr});
+        postMessage({type: 'ai_move_done', isAutoPlay, board, lastMoveStr, gameEndState: main.get_game_end_state()});
     } else if (e.data.type === 'make_human_move') {
         const {fromX, fromY, toX, toY, isAutoPlay} = e.data;
         if (main.try_move(fromX, fromY, toX, toY)) {
             const board = getBoardState();
             const lastMoveStr = main.get_last_move_notation();
             if (!isAutoPlay) main.refresh_player_moves();
-            postMessage({type: 'human_move_done', isAutoPlay, board, lastMoveStr});
+            postMessage({type: 'human_move_done', isAutoPlay, board, lastMoveStr, gameEndState: main.get_game_end_state()});
         } else {
             postMessage({type: 'move_invalid'});
         }

@@ -7,6 +7,7 @@ use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::extern_funcs::{random, now};
+use crate::game::stringify::slow_stringify_move_standard;
 use crate::{console_log};
 
 pub struct Ai {
@@ -26,10 +27,13 @@ pub struct Ai {
 // TODO (Minor) Rename this, NoEffect -> Fail low
 enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 
+// TODO Refactor these 2 classes, Clone on enum?
+
+/// Stored move and eval is the best move at the memo position.
 #[derive(Clone)]
 enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
 
-// TODO Evaluation is redundant
+/// (Score which can be exact or lower or upper bound depending on type, depth, type)
 #[derive(Clone)]
 struct MemoData(i32, i8, MemoType);
 
@@ -57,7 +61,7 @@ impl Ai {
     fn get_leading_move(&self) -> Option<(&MoveWithEval, i8)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
-            Some(MemoData(eval, depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move))) => {
+            Some(MemoData(_, depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move))) => {
                 Some((best_move, *depth))
             },
             _ => {
@@ -106,10 +110,10 @@ impl Ai {
             real_board.handle_move_no_revert(m);
 
             let is_check = real_board.is_checking(original_player);
-            let is_checkmate = is_check && real_board.has_no_legal_moves(original_player);
+            let is_checkmate = is_check && real_board.has_no_legal_moves();
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
 
-            Some(real_board.slow_stringify_move_standard(m, &before_info, &after_info))
+            Some(slow_stringify_move_standard(m, &before_info, &after_info))
         } else {
             console_log!("No move");
             None
@@ -120,6 +124,7 @@ impl Ai {
         self.node_counter = 0;
         self.memo_hits = 0;
         self.fast_found_hits = 0;
+        // TODO Memo clear is bad, need basic aging
         self.memo.clear();
 
         notation
@@ -155,9 +160,11 @@ impl Ai {
         self.terminated
     }
 
-    // TODO Refactor
-    /// First tuple entry = the memoized result if any
-    /// Second tuple entry = if this value exists, we can stop recursing because the full result is memoized, including the score sign
+    // TODO Refactor into struct
+    /// First tuple entry = the memoized result if any, like an existence boolean
+    /// Second tuple entry = exists only if all info is present, e.g. if memo says score >= 5.0, and 
+    /// and alpha, beta = 3.0, 6.0 (a constraint range), then cannot return an accurate answer -- 
+    /// if real score is 4.0 or 4.2, not enough info stored to know. But if memo says >= 7.0, then all real scores -> 6.0.
     fn find_memo_score(&mut self, remaining_depth: i8, alpha: i32, beta: i32) -> (Option<&MemoType>, Option<i32>) {
         if let Some(MemoData(saved_num, saved_depth, memo_type)) = self.memo.get(&self.test_board.get_hash()) {
 

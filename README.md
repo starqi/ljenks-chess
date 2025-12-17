@@ -10,6 +10,14 @@ Copy www/assets/dist/* to gh-pages branch.
 
 ### TODO
 
+.fix stringify -> no board
+add enum { checkmate, stalemate } and board funcs
+feed into stringify
+last move -> struct last move str + above enum, lock at lib.rs
+    comment: board only thinks in terms of empty move list or not
+pip back out from worker.js and do rest later
+    
+
 - Promotion PGN
 - Alternate between white and black
 - AI is thinking graphic

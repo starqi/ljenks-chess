@@ -8,3 +8,4 @@ pub mod move_test;
 pub mod searchable_moves;
 pub mod bitboard;
 pub mod bitboard_presets;
+pub mod stringify;
