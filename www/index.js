@@ -115,7 +115,7 @@ class Application {
 
             if (e.data.type === 'ready') {
                 if (!cbCalled) {
-                    this.isWhiteCameraPosition = Math.random() > 0.5;
+                    this.isWhiteCameraPosition = !this.isWhiteCameraPosition;
                     // Twice to get rid of board "diffs" between old and new boards
                     this.refreshBoardFromWasmData(e.data.board);
                     this.refreshBoardFromWasmData(e.data.board);

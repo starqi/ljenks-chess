@@ -20,8 +20,10 @@ pub struct Ai {
     fast_found_hits: usize,
     node_counter: u64,
     start_ms: u128,
-    ms_till_terminate: u128,
-    terminated: bool
+    ms_till_terminate: u128, // Configuration
+    terminated: bool,
+    depth: i8, // Configuration
+    iterative_deepening_depth: i8
 }
 
 // TODO (Minor) Rename this, NoEffect -> Fail low
@@ -33,11 +35,13 @@ enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 #[derive(Clone)]
 enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
 
-/// (Score which can be exact or lower or upper bound depending on type, depth, type)
+/// (Score which can be exact or lower or upper bound depending on type, remaining depth, type)
 #[derive(Clone)]
 struct MemoData(i32, i8, MemoType);
 
 static MAX_EVAL: i32 = 999999;
+
+static RANDOMIZATION_DIFF: i32 = 20; // Too high (50) -> game never ends from weird stall moves...?
 
 impl Ai {
 
@@ -53,8 +57,10 @@ impl Ai {
             fast_found_hits: 0,
             node_counter: 0,
             start_ms: 0,
-            ms_till_terminate: 5000,
-            terminated: false
+            ms_till_terminate: 1000,
+            terminated: false,
+            depth: 99,
+            iterative_deepening_depth: 1
         }
     }
 
@@ -70,15 +76,15 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, depth: i8, ms_till_terminate: u128, real_board: &mut Board) -> Option<String> {
+    pub fn make_move(&mut self, real_board: &mut Board) -> Option<String> {
 
         self.test_board.clone_from(real_board);
 
         self.start_ms = now();
-        self.ms_till_terminate = ms_till_terminate;
         self.terminated = false;
-        for d in (1i8..=depth).step_by(2) {
+        for d in (1i8..=self.depth).step_by(2) {
             console_log!("\nBegin depth {}", d);
+            self.iterative_deepening_depth = d;
             unsafe {
                 self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
             }
@@ -479,7 +485,17 @@ impl Ai {
         if score >= beta {
             SingleMoveResult::BetaCutOff(score)
         } else if score > alpha {
-            SingleMoveResult::NewAlpha(score)
+            let extra = score - alpha;
+            if remaining_depth >= self.iterative_deepening_depth && extra < RANDOMIZATION_DIFF {
+                console_log!("Randomizing, extra = {}", extra);
+                if random() > 0.5 {
+                    SingleMoveResult::NoEffect
+                } else {
+                    SingleMoveResult::NewAlpha(score)
+                }
+            } else {
+                SingleMoveResult::NewAlpha(score)
+            }
         } else {
             SingleMoveResult::NoEffect
         }

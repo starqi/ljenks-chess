@@ -86,13 +86,13 @@ impl Main {
         self.game_end_state.clone()
     }
 
-    pub fn make_ai_move(&mut self, depth: i8) -> bool {
+    pub fn make_ai_move(&mut self) -> bool {
         if self.game_end_state.is_some() {
             console_log!("Game has ended, cannot make AI move");
             return false;
         }
 
-        self.last_move = self.ai.make_move(depth, 10000, &mut self.board);
+        self.last_move = self.ai.make_move(&mut self.board);
 
         let is_check = self.board.is_checking(self.board.get_player_with_turn().other_player());
         let has_no_legal_moves = self.board.has_no_legal_moves();
