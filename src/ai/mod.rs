@@ -35,9 +35,9 @@ enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 #[derive(Clone)]
 enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
 
-/// (Score which can be exact or lower or upper bound depending on type, remaining depth, type)
+/// (Score which can be exact or lower or upper bound depending on type, remaining depth, type, age)
 #[derive(Clone)]
-struct MemoData(i32, i8, MemoType);
+struct MemoData(i32, i8, MemoType, usize);
 
 static MAX_EVAL: i32 = 999999;
 
@@ -67,7 +67,7 @@ impl Ai {
     fn get_leading_move(&self) -> Option<(&MoveWithEval, i8)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
-            Some(MemoData(_, depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move))) => {
+            Some(MemoData(_, depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
                 Some((best_move, *depth))
             },
             _ => {
@@ -130,14 +130,20 @@ impl Ai {
         self.node_counter = 0;
         self.memo_hits = 0;
         self.fast_found_hits = 0;
-        // TODO Memo clear is bad, need basic aging
-        self.memo.clear();
+        // TODO Memo experiment... statistics...
+        //self.memo.clear();
+        console_log!("Memo aging, before size = {}", self.memo.len());
+        for (_, MemoData(_, _, _, age)) in self.memo.iter_mut() {
+            *age += 1;
+        }
+        self.memo.retain(|_, MemoData(_, _, _, age)| *age <= 5);
+        console_log!("Memo aging, after size = {}", self.memo.len());
 
         notation
     }
 
     fn assert_king_pos(&self, player: Player) {
-        if let Square::Occupied(Piece::King, player) = self.test_board.get_by_index(self.test_board.get_player_state(player).king_location._lsb_to_index()) {
+        if let Square::Occupied(Piece::King, _) = self.test_board.get_by_index(self.test_board.get_player_state(player).king_location._lsb_to_index()) {
         } else {
             panic!("Wrong king square detected for {:?}", player);
         }
@@ -172,7 +178,7 @@ impl Ai {
     /// and alpha, beta = 3.0, 6.0 (a constraint range), then cannot return an accurate answer -- 
     /// if real score is 4.0 or 4.2, not enough info stored to know. But if memo says >= 7.0, then all real scores -> 6.0.
     fn find_memo_score(&mut self, remaining_depth: i8, alpha: i32, beta: i32) -> (Option<&MemoType>, Option<i32>) {
-        if let Some(MemoData(saved_num, saved_depth, memo_type)) = self.memo.get(&self.test_board.get_hash()) {
+        if let Some(MemoData(saved_num, saved_depth, memo_type, _)) = self.memo.get(&self.test_board.get_hash()) {
 
             // If the memoized move has the precision we want, use its score
             if *saved_depth >= remaining_depth {
@@ -319,7 +325,7 @@ impl Ai {
                             if self.terminated {
                                 return initial_alpha; // See (2)
                             } else {
-                                self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan(m)));
+                                self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan(m), 0));
                                 return beta;
                             }
                         },
@@ -397,8 +403,8 @@ impl Ai {
                     moves_end_exclusive
                 );
 
-                // TODO IMMEDIATE FIX COMMENT
-                // If we reduce depth, then try again with real depth if guessed wrong, and recursive call is not a fail-low
+                // TODO Review soundness. I believe this says if move ordering is perfect, then 
+                // late move reduction call will never trigger any changes in the best move. 
                 if let SingleMoveResult::NewAlpha(score) = r {
                     assert!(!self.terminated); // TODO Why?
                     if less_depth_amount <= 0 {
@@ -412,14 +418,14 @@ impl Ai {
                     if self.terminated {
                         // Don't lose the best move so far during termination, but don't pretend it's the real move at this depth (hence -1 to remaining depth)
                         if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
-                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(hash_move.unwrap().clone())));
+                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(hash_move.unwrap().clone()), 0));
                         } else if new_alpha_i >= 0 {
-                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone())));
+                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()), 0));
                         }
                         return initial_alpha; // See (2)
                     } else {
                         if less_depth_amount <= 0 {
-                            self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan((*m).clone())));
+                            self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan((*m).clone()), 0));
                             return beta;
                         } else {
                             less_depth_amount = 0;
@@ -431,14 +437,14 @@ impl Ai {
             }
         }
 
-        assert!(!self.terminated);
+        assert!(!self.terminated); // TODO Review why?
         if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
-            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(hash_move.unwrap())));
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(hash_move.unwrap()), 0));
         } else if new_alpha_i >= 0 {
-            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone())));
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()), 0));
         } else {
             // See (1)
-            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::LessThan(self.moves_buf.v()[0].clone())));
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::LessThan(self.moves_buf.v()[0].clone()), 0));
         }
 
         alpha

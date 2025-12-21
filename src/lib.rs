@@ -181,16 +181,6 @@ impl Main {
     pub fn get_last_move_notation(&self) -> String {
         self.last_move.clone().unwrap_or_default()
     }
-
-    pub fn reset(&mut self) {
-        self.board = Board::new();
-        self.temp = MoveList::new(50);
-        self.move_list = MoveList::new(50);
-        self.searchable = SearchableMoves::new();
-        self.last_move = None;
-        self.position_hashes = vec![self.board.get_hash()];
-        self.refresh_player_moves();
-    }
 }
 
 #[cfg(test)]
