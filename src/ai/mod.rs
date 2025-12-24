@@ -24,7 +24,8 @@ pub struct Ai {
     ms_till_terminate: u128, // Configuration
     terminated: bool,
     depth: i8, // Configuration
-    iterative_deepening_depth: i8
+    iterative_deepening_depth: i8,
+    real_board_positional_hashes: *const Vec<u64>
 }
 
 // TODO (Minor) Rename this, NoEffect -> Fail low
@@ -33,9 +34,8 @@ enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 // TODO Refactor these 2 classes, Clone on enum?
 
 /// Stored move and eval is the best move at the memo position.
-/// For `LessThan`, it seems there is no good move to record, so only an eval is stored.
 #[derive(Clone)]
-enum MemoType { LessThan(), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
+enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
 
 /// (Score which can be exact or lower or upper bound depending on type, remaining depth, type, age)
 #[derive(Clone)]
@@ -46,6 +46,11 @@ static MAX_EVAL: i32 = 999999;
 static RANDOMIZATION_DIFF: i32 = 20; // Too high (50) -> game never ends from weird stall moves...?
 
 impl Ai {
+
+    /// Must be called, second "new". Had issues with wasm tracking Rust lifetimes, and couldn't do it in constructor...
+    pub fn late_inject(&mut self, real_board_positional_hashes: &Vec<u64>) {
+        self.real_board_positional_hashes = real_board_positional_hashes;
+    }
 
     pub fn new() -> Self {
         console_log!("AI init");
@@ -62,16 +67,17 @@ impl Ai {
             start_ms: 0,
             ms_till_terminate: 1000,
             terminated: false,
-            depth: 99,
-            iterative_deepening_depth: 1
+            depth: 5,
+            iterative_deepening_depth: 1,
+            real_board_positional_hashes: 0 as *const Vec<u64>
         }
     }
 
     fn get_leading_move(&self) -> Option<(&MoveWithEval, i8)> {
         match self.memo.get(&self.test_board.get_hash()) {
             // In this context, fail high means checkmate
-            Some(MemoData(_, depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move), _)) => {
-                Some((best_move, *depth))
+            Some(MemoData(_, remaining_depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
+                Some((best_move, *remaining_depth))
             },
             _ => {
                 None
@@ -110,19 +116,19 @@ impl Ai {
         self.assert_king_pos(Player::Black);
 
         let leading_move = self.get_leading_move();
-        let notation = if let Some((m, e)) = leading_move {
-            console_log!("Making move: {} ({})", self.test_board.stringify_move_for_js_logs(m), e);
+        let notation = if let Some((best_move, remaining_depth)) = leading_move {
+            console_log!("Making move: {} (depth = {})", self.test_board.stringify_move_for_js_logs(best_move), remaining_depth);
 
-            let before_info = BeforeMoveInfoForStringify::slow_new(real_board, m);
+            let before_info = BeforeMoveInfoForStringify::slow_new(real_board, best_move);
             let original_player = real_board.get_player_with_turn();
 
-            real_board.handle_move_no_revert(m);
+            real_board.handle_move_no_revert(best_move);
 
             let is_check = real_board.is_checking(original_player);
             let is_checkmate = is_check && real_board.has_no_legal_moves();
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
 
-            Some(slow_stringify_move_standard(m, &before_info, &after_info))
+            Some(slow_stringify_move_standard(best_move, &before_info, &after_info))
         } else {
             console_log!("No move");
             None
@@ -187,36 +193,38 @@ impl Ai {
     /// Second tuple entry = exists only if all info is present, e.g. if memo says score >= 5.0, and 
     /// and alpha, beta = 3.0, 6.0 (a constraint range), then cannot return an accurate answer -- 
     /// if real score is 4.0 or 4.2, not enough info stored to know. But if memo says >= 7.0, then all real scores -> 6.0.
-    fn find_memo_score(&mut self, remaining_depth: i8, alpha: i32, beta: i32) -> (Option<&MemoType>, Option<i32>) {
+    fn find_memo_score(&mut self, remaining_depth: i8, alpha: i32, beta: i32) -> (Option<&MoveWithEval>, Option<i32>) {
         if let Some(MemoData(saved_num, saved_depth, memo_type, _)) = self.memo.get(&self.test_board.get_hash()) {
-
             // If the memoized move has the precision we want, use its score
-            if *saved_depth >= remaining_depth {
-                match memo_type {
-                    MemoType::LessThan() => {
-                        if *saved_num <= alpha {
-                            return (Some(memo_type), Some(alpha));
-                        }
-                    },
-                    MemoType::GreaterThan(_) => {
-                        if *saved_num >= beta { 
-                            return (Some(memo_type), Some(beta));
-                        }
-                    },
-                    MemoType::Exact(_) => {
-
-                        if *saved_num < alpha {
-                            return (Some(memo_type), Some(alpha)); 
-                        } else if *saved_num > beta {
-                            return (Some(memo_type), Some(beta)); 
-                        } else {
-                            return (Some(memo_type), Some(*saved_num)); 
-                        }
+            match memo_type {
+                MemoType::LessThan(m) => {
+                    if *saved_depth >= remaining_depth && *saved_num <= alpha {
+                        (Some(m), Some(alpha))
+                    } else {
+                        (Some(m), None)
                     }
-                };
-            }; 
-
-            (Some(memo_type), None)
+                },
+                MemoType::GreaterThan(m) => {
+                    if *saved_depth >= remaining_depth && *saved_num >= beta { 
+                        (Some(m), Some(beta))
+                    } else {
+                        (Some(m), None)
+                    }
+                },
+                MemoType::Exact(m) => {
+                    if *saved_depth >= remaining_depth {
+                        if *saved_num < alpha {
+                            (Some(m), Some(alpha))
+                        } else if *saved_num > beta {
+                            (Some(m), Some(beta))
+                        } else {
+                            (Some(m), Some(*saved_num))
+                        }
+                    } else {
+                        (Some(m), None)
+                    }
+                }
+            }
         } else {
             (None, None)
         }
@@ -309,23 +317,50 @@ impl Ai {
         // When `new_alpha_i` is `NEW_ALPHA_I_HASH_MOVE`, the hash move can be found here
         let mut hash_move: Option<MoveWithEval> = None;
 
-        let memo_move_suggestion: Option<MoveWithEval> = match self.find_memo_score(remaining_depth, alpha, beta) {
-            (_, Some(adjusted_score)) => { // Use memoized move
-                self.useful_memo_hits += 1;
-                return adjusted_score;
+        // Shape: (Move with eval, clamped score, is exact match)
+        let memo_move_suggestion: Option<(MoveWithEval, i32, bool)> = match self.find_memo_score(remaining_depth, alpha, beta) {
+            (Some(m), Some(clamped_score)) => { // Use memoized move
+                Some((m.clone(), clamped_score, true))
             },
-            (Some(MemoType::Exact(m) | MemoType::GreaterThan(m)), None) => {
+            (Some(m), None) => {
                 // Memoized move is not precise enough, try using it as the first best move.
                 // Must clone the move, because recursive memo updates touch the same memory.
-                Some(m.clone())
+                Some((m.clone(), 0, false))
             },
             _ => None
         };
 
-        if let Some(m) = memo_move_suggestion {
+        if let Some((m, clamped_score, true)) = memo_move_suggestion {
+            self.useful_memo_hits += 1;
+
+            if remaining_depth >= self.iterative_deepening_depth {
+                let mut found_repetition = false;
+
+                let mut revertable = RevertableMove::NoOp(0);
+                let before_move_hash = self.test_board.get_hash();
+                self.test_board.handle_move(&m, &mut revertable);
+
+                let current_hash = self.test_board.get_hash();
+                let unrawed: &Vec<u64> = &*self.real_board_positional_hashes;
+                let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
+                console_log!("??? reps={}, real#={} remaining_depth_no_lmr={} it={} {}", repetition_count, unrawed.len(), remaining_depth, self.iterative_deepening_depth, unrawed as *const Vec<u64> as usize);
+                if repetition_count >= 2 {
+                    console_log!("??? GREATER 2");
+                    console_log!("HASH THERE 1??? {}", self.memo.contains_key(&before_move_hash));
+                    self.memo.remove(&before_move_hash);
+                    console_log!("HASH THERE 2??? {}", self.memo.contains_key(&before_move_hash));
+                    found_repetition = true;
+                }
+                self.test_board.revert_move(&revertable);
+
+                if !found_repetition { return clamped_score; }
+            } else {
+                return clamped_score;
+            }
+        } else if let Some((m, _, false)) = memo_move_suggestion {
 
             // Reminder: No null window, because this is our best move candidate, hence it is not expected to fail low
-            match self.negamax_try_move(remaining_depth, alpha, false, beta, &m, moves_start) {
+            match self.negamax_try_move(remaining_depth, remaining_depth, alpha, false, beta, &m, moves_start) {
                 SingleMoveResult::BetaCutOff(score) => {
                     self.hash_move_memo_hits += 1;
                     if self.terminated {
@@ -399,6 +434,7 @@ impl Ai {
             // TODO Statistics for research, number of retries
             loop {
                 let r = self.negamax_try_move(
+                    remaining_depth,
                     remaining_depth - (less_depth_amount as i8), 
                     alpha,
                     new_alpha_i != NEW_ALPHA_I_NEVER_SET,
@@ -412,6 +448,9 @@ impl Ai {
                 if let SingleMoveResult::NewAlpha(score) = r {
                     assert!(!self.terminated); // TODO Why?
                     if less_depth_amount <= 0 {
+if remaining_depth >= self.iterative_deepening_depth {
+    console_log!("--new alpha: {}", score);
+}
                         alpha = score;
                         new_alpha_i = i as i32;
                         break;
@@ -447,8 +486,12 @@ impl Ai {
         } else if new_alpha_i >= 0 {
             self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()), 0));
         } else {
-            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::LessThan(), 0));
+            // Even when there is no alternative to losing via checkmate (never > alpha), need to give a best move. 
+            self.insert_memo(MemoData(alpha, remaining_depth, MemoType::LessThan(self.moves_buf.v()[moves_start].clone()), 0));
         }
+if remaining_depth >= self.iterative_deepening_depth {
+console_log!("check alpha: {}", alpha);
+}
 
         alpha
     }
@@ -456,6 +499,7 @@ impl Ai {
     /// Unsafe purpose: allow reference to `m` while the move list holding it is being mutated, trusting proper management of move list subsets.
     unsafe fn negamax_try_move(
         &mut self,
+        remaining_depth_no_lmr: i8,
         remaining_depth: i8,
         alpha: i32,
         do_null_window: bool,
@@ -464,7 +508,35 @@ impl Ai {
         moves_start: usize
     ) -> SingleMoveResult {
         let mut revertable = RevertableMove::NoOp(0);
+        let before_move_hash = self.test_board.get_hash();
         self.test_board.handle_move(&*m, &mut revertable);
+
+        // TODO (Minor) Inline func helper "is_first_depth"
+        if remaining_depth_no_lmr >= self.iterative_deepening_depth {
+            let current_hash = self.test_board.get_hash();
+            let unrawed: &Vec<u64> = &*self.real_board_positional_hashes;
+            let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
+            console_log!("? {} reps={}, real#={} remaining_depth_no_lmr={} it={} {} {} {}", self.test_board.stringify_move_for_js_logs(&*m), repetition_count, unrawed.len(), remaining_depth_no_lmr, self.iterative_deepening_depth, unrawed as *const Vec<u64> as usize, alpha, beta);
+            if repetition_count >= 2 {
+                console_log!("GREATER 2");
+                self.test_board.revert_move(&revertable);
+                console_log!("HASH THERE 1? {}", self.memo.contains_key(&before_move_hash));
+                self.memo.remove(&before_move_hash);
+                console_log!("HASH THERE 2? {} alpha={} beta={}", self.memo.contains_key(&before_move_hash), alpha, beta);
+                if 0 >= beta {
+                    return SingleMoveResult::BetaCutOff(beta);
+                } else if 0 > alpha {
+                    return SingleMoveResult::NewAlpha(0);
+                } else {
+                    return SingleMoveResult::NoEffect;
+                }
+            }
+        }
+
+        // TODO IMMEDIATE If top level, print console log, comment minimal printing, 
+        // check ref to pos hashes for repetition, if so, return as fail low, comment same as "move sucked",
+        // so goes on to next move, comment this means (for speed) immediately, when AI at top level wants to 
+        // recurse to search, it discovers the position is a repetition and avoids the move 
 
         let mut fast_found_score: i32 = 0;
         let mut fast_found = false;
@@ -490,13 +562,16 @@ impl Ai {
         };
 
         self.test_board.revert_move(&revertable);
+if remaining_depth_no_lmr >= self.iterative_deepening_depth {
+    console_log!("ntrymove {} {} {}", score, fast_found, alpha);
+}
 
         if score >= beta {
             SingleMoveResult::BetaCutOff(score)
         } else if score > alpha {
             let extra = score - alpha;
             if remaining_depth >= self.iterative_deepening_depth && extra < RANDOMIZATION_DIFF {
-                console_log!("Randomizing, extra = {}", extra);
+                //console_log!("Randomizing, extra = {}", extra);
                 if random() > 0.5 {
                     SingleMoveResult::NoEffect
                 } else {

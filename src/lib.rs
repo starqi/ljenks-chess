@@ -69,6 +69,7 @@ impl Main {
 
         let board = Board::new();
         let initial_hash = board.get_hash();
+        let position_hashes = vec![initial_hash];
         Main {
             board,
             ai: Ai::new(),
@@ -78,7 +79,7 @@ impl Main {
             searchable: SearchableMoves::new(),
             last_move: None,
             game_end_state: None,
-            position_hashes: vec![initial_hash]
+            position_hashes: position_hashes
         }
     }
 
@@ -92,6 +93,7 @@ impl Main {
             return false;
         }
 
+        self.ai.late_inject(&self.position_hashes);
         self.last_move = self.ai.make_move(&mut self.board);
 
         let is_check = self.board.is_checking(self.board.get_player_with_turn().other_player());
@@ -107,6 +109,7 @@ impl Main {
         } else if is_stalemate {
             Some(GameEndState::Stalemate)
         } else if repetition_count >= 3 {
+            console_log!("DRAW WHAT {}", repetition_count);
             Some(GameEndState::RepetitionCalled)
         } else {
             None
@@ -151,6 +154,7 @@ impl Main {
             self.last_move = Some(notation);
 
             let current_hash = self.board.get_hash();
+
             self.position_hashes.push(current_hash);
             let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
             self.game_end_state = if is_checkmate {

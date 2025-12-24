@@ -195,17 +195,17 @@ impl Board {
                 let square = self.get_by_index(_from_coord.value());
                 // Since a piece should be on the after square,
                 // the square will stringify to eg. k, K, p, P, then it becomes eg. Ke2
-                format!("{}{} m={}", square, _to_coord, m.eval())
+                format!("{}{} score={}", square, _to_coord, m.eval())
             },
             MoveDescription::Castle(castle_type) => {
                 if *castle_type == CastleType::Oo {
-                    format!("oo m={}", m.eval())
+                    format!("oo score={}", m.eval())
                 } else {
-                    format!("ooo m={}", m.eval())
+                    format!("ooo score={}", m.eval())
                 }
             },
             MoveDescription::SkipMove => {
-                format!("skip m={}", m.eval())
+                format!("skip score={}", m.eval())
             }
         }
     }

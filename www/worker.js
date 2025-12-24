@@ -16,7 +16,7 @@ self.onmessage = (e) => {
     console.log('Worker received', e.data);
     if (e.data.type === 'make_ai_move') {
         const {depth, isAutoPlay} = e.data;
-        if (!main.make_ai_move(depth)) {
+        if (!main.make_ai_move()) {
             postMessage({type: 'move_invalid'});
             return;
         }
