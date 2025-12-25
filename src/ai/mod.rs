@@ -351,6 +351,32 @@ impl Ai {
                     console_log!("HASH THERE 2??? {}", self.memo.contains_key(&before_move_hash));
                     found_repetition = true;
                 }
+
+                if !found_repetition {
+                    self.moves_buf.write_index = moves_start;
+                    self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
+                    let moves_end_exclusive = self.moves_buf.write_index;
+
+                    for i in (moves_start..moves_end_exclusive).rev() {
+                        let m: *const MoveWithEval = &self.moves_buf.v()[i];
+
+                        let mut revertable = RevertableMove::NoOp(0);
+                        self.test_board.handle_move(&*m, &mut revertable);
+                        let current_hash = self.test_board.get_hash();
+                        let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
+                        if repetition_count >= 2 {
+                            console_log!("???2 GREATER 2");
+                            console_log!("HASH THERE 1???2 {}", self.memo.contains_key(&before_move_hash));
+                            self.memo.remove(&before_move_hash);
+                            console_log!("HASH THERE 2???2 {}", self.memo.contains_key(&before_move_hash));
+                            found_repetition = true;
+                            self.test_board.revert_move(&revertable);
+                            break;
+                        } else {
+                            self.test_board.revert_move(&revertable);
+                        }
+                    }
+                }
                 self.test_board.revert_move(&revertable);
 
                 if !found_repetition { return clamped_score; }
@@ -530,6 +556,42 @@ console_log!("check alpha: {}", alpha);
                 } else {
                     return SingleMoveResult::NoEffect;
                 }
+            } else {
+                self.moves_buf.write_index = moves_start;
+                self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
+                let moves_end_exclusive = self.moves_buf.write_index;
+
+                let mut repetition = false;
+                for i in (moves_start..moves_end_exclusive).rev() {
+                    let m: *const MoveWithEval = &self.moves_buf.v()[i];
+
+                    let mut revertable2 = RevertableMove::NoOp(0);
+                    self.test_board.handle_move(&*m, &mut revertable2);
+                    let current_hash = self.test_board.get_hash();
+                    let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
+                    if repetition_count >= 2 {
+                        console_log!("?2 GREATER 2");
+                        console_log!("HASH THERE 1?2 {}", self.memo.contains_key(&before_move_hash));
+                        self.memo.remove(&before_move_hash);
+                        console_log!("HASH THERE 2?2 {}", self.memo.contains_key(&before_move_hash));
+                        self.test_board.revert_move(&revertable2);
+                        repetition = true;
+                        break;
+                    } else {
+                        self.test_board.revert_move(&revertable2);
+                    }
+                }
+
+                if repetition {
+                    self.test_board.revert_move(&revertable);
+                    if 0 >= beta {
+                        return SingleMoveResult::BetaCutOff(beta);
+                    } else if 0 > alpha {
+                        return SingleMoveResult::NewAlpha(0);
+                    } else {
+                        return SingleMoveResult::NoEffect;
+                    }
+                }
             }
         }
 
@@ -571,7 +633,7 @@ if remaining_depth_no_lmr >= self.iterative_deepening_depth {
         } else if score > alpha {
             let extra = score - alpha;
             if remaining_depth >= self.iterative_deepening_depth && extra < RANDOMIZATION_DIFF {
-                //console_log!("Randomizing, extra = {}", extra);
+                console_log!("Randomizing, extra = {}", extra);
                 if random() > 0.5 {
                     SingleMoveResult::NoEffect
                 } else {

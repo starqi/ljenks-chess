@@ -225,7 +225,7 @@ class Application {
                 this.draggedSqY,
                 sqCoords.x,
                 sqCoords.y,
-                false
+                true
             );
         } else {
             this.makeHumanMoveAsync(
@@ -233,7 +233,7 @@ class Application {
                 7 - this.draggedSqY,
                 7 - sqCoords.x,
                 7 - sqCoords.y,
-                false
+                true
             );
         }
     }
