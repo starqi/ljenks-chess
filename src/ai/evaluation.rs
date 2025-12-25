@@ -181,7 +181,7 @@ pub fn add_captures_to_evals(
     end_exclusive: usize,
 ) {
     m.write_evals(start, end_exclusive, |m| {
-        let mut score = m.eval();
+        let mut score = m.ordering_score();
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
                 if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
@@ -203,7 +203,7 @@ pub fn add_mobility_to_evals(
     let opp_state = board.get_player_state(board.get_player_with_turn().other_player());
 
     m.write_evals(start, end_exclusive, |m| {
-        let mut score = m.eval();
+        let mut score = m.ordering_score();
 
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {

@@ -23,7 +23,7 @@ pub enum MoveMetadata {
 // Keep minimal in size, to make move generation fast, and move execution slower
 #[derive(Clone)]
 pub enum MoveDescription {
-    // (From, to, metadata)
+    /// (From, to, metadata)
     NormalMove(FastCoord, FastCoord, MoveMetadata),
     Castle(CastleType),
     SkipMove
@@ -35,8 +35,7 @@ impl Default for MoveDescription {
     }
 }
 
-// Put all AI info here, such as eval and metadata (is capture or not)
-// 
+/// (MoveDescription, ordering score not eval)
 #[derive(Clone, Default)]
 pub struct MoveWithEval(pub MoveDescription, pub i32);
 
@@ -44,7 +43,7 @@ impl MoveWithEval {
     #[inline]
     pub fn description(&self) -> &MoveDescription { &self.0 }
     #[inline]
-    pub fn eval(&self) -> i32 { self.1 }
+    pub fn ordering_score(&self) -> i32 { self.1 }
 }
 
 pub struct MoveList {

@@ -67,7 +67,7 @@ impl Ai {
             start_ms: 0,
             ms_till_terminate: 1000,
             terminated: false,
-            depth: 5,
+            depth: 99,
             iterative_deepening_depth: 1,
             real_board_positional_hashes: 0 as *const Vec<u64>
         }
@@ -333,53 +333,28 @@ impl Ai {
         if let Some((m, clamped_score, true)) = memo_move_suggestion {
             self.useful_memo_hits += 1;
 
+            // [Lame shallow fast draw detection scenario: when normal memo score is replaced with 0 (draw by repetition).]
+            //
+            // Normal scenario without this is returning the clamped score from memo.
+            //
+            // Now detect the memoized best move being actually a draw-by-repetition right before the draw is 
+            // about to happen.
+            // Detect the current player causing a draw OR current player allowing opponent to force draw.
+            // Such a move will replace normal eval to score 0.
+            // Do this by erasing the memo, not using the memoized move, and proceeding 
+            // to the 2nd part of this implementation in `negamax_try_move` section.
             if remaining_depth >= self.iterative_deepening_depth {
-                let mut found_repetition = false;
-
                 let mut revertable = RevertableMove::NoOp(0);
                 let before_move_hash = self.test_board.get_hash();
                 self.test_board.handle_move(&m, &mut revertable);
-
-                let current_hash = self.test_board.get_hash();
-                let unrawed: &Vec<u64> = &*self.real_board_positional_hashes;
-                let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
-                console_log!("??? reps={}, real#={} remaining_depth_no_lmr={} it={} {}", repetition_count, unrawed.len(), remaining_depth, self.iterative_deepening_depth, unrawed as *const Vec<u64> as usize);
-                if repetition_count >= 2 {
-                    console_log!("??? GREATER 2");
-                    console_log!("HASH THERE 1??? {}", self.memo.contains_key(&before_move_hash));
-                    self.memo.remove(&before_move_hash);
-                    console_log!("HASH THERE 2??? {}", self.memo.contains_key(&before_move_hash));
-                    found_repetition = true;
-                }
-
-                if !found_repetition {
-                    self.moves_buf.write_index = moves_start;
-                    self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
-                    let moves_end_exclusive = self.moves_buf.write_index;
-
-                    for i in (moves_start..moves_end_exclusive).rev() {
-                        let m: *const MoveWithEval = &self.moves_buf.v()[i];
-
-                        let mut revertable = RevertableMove::NoOp(0);
-                        self.test_board.handle_move(&*m, &mut revertable);
-                        let current_hash = self.test_board.get_hash();
-                        let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
-                        if repetition_count >= 2 {
-                            console_log!("???2 GREATER 2");
-                            console_log!("HASH THERE 1???2 {}", self.memo.contains_key(&before_move_hash));
-                            self.memo.remove(&before_move_hash);
-                            console_log!("HASH THERE 2???2 {}", self.memo.contains_key(&before_move_hash));
-                            found_repetition = true;
-                            self.test_board.revert_move(&revertable);
-                            break;
-                        } else {
-                            self.test_board.revert_move(&revertable);
-                        }
-                    }
-                }
+                // After this scope is done, other code can feel free to overwrite from index `moves_start`.
+                let is_draw = self.is_handled_move_shallow_draw(moves_start);
                 self.test_board.revert_move(&revertable);
-
-                if !found_repetition { return clamped_score; }
+                if is_draw {
+                    self.memo.remove(&before_move_hash);
+                } else {
+                    return clamped_score; 
+                }
             } else {
                 return clamped_score;
             }
@@ -416,7 +391,7 @@ impl Ai {
         self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
 
-        // FIXME
+        // FIXME Re-investigate
         /*
         for i in moves_start..moves_end_exclusive {
 
@@ -474,9 +449,6 @@ impl Ai {
                 if let SingleMoveResult::NewAlpha(score) = r {
                     assert!(!self.terminated); // TODO Why?
                     if less_depth_amount <= 0 {
-if remaining_depth >= self.iterative_deepening_depth {
-    console_log!("--new alpha: {}", score);
-}
                         alpha = score;
                         new_alpha_i = i as i32;
                         break;
@@ -515,9 +487,6 @@ if remaining_depth >= self.iterative_deepening_depth {
             // Even when there is no alternative to losing via checkmate (never > alpha), need to give a best move. 
             self.insert_memo(MemoData(alpha, remaining_depth, MemoType::LessThan(self.moves_buf.v()[moves_start].clone()), 0));
         }
-if remaining_depth >= self.iterative_deepening_depth {
-console_log!("check alpha: {}", alpha);
-}
 
         alpha
     }
@@ -533,22 +502,27 @@ console_log!("check alpha: {}", alpha);
         m: *const MoveWithEval,
         moves_start: usize
     ) -> SingleMoveResult {
+        if remaining_depth_no_lmr >= self.iterative_deepening_depth {
+            console_log!("negamax_try_move {}", self.test_board.stringify_move_for_js_logs(&*m));
+        }
+
         let mut revertable = RevertableMove::NoOp(0);
         let before_move_hash = self.test_board.get_hash();
         self.test_board.handle_move(&*m, &mut revertable);
 
+        // [Lame shallow fast draw detection scenario: during negamax]
+        // See other section with same name first. 
+        // If draw is detected, then no need to recurse, follow same alpha-beta ideas but with score = 0.
+        // Remember to revert the move.
+
         // TODO (Minor) Inline func helper "is_first_depth"
         if remaining_depth_no_lmr >= self.iterative_deepening_depth {
-            let current_hash = self.test_board.get_hash();
-            let unrawed: &Vec<u64> = &*self.real_board_positional_hashes;
-            let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
-            console_log!("? {} reps={}, real#={} remaining_depth_no_lmr={} it={} {} {} {}", self.test_board.stringify_move_for_js_logs(&*m), repetition_count, unrawed.len(), remaining_depth_no_lmr, self.iterative_deepening_depth, unrawed as *const Vec<u64> as usize, alpha, beta);
-            if repetition_count >= 2 {
-                console_log!("GREATER 2");
-                self.test_board.revert_move(&revertable);
-                console_log!("HASH THERE 1? {}", self.memo.contains_key(&before_move_hash));
+            let is_draw = self.is_handled_move_shallow_draw(moves_start);
+            if is_draw {
+                console_log!("negamax_try_move.is_draw");
                 self.memo.remove(&before_move_hash);
-                console_log!("HASH THERE 2? {} alpha={} beta={}", self.memo.contains_key(&before_move_hash), alpha, beta);
+                self.test_board.revert_move(&revertable);
+
                 if 0 >= beta {
                     return SingleMoveResult::BetaCutOff(beta);
                 } else if 0 > alpha {
@@ -556,49 +530,8 @@ console_log!("check alpha: {}", alpha);
                 } else {
                     return SingleMoveResult::NoEffect;
                 }
-            } else {
-                self.moves_buf.write_index = moves_start;
-                self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
-                let moves_end_exclusive = self.moves_buf.write_index;
-
-                let mut repetition = false;
-                for i in (moves_start..moves_end_exclusive).rev() {
-                    let m: *const MoveWithEval = &self.moves_buf.v()[i];
-
-                    let mut revertable2 = RevertableMove::NoOp(0);
-                    self.test_board.handle_move(&*m, &mut revertable2);
-                    let current_hash = self.test_board.get_hash();
-                    let repetition_count = unrawed.iter().filter(|&&h| h == current_hash).count();
-                    if repetition_count >= 2 {
-                        console_log!("?2 GREATER 2");
-                        console_log!("HASH THERE 1?2 {}", self.memo.contains_key(&before_move_hash));
-                        self.memo.remove(&before_move_hash);
-                        console_log!("HASH THERE 2?2 {}", self.memo.contains_key(&before_move_hash));
-                        self.test_board.revert_move(&revertable2);
-                        repetition = true;
-                        break;
-                    } else {
-                        self.test_board.revert_move(&revertable2);
-                    }
-                }
-
-                if repetition {
-                    self.test_board.revert_move(&revertable);
-                    if 0 >= beta {
-                        return SingleMoveResult::BetaCutOff(beta);
-                    } else if 0 > alpha {
-                        return SingleMoveResult::NewAlpha(0);
-                    } else {
-                        return SingleMoveResult::NoEffect;
-                    }
-                }
             }
         }
-
-        // TODO IMMEDIATE If top level, print console log, comment minimal printing, 
-        // check ref to pos hashes for repetition, if so, return as fail low, comment same as "move sucked",
-        // so goes on to next move, comment this means (for speed) immediately, when AI at top level wants to 
-        // recurse to search, it discovers the position is a repetition and avoids the move 
 
         let mut fast_found_score: i32 = 0;
         let mut fast_found = false;
@@ -624,9 +557,10 @@ console_log!("check alpha: {}", alpha);
         };
 
         self.test_board.revert_move(&revertable);
-if remaining_depth_no_lmr >= self.iterative_deepening_depth {
-    console_log!("ntrymove {} {} {}", score, fast_found, alpha);
-}
+
+        if remaining_depth_no_lmr >= self.iterative_deepening_depth {
+            console_log!("negamax_try_move.score alpha={}, beta={}, score={}, fast_found={}", alpha, beta, score, fast_found);
+        }
 
         if score >= beta {
             SingleMoveResult::BetaCutOff(score)
@@ -644,6 +578,34 @@ if remaining_depth_no_lmr >= self.iterative_deepening_depth {
             }
         } else {
             SingleMoveResult::NoEffect
+        }
+    }
+
+    unsafe fn is_handled_move_shallow_draw(&mut self, moves_start: usize) -> bool {
+        let post_move_hash = self.test_board.get_hash();
+        let real_board_positional_hashes: &Vec<u64> = &*self.real_board_positional_hashes;
+        let repetition_count_wo_move = real_board_positional_hashes.iter().filter(|&&h| h == post_move_hash).count();
+
+        if repetition_count_wo_move >= 2 {
+            return true;
+        } else {
+            // Attempt #2 for opponent causing a draw
+            self.moves_buf.write_index = moves_start;
+            self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
+            let moves_end_exclusive = self.moves_buf.write_index;
+            for i in (moves_start..moves_end_exclusive).rev() {
+                let m: *const MoveWithEval = &self.moves_buf.v()[i];
+
+                let mut revertable2 = RevertableMove::NoOp(0);
+                self.test_board.handle_move(&*m, &mut revertable2);
+                let post_move_hash2 = self.test_board.get_hash();
+                let repetition_count_wo_move2 = real_board_positional_hashes.iter().filter(|&&h| h == post_move_hash2).count();
+                self.test_board.revert_move(&revertable2);
+                if repetition_count_wo_move2 >= 2 {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
