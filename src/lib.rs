@@ -35,6 +35,8 @@ lazy_static! {
     pub static ref BITBOARD_PRESETS: BitboardPresets = BitboardPresets::new();
 }
 
+const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;
+
 #[wasm_bindgen]
 #[derive(Clone)]
 pub enum GameEndState { Checkmate = 0, Stalemate = 1, RepetitionCalled = 2 }
@@ -49,7 +51,8 @@ pub struct Main {
     searchable: SearchableMoves,
     last_move: Option<String>,
     game_end_state: Option<GameEndState>,
-    position_hashes: Vec<u64>
+    position_hashes: Vec<u64>,
+    half_moves_without_pawn_move: usize
 }
 
 #[wasm_bindgen]
@@ -79,7 +82,8 @@ impl Main {
             searchable: SearchableMoves::new(),
             last_move: None,
             game_end_state: None,
-            position_hashes: position_hashes
+            position_hashes: position_hashes,
+            half_moves_without_pawn_move: 0
         }
     }
 
@@ -93,27 +97,10 @@ impl Main {
             return false;
         }
 
-        self.ai.late_inject(&self.position_hashes);
+        self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         self.last_move = self.ai.make_move(&mut self.board);
 
-        let is_check = self.board.is_checking(self.board.get_player_with_turn().other_player());
-        let has_no_legal_moves = self.board.has_no_legal_moves();
-        let is_checkmate = is_check && has_no_legal_moves;
-        let is_stalemate = !is_check && has_no_legal_moves;
-
-        let current_hash = self.board.get_hash();
-        self.position_hashes.push(current_hash);
-        let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
-        self.game_end_state = if is_checkmate {
-            Some(GameEndState::Checkmate)
-        } else if is_stalemate {
-            Some(GameEndState::Stalemate)
-        } else if repetition_count >= 3 {
-            console_log!("DRAW WHAT {}", repetition_count);
-            Some(GameEndState::RepetitionCalled)
-        } else {
-            None
-        };
+        self.slow_handle_special_end_conitions(self.board.get_player_with_turn().other_player(), None);
         true
     }
 
@@ -138,34 +125,15 @@ impl Main {
 
         let _m = self.searchable.get_move(&Coord(from_x as u8, from_y as u8), &Coord(to_x as u8, to_y as u8));
         if let Some(m) = _m {
+            let m_clone = m.clone(); // Dodge borrow checker
             let before_info = BeforeMoveInfoForStringify::slow_new(&self.board, m);
             let original_player = self.board.get_player_with_turn();
 
             self.board.handle_move_no_revert(m);
             self.board.assert_hash();
 
-            let is_check = self.board.is_checking(original_player);
-            let has_no_legal_moves = self.board.has_no_legal_moves();
-            let is_checkmate = is_check && has_no_legal_moves;
-            let is_stalemate = !is_check && has_no_legal_moves;
-            let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
+            self.slow_handle_special_end_conitions(original_player, Some((&before_info, &m_clone)));
 
-            let notation = slow_stringify_move_standard(m, &before_info, &after_info);
-            self.last_move = Some(notation);
-
-            let current_hash = self.board.get_hash();
-
-            self.position_hashes.push(current_hash);
-            let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
-            self.game_end_state = if is_checkmate {
-                Some(GameEndState::Checkmate)
-            } else if is_stalemate {
-                Some(GameEndState::Stalemate)
-            } else if repetition_count >= 3 {
-                Some(GameEndState::RepetitionCalled)
-            } else {
-                None
-            };
             true
         } else {
             false
@@ -184,6 +152,56 @@ impl Main {
 
     pub fn get_last_move_notation(&self) -> String {
         self.last_move.clone().unwrap_or_default()
+    }
+
+    // Board class will only be in terms of # of moves unavailable or whether is checking,
+    // but this excludes formal checkmate, stalemate, 50 move rule, etc.
+    fn slow_handle_special_end_conitions(
+        &mut self,
+        original_player: Player,
+        before_info_if_setting_last_move: Option<(&BeforeMoveInfoForStringify, &MoveWithEval)>
+    ) {
+        let is_check = self.board.is_checking(original_player);
+        let has_no_legal_moves = self.board.has_no_legal_moves();
+        let is_checkmate = is_check && has_no_legal_moves;
+        let is_stalemate = !is_check && has_no_legal_moves;
+
+        if let Some((before, m)) = before_info_if_setting_last_move {
+            let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
+            let notation = slow_stringify_move_standard(m, before, &after_info);
+            self.last_move = Some(notation);
+        }
+
+        let current_hash = self.board.get_hash();
+        self.position_hashes.push(current_hash);
+
+        if let Some(m) = &self.last_move {
+            if m.len() == 2 { // TODO IMMEDIATE Proper pawn detection, repeated code?
+                self.half_moves_without_pawn_move = 1;
+            } else {
+                self.half_moves_without_pawn_move += 1;
+            }
+            console_log!("half_moves_without_pawn_move {} {}", self.half_moves_without_pawn_move, m);
+        }
+
+        self.game_end_state = if is_checkmate {
+            Some(GameEndState::Checkmate)
+        } else if is_stalemate {
+            Some(GameEndState::Stalemate)
+        } else {
+            let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
+            if repetition_count >= 3 {
+                console_log!("Repetition called {}", repetition_count);
+                Some(GameEndState::RepetitionCalled)
+            } else {
+                if self.half_moves_without_pawn_move >= NO_PAWN_HALF_MOVES_DRAW_THRESHOLD {
+                    console_log!("Repetition called no pawn moves {}", self.half_moves_without_pawn_move);
+                    Some(GameEndState::RepetitionCalled)
+                } else {
+                    None
+                }
+            }
+        };
     }
 }
 

@@ -25,7 +25,8 @@ pub struct Ai {
     terminated: bool,
     depth: i8, // Configuration
     iterative_deepening_depth: i8,
-    real_board_positional_hashes: *const Vec<u64>
+    real_board_positional_hashes: *const Vec<u64>,
+    half_moves_without_pawn_move: *const usize
 }
 
 // TODO (Minor) Rename this, NoEffect -> Fail low
@@ -48,8 +49,9 @@ static RANDOMIZATION_DIFF: i32 = 20; // Too high (50) -> game never ends from we
 impl Ai {
 
     /// Must be called, second "new". Had issues with wasm tracking Rust lifetimes, and couldn't do it in constructor...
-    pub fn late_inject(&mut self, real_board_positional_hashes: &Vec<u64>) {
+    pub fn late_inject(&mut self, real_board_positional_hashes: &Vec<u64>, moves_without_pawn_move: &usize) {
         self.real_board_positional_hashes = real_board_positional_hashes;
+        self.half_moves_without_pawn_move = moves_without_pawn_move;
     }
 
     pub fn new() -> Self {
@@ -69,7 +71,8 @@ impl Ai {
             terminated: false,
             depth: 99,
             iterative_deepening_depth: 1,
-            real_board_positional_hashes: 0 as *const Vec<u64>
+            real_board_positional_hashes: 0 as *const Vec<u64>,
+            half_moves_without_pawn_move: 0 as *const usize
         }
     }
 
