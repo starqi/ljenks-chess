@@ -21,7 +21,12 @@ const MOVE_ORDER_MOB_SQ_VAL: i32 = 3;
 const MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 3;
 const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
-const DEFENDED_PAWN_BONUS: i32 = 10;
+const DEFENDED_PAWN_BONUS: i32 = 4;
+
+// [Balance between non-material evals]
+// 1 key square (100) * PIECE_VALUE_TO_CONTROL_MULTIPLIER (30) / 256 -> ~ 11 cp.
+// 5 defended pawns (most of the board) * DEFENDED_PAWN_BONUS (4) -> 20 cp.
+// Positional play is extremely sensitive to these values in practice.
 
 /// Index is `Piece` enum number.
 /// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
@@ -33,11 +38,11 @@ static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 
 /// Controlling enemy territory = good, controlling own territory = useless, control center = good.
 static POSITIONAL_SQUARE_WORTH_WHITE: [i32; 64] = [
-    100,  100,  100,  100,  100,  100,  100,  100,
-    100,  100,  100,  100,  100,  100,  100,  100,
-    80,    80,   90,   90,   90,   90,   80,   80,
-    80,    80,   90,  100,  100,   90,   80,   80,
-    50,    50,   60,   80,   80,   60,   50,   50,
+    90,    90,  100,  100,  100,  100,   90,   90,
+    90,    90,  100,  100,  100,  100,   90,   90,
+    70,    80,   90,   90,   90,   90,   80,   70,
+    70,    80,   90,  100,  100,   90,   80,   70,
+    50,    50,   60,   70,   70,   60,   50,   50,
     30,    30,   40,   40,   40,   40,   30,   30,
     10,    10,   10,   10,   10,   10,   10,   10,
     10,    10,   10,   10,   10,   10,   10,   10,
@@ -47,11 +52,10 @@ fn get_positional_sq_worth_white(x: i32, y: i32) -> i32 {
     POSITIONAL_SQUARE_WORTH_WHITE[(y * 8 + x) as usize]
 }
 
-/// Maps `PIECE_VALUES_FOR_CONTROL` number as index to higher-the-better control score. 
+/// Maps `PIECE_TO_CONTROL_BADNESS` number as index to higher-the-better control score. 
 static PIECE_VALUE_TO_CONTROL_MULTIPLIER: [i32; 11] = [
     // I think I was setting queen control mult to 0 to stop sending the queen out?
-    //0, 9, 0, 3, 0, 2, 0, 0, 0, 0, 1
-    0, 4, 0, 3, 0, 3, 0, 0, 0, 1, 1
+    0, 30, 0, 30, 0, 30, 0, 0, 0, 0, 0
 ];
 
 #[inline]
