@@ -12,13 +12,13 @@ static PIECE_VALUES: [i32; 6] = [
 ];
 
 const PAWN_PUSH_BONUS: i32 = 10;
-const MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
+pub const MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
 const CASTLE_BONUS: i32 = 50;
-const MOVE_ORDER_ATTACK_BONUS: i32 = 30;
-const MOVE_ORDER_CASTLE_VAL: i32 = 50;
-const MOVE_ORDER_CAPTURE_MIN_VAL: i32 = 100;
-const MOVE_ORDER_MOB_SQ_VAL: i32 = 3;
-const MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 3;
+const MOVE_ORDER_ATTACK_BONUS: i32 = 100;
+const MOVE_ORDER_CASTLE_VAL: i32 = 80;
+const MOVE_ORDER_CAPTURE_BASE_VAL: i32 = 100;
+const MOVE_ORDER_MOB_SQ_VAL: i32 = 10;
+const MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 10;
 const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
 const DEFENDED_PAWN_BONUS: i32 = 4;
@@ -68,19 +68,25 @@ pub fn piece_to_control_badness(piece: Piece) -> i32 {
     PIECE_TO_CONTROL_BADNESS[piece as usize] as i32
 }
 
-/// Precondition: `prepared_af_boards` is filled in with attacked from map
-fn evaluate_player(board: &Board, player: Player) -> i32 {
-
-    let ps = board.get_player_state(player);
+pub fn count_material(board: &Board, player: Player) -> i32 {
     let mut value: i32 = 0;
 
-    // Count material
+    let ps = board.get_player_state(player);
     let mut piece_locs_copy = ps.piece_locs;
     piece_locs_copy.consume_loop_indices(|index| {
         if let Square::Occupied(piece, _) = board.get_by_index(index) {
             value += evaluate_piece(*piece);
         }
     });
+    value
+}
+
+/// Precondition: `prepared_af_boards` is filled in with attacked from map
+fn evaluate_player(board: &Board, player: Player) -> i32 {
+
+    let mut value = count_material(board, player);
+
+    let ps = board.get_player_state(player);
 
     // Reward pawn push in later stages of game
     if value <= MIN_MATERIAL_FOR_PAWN_EVAL {
@@ -178,6 +184,12 @@ pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32
     white_eval + black_eval + calculate_control(board, prepared_af_boards)
 }
 
+// [Balance between move ordering evals]
+// Always add base 100 for attacks and captures, more for capturing an extra piece.
+// Attacking ~4 important squares -> 80, almost as important as a basic attack or capture.
+// In end game, when shuffling pawns and pieces, none of the current criteria matter, then off LMR...
+// Remember this matters very much, bad evals here will allow LMR to prune. 
+
 pub fn add_captures_to_evals(
     board: &Board,
     m: &mut MoveList,
@@ -189,7 +201,8 @@ pub fn add_captures_to_evals(
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
                 if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
-                    score += max(evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece), MOVE_ORDER_CAPTURE_MIN_VAL);
+                    score += max(evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece), 0);
+                    score += MOVE_ORDER_CAPTURE_BASE_VAL;
                 }
             }
         }

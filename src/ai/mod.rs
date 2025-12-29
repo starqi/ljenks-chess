@@ -356,6 +356,7 @@ impl Ai {
                 if is_draw {
                     self.memo.remove(&before_move_hash);
                 } else {
+                    console_log!("Hash move {}", clamped_score);
                     return clamped_score; 
                 }
             } else {
@@ -419,6 +420,8 @@ impl Ai {
             return self.get_no_moves_eval(alpha, beta);
         }
 
+        let material = evaluation::count_material(&self.test_board, self.test_board.get_player_with_turn());
+
         evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         evaluation::add_mobility_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
@@ -431,9 +434,16 @@ impl Ai {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
             let m_score = (*m).1;
-            // TODO Extract this if trick as macrorules. Unit tests.
-            let mut less_depth_amount = (-((remaining_depth > 3 && new_alpha_i != NEW_ALPHA_I_NEVER_SET) as i32)) 
-                & min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3);
+            // See [Balance between move ordering evals]
+            // TODO Extract this if trick as macrorules. Unit tests. Remaining depth superseded by time but 
+            // still relevant for incremental depth...
+            //let mut less_depth_amount = (-((remaining_depth > 3 && new_alpha_i != NEW_ALPHA_I_NEVER_SET) as i32))
+            let mut less_depth_amount = 
+                (-((remaining_depth > 3 &&
+                    material > evaluation::MIN_MATERIAL_FOR_PAWN_EVAL && 
+                    new_alpha_i != NEW_ALPHA_I_NEVER_SET
+                    ) as i32))
+                & min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3); // TODO Extract this logic on this line
 
             // TODO Statistics for research, number of retries
             loop {
@@ -506,7 +516,10 @@ impl Ai {
         moves_start: usize
     ) -> SingleMoveResult {
         if remaining_depth_no_lmr >= self.iterative_deepening_depth {
-            console_log!("negamax_try_move {}", self.test_board.stringify_move_for_js_logs(&*m));
+            console_log!("negamax_try_move {}, depth = {}/{}",
+                self.test_board.stringify_move_for_js_logs(&*m),
+                remaining_depth,
+                remaining_depth_no_lmr);
         }
 
         let mut revertable = RevertableMove::NoOp(0);
