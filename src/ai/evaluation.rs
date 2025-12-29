@@ -14,7 +14,7 @@ static PIECE_VALUES: [i32; 6] = [
 const PAWN_PUSH_BONUS: i32 = 10;
 pub const MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
 const CASTLE_BONUS: i32 = 50;
-const MOVE_ORDER_ATTACK_BONUS: i32 = 100;
+const MOVE_ORDER_ATTACK_BONUS: i32 = 70;
 const MOVE_ORDER_CASTLE_VAL: i32 = 80;
 const MOVE_ORDER_CAPTURE_BASE_VAL: i32 = 100;
 const MOVE_ORDER_MOB_SQ_VAL: i32 = 10;
@@ -23,10 +23,11 @@ const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
 const DEFENDED_PAWN_BONUS: i32 = 4;
 
-// [Balance between non-material evals]
+// [Non-material board eval]
 // 1 key square (100) * PIECE_VALUE_TO_CONTROL_MULTIPLIER (30) / 256 -> ~ 11 cp.
 // 5 defended pawns (most of the board) * DEFENDED_PAWN_BONUS (4) -> 20 cp.
 // Positional play is extremely sensitive to these values in practice.
+// For performance, don't compute non-material eval if material is drastically different.
 
 /// Index is `Piece` enum number.
 /// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
@@ -81,8 +82,7 @@ pub fn count_material(board: &Board, player: Player) -> i32 {
     value
 }
 
-/// Precondition: `prepared_af_boards` is filled in with attacked from map
-fn evaluate_player(board: &Board, player: Player) -> i32 {
+fn evaluate_player_wo_control(board: &Board, player: Player) -> i32 {
 
     let mut value = count_material(board, player);
 
@@ -94,10 +94,9 @@ fn evaluate_player(board: &Board, player: Player) -> i32 {
         let mut piece_locs_copy = ps.piece_locs;
         piece_locs_copy.consume_loop_indices(|index| {
             let coord = FastCoord(index).to_coord();
-            if let Square::Occupied(piece, _) = board.get_by_index(index) {
-                let is_pawn_mask = -((*piece == Piece::Pawn) as i32);
-                value += is_pawn_mask & ((pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
-            }
+            let is_pawn = if let Square::Occupied(Piece::Pawn, _) = board.get_by_index(index) { true } else { false };
+            let is_pawn_mask = -(is_pawn as i32);
+            value += is_pawn_mask & ((pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
         });
     }
 
@@ -153,7 +152,7 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
 
 /// For a player, gets number of pawns defended by another pawn, pawns counted once.
 /// For eval purposes, does not count attackers on top or bottom rank, pointless edge case.
-pub fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
+fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
     let ps = board.get_player_state(player);
     let mut piece_locs_clone = ps.piece_locs.clone();
     let mut player_pawn_bb = Bitboard(0);
@@ -177,18 +176,25 @@ pub fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
     defended_bb.pop_count() as u8
 }
 
+/// See [Non-material board eval].
 pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
-    let white_eval = evaluate_player(board, Player::White);
-    let black_eval = evaluate_player(board, Player::Black);
-    
-    white_eval + black_eval + calculate_control(board, prepared_af_boards)
+    let white_eval = evaluate_player_wo_control(board, Player::White);
+    let black_eval = evaluate_player_wo_control(board, Player::Black);
+    let pre_control = white_eval + black_eval;
+    if pre_control.abs() >= 300 { return pre_control; }
+    pre_control + calculate_control(board, prepared_af_boards)
 }
 
-// [Balance between move ordering evals]
-// Always add base 100 for attacks and captures, more for capturing an extra piece.
+// [Move ordering eval]
+// Always add base 100 for captures, more for capturing a better piece.
 // Attacking ~4 important squares -> 80, almost as important as a basic attack or capture.
+// Simply attacking -> 70, attacking 4 important squares -> 150.
+// For performance, only add mobility score to non-captures and ensure it's mostly still captures first,
+// though attacking 4 important squares can be greater than a simple capture.
 // In end game, when shuffling pawns and pieces, none of the current criteria matter, then off LMR...
-// Remember this matters very much, bad evals here will allow LMR to prune. 
+// Remember this matters very much b/c bad evals here will allow LMR to prune and lose accuracy. 
+
+// TODO Distinguish bad captures (sac queen for a pawn) and completely re-order. 
 
 pub fn add_captures_to_evals(
     board: &Board,
@@ -210,8 +216,8 @@ pub fn add_captures_to_evals(
     });
 }
 
-/// Precondition: Move list is the current player's moves
-pub fn add_mobility_to_evals(
+/// Precondition: `add_captures_to_evals` already ran.`
+pub fn add_mobility_to_evals_after_capture(
     board: &Board,
     m: &mut MoveList,
     start: usize,
@@ -221,6 +227,7 @@ pub fn add_mobility_to_evals(
 
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.ordering_score();
+        if score >= MOVE_ORDER_CAPTURE_BASE_VAL { return score; }
 
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {
@@ -256,7 +263,7 @@ mod test {
         let mut ml = MoveList::new(50);
         board.get_pseudo_moves_at(FastCoord::from_xy(3, 7), &mut ml);
         let write_index = ml.write_index;
-        add_mobility_to_evals(&board, &mut ml, 0, write_index);
+        add_mobility_to_evals_after_capture(&board, &mut ml, 0, write_index);
         board.print_move_list(&ml, 0, ml.write_index);
     }
 

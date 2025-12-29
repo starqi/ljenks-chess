@@ -423,7 +423,7 @@ impl Ai {
         let material = evaluation::count_material(&self.test_board, self.test_board.get_player_with_turn());
 
         evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
-        evaluation::add_mobility_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
+        evaluation::add_mobility_to_evals_after_capture(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
 
         for i in (moves_start..moves_end_exclusive).rev() {
