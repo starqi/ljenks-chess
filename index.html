@@ -4,13 +4,27 @@
             .no-select {
                 user-select: none;
             }
+            button:active {
+                background: #333;
+                transform: scale(0.98);
+            }
         </style>
     </head>
     <body style="background: #111111; padding-top: 15px;">
-        <div>
-            <h1 id="title" style="font-family: sans-serif; text-align: center; color: #aaaaaa;">Ljenks Age 11 (1900)</h1>
-            <div id="board" class="no-select" style="position: relative; text-align: center; width: fit-content; height: fit-content; margin: auto; color:#aaaaaa">
-                <img id="dragged" style="position: absolute; visibility: hidden;">
+        <div style="display: flex; justify-content: center; gap: 20px;">
+            <div>
+                <h1 id="title" style="font-family: sans-serif; text-align: center; color: #aaaaaa;">Ljenks Age 11 (1900)</h1>
+                <div id="board" class="no-select" style="position: relative; text-align: center; width: fit-content; height: fit-content; margin: auto; color:#aaaaaa">
+                    <img id="dragged" style="position: absolute; visibility: hidden;">
+                </div>
+            </div>
+            <div id="move-list" style="font-family: monospace; color: #aaaaaa; font-size: 14px; padding: 10px; background: #222; border-radius: 5px; overflow-y: auto;">
+                <div style="font-weight: bold; margin-bottom: 10px;font-size: 28;">Moves</div>
+                <textarea style="background:#222; color:#aaa; width:300px; height:500px; font-size:30; resize: none;" id="move-list-content"></textarea>
+                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+                    <button id="self-play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Self-Play</button>
+                    <button id="play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Play</button>
+                </div>
             </div>
         </div>
         <script src="index.js"></script>
