@@ -6,7 +6,8 @@ https://starqi.github.io/ljenks-chess/
 
 #### Deployment
 
-Copy www/assets/dist/* to gh-pages branch. 
+npm run build
+Copy www/dist/* to gh-pages branch. 
 
 ### TODO
 

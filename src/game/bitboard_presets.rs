@@ -50,7 +50,7 @@ impl BitboardPresets {
             pawn_move_masks: [white_pawn_masks, black_pawn_masks],
             king_moves: make_king_lookup(),
             ensure_blocker: [Bitboard(1u64 << 63), Bitboard(1)],
-            opponent_squares: [bitboard_union!(make_line(0) , make_line(1) , make_line(2)), bitboard_union!(make_line(7), make_line(6), make_line(5))],
+            opponent_squares: [bitboard_union!(make_line(0), make_line(1)), bitboard_union!(make_line(7), make_line(6))],
             central_squares: make_center_sqs(),
 
             // Use existing sequence but convert to index 0 = a8, https://www.chessprogramming.org/BitScan#De_Bruijn_Multiplication
@@ -71,8 +71,8 @@ fn make_line(y: u8) -> Bitboard {
 
 fn make_center_sqs() -> Bitboard {
     let mut result = Bitboard(0);
-    for x in 2..5 {
-        for y in 2..5 {
+    for x in 3..4 {
+        for y in 3..4 {
             result.set(x, y);
         }
     }

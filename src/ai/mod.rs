@@ -364,6 +364,11 @@ impl Ai {
             }
         } else if let Some((m, _, false)) = memo_move_suggestion {
 
+            // TODO Hide check behind CFG flag
+            if remaining_depth >= self.iterative_deepening_depth {
+                console_log!("Starting search with memo move");
+            }
+
             // Reminder: No null window, because this is our best move candidate, hence it is not expected to fail low
             match self.negamax_try_move(remaining_depth, remaining_depth, alpha, false, beta, &m, moves_start) {
                 SingleMoveResult::BetaCutOff(score) => {
@@ -487,6 +492,10 @@ impl Ai {
                     }
                 } else {
                     break;
+                }
+
+                if remaining_depth >= self.iterative_deepening_depth {
+                    console_log!("LMR fail, research");
                 }
             }
         }

@@ -14,11 +14,11 @@ static PIECE_VALUES: [i32; 6] = [
 const PAWN_PUSH_BONUS: i32 = 10;
 pub const MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
 const CASTLE_BONUS: i32 = 50;
-const MOVE_ORDER_ATTACK_BONUS: i32 = 70;
+const MOVE_ORDER_ATTACK_BONUS: i32 = 50;
 const MOVE_ORDER_CASTLE_VAL: i32 = 80;
-const MOVE_ORDER_CAPTURE_BASE_VAL: i32 = 100;
-const MOVE_ORDER_MOB_SQ_VAL: i32 = 10;
-const MOVE_ORDER_MOB_CENTER_SQ_BONUS: i32 = 10;
+const MOVE_ORDER_CAPTURE_BASE_VAL: i32 = 130;
+const MOVE_ORDER_CAPTURE_LOWER_RANGE: i32 = 100;
+const MOVE_ORDER_MOB_SQ_VAL: i32 = 1;
 const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
 const DEFENDED_PAWN_BONUS: i32 = 4;
@@ -186,15 +186,14 @@ pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32
 }
 
 // [Move ordering eval]
-// Always add base 100 for captures, more for capturing a better piece.
-// Attacking ~4 important squares -> 80, almost as important as a basic attack or capture.
-// Simply attacking -> 70, attacking 4 important squares -> 150.
-// For performance, only add mobility score to non-captures and ensure it's mostly still captures first,
-// though attacking 4 important squares can be greater than a simple capture.
-// In end game, when shuffling pawns and pieces, none of the current criteria matter, then off LMR...
+// 3 categories of importance: first captures, then attacks, non-attacks.
+// Lower cat move can be before higher cat in some cases, doesn't have to be perfect.
+// Intra cat 1 ordering: Capturing higher valued piece better, mobility not considered.
+// Otheriwse, intra category ordering = mobility.
+// In end game, attacks and captures matter less maybe, then off LMR elsewhere.
+// In early game, there are no attacks, bug = feature -> everything is LMR low depth.
+// Reduce queen mobility score because it's double rook/bishop mobility.
 // Remember this matters very much b/c bad evals here will allow LMR to prune and lose accuracy. 
-
-// TODO Distinguish bad captures (sac queen for a pawn) and completely re-order. 
 
 pub fn add_captures_to_evals(
     board: &Board,
@@ -207,8 +206,10 @@ pub fn add_captures_to_evals(
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
                 if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
-                    score += max(evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece), 0);
+                    let diff = evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece);
                     score += MOVE_ORDER_CAPTURE_BASE_VAL;
+                    // Penalty for e.g. queen taking pawn.
+                    score -= -((diff < 0) as i32) & (-diff >> 3);
                 }
             }
         }
@@ -227,18 +228,22 @@ pub fn add_mobility_to_evals_after_capture(
 
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.ordering_score();
-        if score >= MOVE_ORDER_CAPTURE_BASE_VAL { return score; }
+        if score >= MOVE_ORDER_CAPTURE_LOWER_RANGE { return score; }
 
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {
-                let atks = board.get_imaginary_pseudo_move_at(*_to_coord, *src_piece, *src_player);
-                score += atks.pop_count() as i32 * MOVE_ORDER_MOB_SQ_VAL;
 
-                let piece_atks = Bitboard(atks.0 & opp_state.piece_locs.0);
+                let mut mobility_score = -((*src_piece != Piece::Queen) as i32) & MOVE_ORDER_MOB_SQ_VAL;
+                mobility_score += MOVE_ORDER_MOB_SQ_VAL;
+
+                let moves = board.get_imaginary_pseudo_move_at(*_to_coord, *src_piece, *src_player);
+                score += moves.pop_count() as i32 * mobility_score;
+
+                let piece_atks = Bitboard(moves.0 & opp_state.piece_locs.0);
                 score += -((piece_atks.0 != 0) as i32) & MOVE_ORDER_ATTACK_BONUS;
 
-                let mut important_sq_atks = Bitboard(atks.0 & (BITBOARD_PRESETS.central_squares.0 | BITBOARD_PRESETS.opponent_squares[*src_player as usize].0));
-                score += important_sq_atks.consume_pop_count() as i32 * MOVE_ORDER_MOB_CENTER_SQ_BONUS;
+                let mut important_sq_moves = Bitboard(moves.0 & (BITBOARD_PRESETS.central_squares.0 | BITBOARD_PRESETS.opponent_squares[*src_player as usize].0));
+                score += important_sq_moves.consume_pop_count() as i32 * mobility_score;
             }
         } else if let MoveDescription::Castle(_) = m.description() {
             score += MOVE_ORDER_CASTLE_VAL;

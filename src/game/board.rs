@@ -1,10 +1,12 @@
 use std::fmt::{Display, Formatter, self};
 
+use crate::*;
+
+use super::memo::*;
 use super::coords::*;
 use super::entities::*;
 use super::move_list::*;
 use super::move_test::*;
-use super::super::*;
 use super::bitboard::*;
 
 #[derive(Clone)]
@@ -448,7 +450,8 @@ impl Board {
     }
 
     pub fn is_capture(&self, m: &MoveWithEval) -> bool {
-        if let MoveDescription::NormalMove(_, _to_coord, _) = m.description() {
+        if let MoveDescription::NormalMove(_, _to_coord, meta) = m.description() {
+            if *meta == MoveMetadata::EnPassant { return true; }
             if let Square::Occupied(_, _) = self.get_by_index(_to_coord.value()) {
                 return true;
             }
@@ -938,6 +941,8 @@ impl Board {
 
 #[cfg(test)]
 mod test {
+
+    use crate::game::stringify::slow_stringify_unambiguous_coord;
 
     use super::*;
 
