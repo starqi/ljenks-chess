@@ -22,7 +22,6 @@ Copy www/dist/* to gh-pages branch.
 - / Saw one illegal move king moving into rook file? Another illegal queen d3 self capture...
     - / It's ambiguous rooks 
         - / Move str: Duplicate piece resolution: Raa4
-- Have to do repetition detection at engine level to avoid self-play perma loop (saw it while up a gazillion material)
 - / Scrolling issues
 - Write notes on how wasm works, check versions
 - Minor: Pointer jumps to &Bitboard worse than copying
@@ -30,9 +29,7 @@ Copy www/dist/* to gh-pages branch.
 - Pure square control counterexamples: 
     - Long range bishop with all target squares pawn controlled -> not valued
 - TODO IMMEDIATE
-- PNG importer for testing
 - Profiler?
-- Check mobile, check UI after changing CSS
 - Clean up linter warnings
     - Dead code
 - Evaluation

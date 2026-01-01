@@ -33,7 +33,10 @@ class Application {
         this.moveHistory = [];
         this.moveNumber = 1;
 
-        this.SQUARE_LENGTH = (0.9 * Math.min(window.innerWidth, window.innerHeight - document.getElementById('title').getBoundingClientRect().height) / 8) >>> 0;
+        this.SQUARE_LENGTH = (0.9 * Math.min(
+            window.innerWidth - document.getElementById('move-list').getBoundingClientRect().width,
+            window.innerHeight - document.getElementById('title').getBoundingClientRect().height
+        ) / 8) >>> 0;
 
         // Pawn = 0, Rook, Knight, Bishop, Queen, King
         this.numToLetter = [
