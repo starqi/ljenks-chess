@@ -30,6 +30,7 @@ pub struct Ai {
 }
 
 // TODO (Minor) Rename this, NoEffect -> Fail low
+/// BetaCutOff i32 will contain the precise score, it's not the upper bound.
 enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 
 // TODO Refactor these 2 classes, Clone on enum?
@@ -67,7 +68,7 @@ impl Ai {
             fast_found_hits: 0,
             node_counter: 0,
             start_ms: 0,
-            ms_till_terminate: 1000,
+            ms_till_terminate: 1500,
             terminated: false,
             depth: 99,
             iterative_deepening_depth: 1,
@@ -94,7 +95,7 @@ impl Ai {
 
         self.start_ms = now();
         self.terminated = false;
-        for d in (1i8..=self.depth).step_by(2) {
+        for d in (5i8..=self.depth).step_by(2) {
             console_log!("\nBegin depth {}", d);
             self.iterative_deepening_depth = d;
             unsafe {
@@ -185,6 +186,9 @@ impl Ai {
     }
 
     /// Node counter increase coupled with check to not miss an increment
+    /// [Termination]
+    /// Search should use a fake beta cutoff to escape recursively, 
+    /// then check if `self.terminated` to see if it's a real beta cutoff.
     fn increment_node_check_termination(&mut self) -> bool {
         self.node_counter += 1;
         self.terminated = self.terminated || (self.node_counter % 50000 == 0 && now() - self.start_ms > self.ms_till_terminate);
@@ -244,7 +248,7 @@ impl Ai {
         // Evaluation is always maximizing for white. Black is also maximizing, so whenever it's black's turn, black's 'score definition" is negative of white's score definition.
         let score_multiplier = self.test_board.get_player_with_turn().multiplier();
 
-        if self.increment_node_check_termination() { return initial_alpha; } // See (2) FIXME WTF IS (2)
+        if self.increment_node_check_termination() { return initial_alpha; } // See [Termination]
 
         let mut alpha = initial_alpha;
 
@@ -289,7 +293,7 @@ impl Ai {
             self.test_board.revert_move(&revertable);
 
             if r >= beta { 
-                if self.terminated { return initial_alpha; } // See (2)
+                if self.terminated { return initial_alpha; } // See [Termination]
                 return beta; 
             }
             if r > alpha { alpha = score; }
@@ -313,7 +317,7 @@ impl Ai {
         if remaining_depth <= 0 {
             return self.qsearch(10, initial_alpha, beta, moves_start);
         }
-        if self.increment_node_check_termination() { return initial_alpha; } // Chain force beta cutoff in all parents; checked by assertions (2)
+        if self.increment_node_check_termination() { return initial_alpha; } // See [Termination]
 
         let mut alpha = initial_alpha;
         let mut new_alpha_i: i32 = NEW_ALPHA_I_NEVER_SET;
@@ -364,8 +368,7 @@ impl Ai {
             }
         } else if let Some((m, _, false)) = memo_move_suggestion {
 
-            // TODO Hide check behind CFG flag
-            if remaining_depth >= self.iterative_deepening_depth {
+            if self.my_debug_enabled(remaining_depth) {
                 console_log!("Starting search with memo move");
             }
 
@@ -374,7 +377,7 @@ impl Ai {
                 SingleMoveResult::BetaCutOff(score) => {
                     self.hash_move_memo_hits += 1;
                     if self.terminated {
-                        return initial_alpha; // See (2)
+                        return initial_alpha; // See [Termination]
                     } else {
                         self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan(m), 0));
                         return beta;
@@ -391,7 +394,7 @@ impl Ai {
                 SingleMoveResult::NoEffect => {
                     // The memoized move was not very good after examining it full depth, begin normal loop through moves.
                 }
-            };
+            }
             assert!(!self.terminated);
         }
 
@@ -443,64 +446,41 @@ impl Ai {
             // TODO Extract this if trick as macrorules. Unit tests. Remaining depth superseded by time but 
             // still relevant for incremental depth...
             //let mut less_depth_amount = (-((remaining_depth > 3 && new_alpha_i != NEW_ALPHA_I_NEVER_SET) as i32))
-            let mut less_depth_amount = 
+            let less_depth_amount = 
                 (-((remaining_depth > 3 &&
                     material > evaluation::MIN_MATERIAL_FOR_PAWN_EVAL && 
                     new_alpha_i != NEW_ALPHA_I_NEVER_SET
-                    ) as i32))
+                ) as i32))
                 & min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3); // TODO Extract this logic on this line
 
-            // TODO Statistics for research, number of retries
-            loop {
-                let r = self.negamax_try_move(
-                    remaining_depth,
-                    remaining_depth - (less_depth_amount as i8), 
-                    alpha,
-                    new_alpha_i != NEW_ALPHA_I_NEVER_SET,
-                    beta,
-                    m,
-                    moves_end_exclusive
-                );
+            let r = self.negamax_try_move(
+                remaining_depth,
+                remaining_depth - (less_depth_amount as i8), 
+                alpha,
+                new_alpha_i != NEW_ALPHA_I_NEVER_SET,
+                beta,
+                m,
+                moves_end_exclusive
+            );
 
-                // TODO Review soundness. I believe this says if move ordering is perfect, then 
-                // late move reduction call will never trigger any changes in the best move. 
-                if let SingleMoveResult::NewAlpha(score) = r {
-                    assert!(!self.terminated); // TODO Why?
-                    if less_depth_amount <= 0 {
-                        alpha = score;
-                        new_alpha_i = i as i32;
-                        break;
-                    } else {
-                        less_depth_amount = 0;
+            if let SingleMoveResult::NewAlpha(score) = r {
+                assert!(!self.terminated);
+                alpha = score;
+                new_alpha_i = i as i32;
+            } else if let SingleMoveResult::BetaCutOff(score) = r {
+                if self.terminated {
+                    if new_alpha_i >= 0 {
+                        self.insert_memo(MemoData(alpha, -1, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()), 0));
                     }
-                } else if let SingleMoveResult::BetaCutOff(score) = r {
-                    if self.terminated {
-                        // Don't lose the best move so far during termination, but don't pretend it's the real move at this depth (hence -1 to remaining depth)
-                        if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
-                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(hash_move.unwrap().clone()), 0));
-                        } else if new_alpha_i >= 0 {
-                            self.insert_memo(MemoData(alpha, remaining_depth - 1, MemoType::Exact(self.moves_buf.v()[new_alpha_i as usize].clone()), 0));
-                        }
-                        return initial_alpha; // See (2)
-                    } else {
-                        if less_depth_amount <= 0 {
-                            self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan((*m).clone()), 0));
-                            return beta;
-                        } else {
-                            less_depth_amount = 0;
-                        }
-                    }
+                    return initial_alpha; // See [Termination]
                 } else {
-                    break;
-                }
-
-                if remaining_depth >= self.iterative_deepening_depth {
-                    console_log!("LMR fail, research");
+                    self.insert_memo(MemoData(score, remaining_depth, MemoType::GreaterThan((*m).clone()), 0));
+                    return beta;
                 }
             }
         }
 
-        assert!(!self.terminated); // TODO Review why?
+        assert!(!self.terminated);
         if new_alpha_i == NEW_ALPHA_I_HASH_MOVE {
             self.insert_memo(MemoData(alpha, remaining_depth, MemoType::Exact(hash_move.unwrap()), 0));
         } else if new_alpha_i >= 0 {
@@ -524,7 +504,7 @@ impl Ai {
         m: *const MoveWithEval,
         moves_start: usize
     ) -> SingleMoveResult {
-        if remaining_depth_no_lmr >= self.iterative_deepening_depth {
+        if self.my_debug_enabled(remaining_depth_no_lmr) {
             console_log!("negamax_try_move {}, depth = {}/{}",
                 self.test_board.stringify_move_for_js_logs(&*m),
                 remaining_depth,
@@ -583,8 +563,10 @@ impl Ai {
 
         self.test_board.revert_move(&revertable);
 
-        if remaining_depth_no_lmr >= self.iterative_deepening_depth {
-            console_log!("negamax_try_move.score alpha={}, beta={}, score={}, fast_found={}", alpha, beta, score, fast_found);
+        if self.my_debug_enabled(remaining_depth_no_lmr) {
+            if !self.terminated { // Don't print fake score when terminating
+                console_log!("negamax_try_move.score alpha={}, beta={}, score={}, fast_found={}", alpha, beta, score, fast_found);
+            }
         }
 
         if score >= beta {
@@ -632,5 +614,17 @@ impl Ai {
             }
             return false;
         }
+    }
+
+    #[cfg(feature = "my_debug")]
+    #[inline]
+    fn my_debug_enabled(&self, remaining_depth_no_lmr: i8) -> bool {
+        remaining_depth_no_lmr >= self.iterative_deepening_depth
+    }
+
+    #[cfg(not(feature = "my_debug"))]
+    #[inline]
+    fn my_debug_enabled(&self, remaining_depth_no_lmr: i8) -> bool {
+        false
     }
 }
