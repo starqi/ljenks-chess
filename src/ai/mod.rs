@@ -1,12 +1,12 @@
 mod evaluation;
 
-use std::cmp::min;
 use std::collections::HashMap;
 use super::game::entities::*;
 use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::extern_funcs::{random, now};
+use crate::ai::evaluation::LMR_QUIET_MOVE_SCORE;
 use crate::game::stringify::slow_stringify_move_standard;
 use crate::{console_log};
 
@@ -23,7 +23,7 @@ pub struct Ai {
     start_ms: u128,
     ms_till_terminate: u128, // Configuration
     terminated: bool,
-    depth: i8, // Configuration
+    min_depth: i8, // Configuration
     iterative_deepening_depth: i8,
     real_board_positional_hashes: *const Vec<u64>,
     half_moves_without_pawn_move: *const usize
@@ -70,7 +70,7 @@ impl Ai {
             start_ms: 0,
             ms_till_terminate: 1500,
             terminated: false,
-            depth: 99,
+            min_depth: 7,
             iterative_deepening_depth: 1,
             real_board_positional_hashes: 0 as *const Vec<u64>,
             half_moves_without_pawn_move: 0 as *const usize
@@ -95,7 +95,7 @@ impl Ai {
 
         self.start_ms = now();
         self.terminated = false;
-        for d in (5i8..=self.depth).step_by(2) {
+        for d in (self.min_depth..=99).step_by(2) {
             console_log!("\nBegin depth {}", d);
             self.iterative_deepening_depth = d;
             unsafe {
@@ -138,11 +138,12 @@ impl Ai {
             None
         };
         console_log!(
-            "Useful memo hits - {}, hash move memo hits - {}, size - {}, fast found - {}",
+            "Useful memo hits - {}, hash move memo hits - {}, size - {}, fast found - {}, time - {}",
             self.useful_memo_hits,
             self.hash_move_memo_hits,
             self.memo.len(),
-            self.fast_found_hits
+            self.fast_found_hits,
+            now() - self.start_ms
         );
         console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
 
@@ -150,7 +151,7 @@ impl Ai {
         self.useful_memo_hits = 0;
         self.hash_move_memo_hits = 0;
         self.fast_found_hits = 0;
-        // TODO Memo experiment... statistics...
+
         //self.memo.clear();
         console_log!("Memo aging, before size = {}", self.memo.len());
         for (_, MemoData(_, _, _, age)) in self.memo.iter_mut() {
@@ -191,7 +192,11 @@ impl Ai {
     /// then check if `self.terminated` to see if it's a real beta cutoff.
     fn increment_node_check_termination(&mut self) -> bool {
         self.node_counter += 1;
-        self.terminated = self.terminated || (self.node_counter % 50000 == 0 && now() - self.start_ms > self.ms_till_terminate);
+        self.terminated = self.terminated || (
+            self.node_counter % 50000 == 0 &&
+            self.iterative_deepening_depth > self.min_depth &&
+            now() - self.start_ms > self.ms_till_terminate
+        );
         self.terminated
     }
 
@@ -428,8 +433,6 @@ impl Ai {
             return self.get_no_moves_eval(alpha, beta);
         }
 
-        let material = evaluation::count_material(&self.test_board, self.test_board.get_player_with_turn());
-
         evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         evaluation::add_mobility_to_evals_after_capture(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
@@ -442,16 +445,12 @@ impl Ai {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
             let m_score = (*m).1;
-            // See [Balance between move ordering evals]
-            // TODO Extract this if trick as macrorules. Unit tests. Remaining depth superseded by time but 
-            // still relevant for incremental depth...
-            //let mut less_depth_amount = (-((remaining_depth > 3 && new_alpha_i != NEW_ALPHA_I_NEVER_SET) as i32))
-            let less_depth_amount = 
-                (-((remaining_depth > 3 &&
-                    material > evaluation::MIN_MATERIAL_FOR_PAWN_EVAL && 
-                    new_alpha_i != NEW_ALPHA_I_NEVER_SET
-                ) as i32))
-                & min(-((m_score < 100) as i32) & ((100 - m_score) >> 5), 3); // TODO Extract this logic on this line
+            // [LMR]
+            // All normal depth except identify the obviously very quiet moves: 
+            // neither attack nor capture and usually passive (e.g. backwards moves).
+            // Our simple move ordering logic not good enough to aggressively prune.
+            // Check real game logs for a feel of what is being pruned. 
+            let less_depth_amount = -((remaining_depth > 2 && m_score < LMR_QUIET_MOVE_SCORE) as i32) & 2;
 
             let r = self.negamax_try_move(
                 remaining_depth,
@@ -542,12 +541,7 @@ impl Ai {
         let mut fast_found = false;
 
         if do_null_window {
-
-            // [PVS intuition]
-            // In the ideal alpha-beta setup, the first move is the best move, set a new alpha and no new alpha is set again.
-            // In this case, we do the same alpha-beta (no null window) for the first move, followed by as small a window as possible
-            // for subsequent moves (faster), betting on fail-lows. (If we do null window on first move, then it'll frequently re-search.)
-
+            // PVS intuition: minmize alpha-beta window for speed, hoping first move is best always
             fast_found_score = -self.negamax(remaining_depth - 1, -alpha - 1, -alpha, moves_start);
             if fast_found_score <= alpha {
                 fast_found = true;

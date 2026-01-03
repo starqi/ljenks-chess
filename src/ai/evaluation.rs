@@ -22,6 +22,7 @@ const MOVE_ORDER_MOB_SQ_VAL: i32 = 1;
 const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
 const DEFENDED_PAWN_BONUS: i32 = 4;
+pub const LMR_QUIET_MOVE_SCORE: i32 = 8;
 
 // [Non-material board eval]
 // 1 key square (100) * PIECE_VALUE_TO_CONTROL_MULTIPLIER (30) / 256 -> ~ 11 cp.
@@ -190,10 +191,8 @@ pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32
 // Lower cat move can be before higher cat in some cases, doesn't have to be perfect.
 // Intra cat 1 ordering: Capturing higher valued piece better, mobility not considered.
 // Otheriwse, intra category ordering = mobility.
-// In end game, attacks and captures matter less maybe, then off LMR elsewhere.
-// In early game, there are no attacks, bug = feature -> everything is LMR low depth.
 // Reduce queen mobility score because it's double rook/bishop mobility.
-// Remember this matters very much b/c bad evals here will allow LMR to prune and lose accuracy. 
+// See [LMR].
 
 pub fn add_captures_to_evals(
     board: &Board,
@@ -224,7 +223,8 @@ pub fn add_mobility_to_evals_after_capture(
     start: usize,
     end_exclusive: usize,
 ) {
-    let opp_state = board.get_player_state(board.get_player_with_turn().other_player());
+    let player = board.get_player_with_turn();
+    let opp_state = board.get_player_state(player.other_player());
 
     m.write_evals(start, end_exclusive, |m| {
         let mut score = m.ordering_score();
