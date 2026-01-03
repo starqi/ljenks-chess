@@ -181,6 +181,11 @@ impl Display for Bitboard {
     }
 }
 
+macro_rules! bitboard_union {
+    ($e:expr) => ($e);
+    ($e:expr, $($e2:expr),+) => (Bitboard($e.0 | bitboard_union!($($e2),+).0))
+}
+
 #[cfg(test)]
 mod test {
 

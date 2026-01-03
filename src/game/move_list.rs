@@ -17,7 +17,7 @@ pub enum CastleType {
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum MoveMetadata {
-    None = 0, DoublePawnJump, EnPassant, Promotion
+    None = 0, DoublePawnJump, EnPassant, Promotion // TODO Promotion
 }
 
 // Keep minimal in size, to make move generation fast, and move execution slower
@@ -95,6 +95,7 @@ impl MoveList {
         s.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
     }
 
+    #[inline]
     pub fn write_evals(&mut self, start: usize, end_exclusive: usize, mut to_eval: impl FnMut(&MoveWithEval) -> i32) {
         for i in start..end_exclusive {
             let m = &mut self.v[i];

@@ -1,5 +1,4 @@
 use super::bitboard::*;
-use super::super::*;
 
 #[repr(u8)]
 pub enum RayDirection {

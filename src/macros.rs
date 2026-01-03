@@ -16,8 +16,7 @@ pub mod global_macros {
     }
 
     #[macro_export]
-    macro_rules! bitboard_union {
-        ($e:expr) => ($e);
-        ($e:expr, $($e2:expr),+) => (Bitboard($e.0 | bitboard_union!($($e2),+).0))
+    macro_rules! branchless_mask {
+        ($cond:expr, $val:expr) => (-($cond as i32) & $val)
     }
 }

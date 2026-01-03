@@ -95,16 +95,15 @@ fn evaluate_player_wo_control(board: &Board, player: Player) -> i32 {
         let mut piece_locs_copy = ps.piece_locs;
         piece_locs_copy.consume_loop_indices(|index| {
             let coord = FastCoord(index).to_coord();
-            let is_pawn = if let Square::Occupied(Piece::Pawn, _) = board.get_by_index(index) { true } else { false };
-            let is_pawn_mask = -(is_pawn as i32);
-            value += is_pawn_mask & ((pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
+            let is_pawn = matches!(board.get_by_index(index), Square::Occupied(Piece::Pawn, _));
+            value += branchless_mask!(is_pawn, (pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
         });
     }
 
     let defended_pawn_count = get_pawndefended_pawn_count(board, player);
     value += defended_pawn_count as i32 * DEFENDED_PAWN_BONUS;
 
-    value += -(ps.is_castled as i32) & CASTLE_BONUS;
+    value += branchless_mask!(ps.is_castled, CASTLE_BONUS);
     value * player.multiplier()
 }
 
@@ -208,7 +207,7 @@ pub fn add_captures_to_evals(
                     let diff = evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece);
                     score += MOVE_ORDER_CAPTURE_BASE_VAL;
                     // Penalty for e.g. queen taking pawn.
-                    score -= -((diff < 0) as i32) & (-diff >> 3);
+                    score -= branchless_mask!(diff < 0, -diff >> 3);
                 }
             }
         }
@@ -233,14 +232,14 @@ pub fn add_mobility_to_evals_after_capture(
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {
 
-                let mut mobility_score = -((*src_piece != Piece::Queen) as i32) & MOVE_ORDER_MOB_SQ_VAL;
+                let mut mobility_score = branchless_mask!(*src_piece != Piece::Queen, MOVE_ORDER_MOB_SQ_VAL);
                 mobility_score += MOVE_ORDER_MOB_SQ_VAL;
 
                 let moves = board.get_imaginary_pseudo_move_at(*_to_coord, *src_piece, *src_player);
                 score += moves.pop_count() as i32 * mobility_score;
 
                 let piece_atks = Bitboard(moves.0 & opp_state.piece_locs.0);
-                score += -((piece_atks.0 != 0) as i32) & MOVE_ORDER_ATTACK_BONUS;
+                score += branchless_mask!(piece_atks.0 != 0, MOVE_ORDER_ATTACK_BONUS);
 
                 let mut important_sq_moves = Bitboard(moves.0 & (BITBOARD_PRESETS.central_squares.0 | BITBOARD_PRESETS.opponent_squares[*src_player as usize].0));
                 score += important_sq_moves.consume_pop_count() as i32 * mobility_score;

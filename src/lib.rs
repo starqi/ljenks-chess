@@ -100,7 +100,7 @@ impl Main {
         self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         self.last_move = self.ai.make_move(&mut self.board);
 
-        self.slow_handle_special_end_conitions(self.board.get_player_with_turn().other_player(), None);
+        self.slow_handle_special_end_conditions(self.board.get_player_with_turn().other_player(), None);
         true
     }
 
@@ -132,7 +132,7 @@ impl Main {
             self.board.handle_move_no_revert(m);
             self.board.assert_hash();
 
-            self.slow_handle_special_end_conitions(original_player, Some((&before_info, &m_clone)));
+            self.slow_handle_special_end_conditions(original_player, Some((&before_info, &m_clone)));
 
             true
         } else {
@@ -156,7 +156,7 @@ impl Main {
 
     // Board class will only be in terms of # of moves unavailable or whether is checking,
     // but this excludes formal checkmate, stalemate, 50 move rule, etc.
-    fn slow_handle_special_end_conitions(
+    fn slow_handle_special_end_conditions(
         &mut self,
         original_player: Player,
         before_info_if_setting_last_move: Option<(&BeforeMoveInfoForStringify, &MoveWithEval)>

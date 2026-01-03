@@ -7,6 +7,7 @@ use super::game::move_list::*;
 use super::game::board::*;
 use super::extern_funcs::{random, now};
 use crate::ai::evaluation::LMR_QUIET_MOVE_SCORE;
+use crate::branchless_mask;
 use crate::game::stringify::slow_stringify_move_standard;
 use crate::{console_log};
 
@@ -170,6 +171,8 @@ impl Ai {
         }
     }
 
+    // In high performance code, there is no formal concept of checkmate/stalemate/50 moves,
+    // but simply whether there exist any moves at all, and if in check then it's checkmate.
     fn get_no_moves_eval(&mut self, alpha: i32, beta: i32) -> i32 {
         let checking_player = self.test_board.get_player_with_turn().other_player();
         if self.test_board.is_checking(checking_player) {
@@ -438,10 +441,10 @@ impl Ai {
         self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
 
         for i in (moves_start..moves_end_exclusive).rev() {
-            // TODO Review borrowing again
-            // First, review Vec again, and [] being immutable ref
-            // Then, is the problem: move itself obv immutable but chain cascades into self (too much), 
-            // if self is immutable, that makes no sense as a recursive algo with potentially mutable buffers
+            // Rust philosophy reminder: unsafe pointer bypass because borrowing `m` chain borrows its owner, self, 
+            // and `negamax_try_move` might modify self and `moves_buf` inside self, 
+            // thus changing `m` while it's still being borrowed as immutable, "value changing underneath". 
+            // But the move list start/end indices prevent this.
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
 
             let m_score = (*m).1;
@@ -450,7 +453,7 @@ impl Ai {
             // neither attack nor capture and usually passive (e.g. backwards moves).
             // Our simple move ordering logic not good enough to aggressively prune.
             // Check real game logs for a feel of what is being pruned. 
-            let less_depth_amount = -((remaining_depth > 2 && m_score < LMR_QUIET_MOVE_SCORE) as i32) & 2;
+            let less_depth_amount = branchless_mask!(remaining_depth > 2 && m_score < LMR_QUIET_MOVE_SCORE, 2);
 
             let r = self.negamax_try_move(
                 remaining_depth,
