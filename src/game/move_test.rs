@@ -1,6 +1,7 @@
 use super::entities::*;
 use super::coords::*;
 use super::bitboard::*;
+use super::move_list::*;
 use super::super::*;
 
 /// For each square, expand into a bitboard, which contains piece locations attacking that square.

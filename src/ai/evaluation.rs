@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::cmp::min;
 use super::super::*;
 use super::super::game::entities::*;
 use super::super::game::bitboard::*;
@@ -16,13 +16,10 @@ pub const MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
 const CASTLE_BONUS: i32 = 50;
 const MOVE_ORDER_ATTACK_BONUS: i32 = 50;
 const MOVE_ORDER_CASTLE_VAL: i32 = 80;
-const MOVE_ORDER_CAPTURE_BASE_VAL: i32 = 130;
-const MOVE_ORDER_CAPTURE_LOWER_RANGE: i32 = 100;
 const MOVE_ORDER_MOB_SQ_VAL: i32 = 1;
 const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
 const DEFENDED_PAWN_BONUS: i32 = 4;
-pub const LMR_QUIET_MOVE_SCORE: i32 = 8;
 
 // [Non-material board eval]
 // 1 key square (100) * PIECE_VALUE_TO_CONTROL_MULTIPLIER (30) / 256 -> ~ 11 cp.
@@ -107,11 +104,10 @@ fn evaluate_player_wo_control(board: &Board, player: Player) -> i32 {
     value * player.multiplier()
 }
 
-// TODO Review general eval performance reqs... Turn it off and check NPS
-
 /// Returns how much more white controls all squares than black, where control belongs to the side controlling with a lower valued piece.
 /// A square is scaled by position (favouring center, enemy side) and piece value (lower better).
 fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
+    // Turning this off -> 28% more NPS
 
     board.rewrite_af_boards_both_players(prepared_af_boards);
 
@@ -185,53 +181,17 @@ pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32
     pre_control + calculate_control(board, prepared_af_boards)
 }
 
-// [Move ordering eval]
-// 3 categories of importance: first captures, then attacks, non-attacks.
-// Lower cat move can be before higher cat in some cases, doesn't have to be perfect.
-// Intra cat 1 ordering: Capturing higher valued piece better, mobility not considered.
-// Otheriwse, intra category ordering = mobility.
-// Reduce queen mobility score because it's double rook/bishop mobility.
-// See [LMR].
-
-pub fn add_captures_to_evals(
-    board: &Board,
-    m: &mut MoveList,
-    start: usize,
-    end_exclusive: usize,
-) {
-    m.write_evals(start, end_exclusive, |m| {
-        let mut score = m.ordering_score();
-        if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
-            if let Square::Occupied(curr_dest_piece, _) = board.get_by_index(_to_coord.value()) {
-                if let Square::Occupied(dragged_piece, _) = board.get_by_index(_from_coord.value()) {
-                    let diff = evaluate_piece(*curr_dest_piece) - evaluate_piece(*dragged_piece);
-                    score += MOVE_ORDER_CAPTURE_BASE_VAL;
-                    // Penalty for e.g. queen taking pawn.
-                    score -= branchless_mask!(diff < 0, -diff >> 3);
-                }
-            }
-        }
-        score
-    });
-}
-
-/// Precondition: `add_captures_to_evals` already ran.`
-pub fn add_mobility_to_evals_after_capture(
-    board: &Board,
-    m: &mut MoveList,
-    start: usize,
-    end_exclusive: usize,
-) {
+pub fn add_mobility_to_vec(board: &Board, vec: &mut Vec<MoveWithEval>) {
     let player = board.get_player_with_turn();
     let opp_state = board.get_player_state(player.other_player());
 
-    m.write_evals(start, end_exclusive, |m| {
+    for m in vec.iter_mut() {
         let mut score = m.ordering_score();
-        if score >= MOVE_ORDER_CAPTURE_LOWER_RANGE { return score; }
 
         if let MoveDescription::NormalMove(_from_coord, _to_coord, _) = m.description() {
             if let Square::Occupied(src_piece, src_player) = board.get_by_index(_from_coord.value()) {
 
+                // Reduce queen mobility score because it's double rook/bishop mobility.
                 let mut mobility_score = branchless_mask!(*src_piece != Piece::Queen, MOVE_ORDER_MOB_SQ_VAL);
                 mobility_score += MOVE_ORDER_MOB_SQ_VAL;
 
@@ -248,10 +208,10 @@ pub fn add_mobility_to_evals_after_capture(
             score += MOVE_ORDER_CASTLE_VAL;
         }
 
-        score
-    });
+        m.1 = score;
+    }
 }
-    
+
 #[cfg(test)]
 mod test {
 
@@ -264,10 +224,10 @@ mod test {
         board.set_uniform_row_test(2, Square::Blank);
         board.set_uniform_row_test(6, Square::Blank);
 
-        let mut ml = MoveList::new(50);
-        board.get_pseudo_moves_at(FastCoord::from_xy(3, 7), &mut ml);
-        let write_index = ml.write_index;
-        add_mobility_to_evals_after_capture(&board, &mut ml, 0, write_index);
+        let mut ml = MoveList::new(0);
+        board.get_pseudo_moves_at(FastCoord::from_xy(3, 7), &mut ml); // D1, queen
+
+        add_mobility_to_vec(&board, ml.v_unsafe());
         board.print_move_list(&ml, 0, ml.write_index);
     }
 
@@ -282,8 +242,6 @@ mod test {
 
     #[test]
     fn basic_square_control() {
-        // TODO IMMEDIATE Generate routine to visualize control of each square and pass this test
-
         let mut board = Board::new();
         board.set_uniform_row_test(2, Square::Blank);
         board.set_uniform_row_test(7, Square::Blank);
@@ -334,7 +292,7 @@ mod test {
 
     #[test]
     fn pawndefended_no_pawns_on_board() {
-        let mut board = Board::new();
+        let board = Board::new();
         assert_eq!(0, get_pawndefended_pawn_count(&board, Player::White));
         assert_eq!(0, get_pawndefended_pawn_count(&board, Player::Black));
     }

@@ -1,0 +1,78 @@
+### Analysis of Performance Bottlenecks in the Rust Chess Engine
+
+Based on a thorough review of the codebase, I've identified several significant points of unnecessary slowness in the AI evaluation, move generation, search algorithms, bitboard operations, and related hot paths. The engine uses bitboards effectively for most operations, but there are inefficiencies in evaluation (especially control calculation), move ordering, search memoization, and move generation legality checks. WASM-specific issues (e.g., HashMap performance, lack of SIMD) exacerbate some problems. Below is a detailed report, focusing on bottlenecks, with evidence from the code and potential impacts.
+
+#### 1. **Search Algorithm Bottlenecks (ai/mod.rs)**
+The search uses iterative deepening negamax with alpha-beta pruning, quiescence search (qsearch), late move reduction (LMR), principal variation search (PVS), and transposition table memoization. While generally solid, several inefficiencies stand out:
+
+- **Memoization with HashMap**: The transposition table uses `HashMap<u64, MemoData>`, which can grow large (e.g., thousands of entries). HashMap operations (insert, get) are O(1) average but involve hashing and potential collisions, which is slow in WASM. The table is aged by iterating over all entries (`for (_, MemoData(_, _, _, age)) in self.memo.iter_mut()`), clearing old ones, and retaining based on age. This is called after every move, and with large tables, it can be a bottleneck. Impact: High in deep searches; the code notes "Memo aging, before size = X", suggesting sizes in the thousands. Recommendation: Replace with a fixed-size array (e.g., via a custom hash table) or use a faster hash function if possible in WASM.
+
+- **Move Cloning in Memoization**: `MemoType` stores `MoveWithEval`, and moves are cloned frequently (e.g., `m.clone()` in `find_memo_score` and `negamax`). `MoveWithEval` includes an enum and i32, but cloning adds overhead in hot paths. Impact: Negamax is recursive and called millions of times; unnecessary copies slow it down. Recommendation: Store move indices or references instead of full clones.
+
+- **Node Counter and Termination Checks**: `increment_node_check_termination` increments a counter and checks time every 50,000 nodes. While efficient, the modulo check and time call (`now()`) add minor overhead per node. Impact: In high-node searches (e.g., 1M+ nodes), this accumulates. Recommendation: Optimize by batching checks or using a timer thread if WASM allows.
+
+- **Draw Detection in Search**: Shallow draw checks (e.g., `is_handled_move_shallow_draw`) generate full move lists recursively to detect repetition. This involves extra move generation and hashing. Impact: Rare but expensive when triggered. Recommendation: Cache repetition counts more efficiently.
+
+- **Recursion Depth and Stack Usage**: Negamax recurses deeply (up to depth 7+), and each call involves stack allocations for locals. In WASM, stack is limited; while depths are manageable, it's not optimal. Impact: Potential stack overflows in extreme cases. Recommendation: Convert to iterative search if possible, but negamax is fine for now.
+
+- **QSearch Overhead**: Qsearch generates captures/checks, sorts them, and evaluates. Sorting (`sort_subset_by_eval`) is unstable but still O(n log n) for move lists (up to 1000 elements). Impact: Called at every leaf; with many captures, it's slow. Recommendation: Use a simpler sort or prioritize captures without full sorting.
+
+#### 2. **AI Evaluation Bottlenecks (ai/evaluation.rs)**
+Evaluation computes material, positional bonuses, and control. It's called at every leaf node, so inefficiencies here are critical.
+
+- **Control Calculation**: `calculate_control` is the biggest bottleneck. It loops over all 64 squares, for each square loops over attackers (from `AttackFromBoards`), finds the lowest "badness" attacker, and computes a surplus. `rewrite_af_boards_both_players` builds attack boards by looping over all pieces and computing attacks per piece. The code comments "Turning this off -> 28% more NPS", confirming it's ~28% of total time. Impact: Massive in mid/endgame; nested loops (64 * attackers_per_square) with bitboard operations. Recommendation: Precompute attack tables statically where possible, or approximate control (e.g., only for key squares). Use SIMD if available, but WASM lacks it.
+
+- **Pawn Evaluation Loops**: `get_pawndefended_pawn_count` clones bitboards and loops over pieces to count defended pawns. `count_material` also clones and loops. Impact: Called per evaluation; cloning u64 bitboards is cheap, but loops over up to 16 pieces add up. Recommendation: Cache material/pawn counts in board state.
+
+- **Branchless Masks and Static Arrays**: Uses `branchless_mask` for conditionals (e.g., pawn bonuses), which avoids branches but may not be faster than simple ifs in modern CPUs/WASM. Static arrays like `POSITIONAL_SQUARE_WORTH` are fine. Impact: Minor. Recommendation: Profile to confirm.
+
+- **Evaluation Frequency**: Only computes control if material diff < 300, which is good, but full evaluation still happens often. Impact: Hot path. Recommendation: Incremental evaluation updates during move making.
+
+#### 3. **Move Generation Bottlenecks (board.rs, bitboard.rs)**
+Move generation uses bitboards for attacks, which is efficient, but legality checks and ordering slow it down.
+
+- **Legality Checks via Move/Revert**: `get_moves` generates pseudo-moves, then for each, makes the move, checks if king is in check, and reverts. This is standard but slow: each check involves full board updates (hash, state changes). Impact: In `get_moves`, for ~20-30 moves, this is 20-30 make/revert cycles per position. Called in search many times. Recommendation: Implement a faster legality check (e.g., incremental attack updates) or generate only legal moves from the start.
+
+- **Move Ordering in Hot Paths**: `add_mobility_to_evals_after_capture` computes "imaginary" moves for each non-capture move (via `get_imaginary_pseudo_move_at`), counting attacked squares. This involves full attack computation per move. Called during move gen, which is frequent. Impact: High; for 20 moves, 20 attack calcs. Recommendation: Simplify mobility scoring (e.g., precompute or approximate) or delay full ordering.
+
+- **Sorting Moves**: `sort_subset_by_eval` sorts move lists (up to 1000 elements) using unstable sort. Impact: O(n log n) per sort; called after move gen. Recommendation: Use a partial sort or bucket sort for ordering.
+
+- **Bitboard Loops**: Functions like `consume_loop_indices` use while loops to unset LSBs. Efficient for sparse bitboards, but for dense ones (e.g., all pieces), it's a loop. Impact: Minor, as bitboards are often sparse. Recommendation: Fine as-is.
+
+- **Attack Computations**: Functions like `_write_rook_moves` use bitboard shifts and masks, which are fast, but called per piece per move gen. Impact: Acceptable, but ensure no redundant calcs.
+
+#### 4. **Bitboard Operations (bitboard.rs)**
+Bitboards are well-implemented with u64 and efficient LSB/MSB via De Bruijn sequences. Operations like `&`, `|`, shifts are fast. `consume_loop_indices` modifies the bitboard in a loop, which is optimal for iteration. `pop_count` uses a loop, but could use hardware popcount if available (WASM may not expose it). Impact: Generally efficient; no major bottlenecks. Recommendation: If WASM supports, use `__builtin_popcountll`.
+
+#### 5. **Data Structures and Allocations**
+- **MoveList as Vec**: `MoveList` uses `Vec<MoveWithEval>` with a `write_index`. `grow_with_access` pushes defaults if needed, but capacities are set (e.g., 1000), so rare. Sorting and writing evals loop over the vec. Impact: Vec is heap-allocated; in WASM, allocations are slow. Recommendation: Use a fixed-size array if possible, or pool allocators.
+
+- **Board Cloning**: `self.test_board.clone_from(real_board)` in `make_move` copies the entire board (64 squares + states). Board is ~200-300 bytes, but cloning is unnecessary if incremental updates work. Impact: Per move in AI. Recommendation: Use a single board with undo stack.
+
+- **HashMap Allocations**: Memo HashMap allocates on heap; resizing is slow. Impact: High in WASM. Recommendation: Pre-allocate or use a custom table.
+
+- **Other Clones**: Bitboard clones (u64) are cheap, but frequent (e.g., in loops). Impact: Minor.
+
+#### 6. **Loops in Hot Paths**
+- Control calc: 8x8 outer loop, inner loop over attackers (variable, up to 16).
+- Move ordering: Loop over moves, each computing attacks.
+- Search: Recursive calls with locals.
+- Evaluation: Loops over pieces for material/defended pawns.
+Impact: Nested loops in control are the worst. Recommendation: Optimize control first.
+
+#### 7. **WASM-Specific Issues**
+- **No SIMD**: Control and attack calcs could benefit from vectorization, but WASM lacks it. Impact: Slower than native.
+- **Memory Allocations**: Vec, HashMap heap allocs are slower in WASM. Impact: Frequent in move lists and memo.
+- **Hashing**: Random keys are u64, but WASM's JS interop for `random` may be slow. Impact: Minor.
+- **Recursion/Stack**: Limited stack; deep searches risk issues. Impact: Low, but monitor.
+- **No Parallelism**: Single-threaded; search can't parallelize. Impact: Inefficient for deep searches.
+
+#### Overall Recommendations
+- **Prioritize Control Optimization**: Disable or approximate control for a quick win (28% NPS gain).
+- **Improve Memoization**: Switch to a fixed-size table or faster map.
+- **Reduce Move Gen Overhead**: Faster legality checks and simpler ordering.
+- **Profile with Tools**: Use WASM profilers to measure exact hotspots.
+- **Incremental Updates**: Update evaluations/attacks incrementally during moves.
+- **Memory Pooling**: For Vecs/HashMaps to reduce alloc overhead.
+
+This engine has solid foundations but suffers from evaluation and search inefficiencies. Addressing control calculation and memoization would yield the biggest improvements. If you provide profiling data or specific depths/nodes, I can refine this further.

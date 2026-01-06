@@ -1,4 +1,7 @@
-mod evaluation;
+pub mod evaluation;
+pub mod move_buckets;
+
+pub use move_buckets::*;
 
 use std::collections::HashMap;
 use super::game::entities::*;
@@ -6,10 +9,9 @@ use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
 use super::extern_funcs::{random, now};
-use crate::ai::evaluation::LMR_QUIET_MOVE_SCORE;
 use crate::branchless_mask;
-use crate::game::stringify::slow_stringify_move_standard;
 use crate::{console_log};
+use crate::slow_stringify_move_standard;
 
 pub struct Ai {
     moves_buf: MoveList,
@@ -27,7 +29,8 @@ pub struct Ai {
     min_depth: i8, // Configuration
     iterative_deepening_depth: i8,
     real_board_positional_hashes: *const Vec<u64>,
-    half_moves_without_pawn_move: *const usize
+    half_moves_without_pawn_move: *const usize,
+    move_buckets: MoveBuckets,
 }
 
 // TODO (Minor) Rename this, NoEffect -> Fail low
@@ -74,7 +77,8 @@ impl Ai {
             min_depth: 7,
             iterative_deepening_depth: 1,
             real_board_positional_hashes: 0 as *const Vec<u64>,
-            half_moves_without_pawn_move: 0 as *const usize
+            half_moves_without_pawn_move: 0 as *const usize,
+            move_buckets: MoveBuckets::new(),
         }
     }
 
@@ -283,10 +287,10 @@ impl Ai {
         let moves_end_exclusive = self.moves_buf.write_index;
         if moves_start == moves_end_exclusive { return score; }
 
-        evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
-        self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
+        self.move_buckets.group_moves_qsearch(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
+        let adjusted_end_exclusive = self.move_buckets.reorder_and_assign_scores_qsearch(&mut self.moves_buf, moves_start);
 
-        for i in (moves_start..moves_end_exclusive).rev() {
+        for i in (moves_start..adjusted_end_exclusive).rev() {
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
             let mut revertable = RevertableMove::NoOp(0);
             self.test_board.handle_move(&*m, &mut revertable);
@@ -295,7 +299,7 @@ impl Ai {
                 remaining_depth_opt - 1, 
                 -beta,
                 -alpha,
-                moves_end_exclusive
+                moves_end_exclusive // Not adjusted_end_exclusive
             );
 
             self.test_board.revert_move(&revertable);
@@ -436,24 +440,23 @@ impl Ai {
             return self.get_no_moves_eval(alpha, beta);
         }
 
-        evaluation::add_captures_to_evals(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
-        evaluation::add_mobility_to_evals_after_capture(&self.test_board, &mut self.moves_buf, moves_start, moves_end_exclusive);
-        self.moves_buf.sort_subset_by_eval(moves_start, moves_end_exclusive);
+        self.move_buckets.group_moves_normal(&self.test_board, &self.moves_buf, moves_start, moves_end_exclusive);
+        let adjusted_end_exclusive = self.move_buckets.reorder_and_assign_scores(&mut self.moves_buf, moves_start);
 
-        for i in (moves_start..moves_end_exclusive).rev() {
+        for i in moves_start..adjusted_end_exclusive {
             // Rust philosophy reminder: unsafe pointer bypass because borrowing `m` chain borrows its owner, self, 
             // and `negamax_try_move` might modify self and `moves_buf` inside self, 
             // thus changing `m` while it's still being borrowed as immutable, "value changing underneath". 
             // But the move list start/end indices prevent this.
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
-
             let m_score = (*m).1;
+
             // [LMR]
             // All normal depth except identify the obviously very quiet moves: 
             // neither attack nor capture and usually passive (e.g. backwards moves).
             // Our simple move ordering logic not good enough to aggressively prune.
             // Check real game logs for a feel of what is being pruned. 
-            let less_depth_amount = branchless_mask!(remaining_depth > 2 && m_score < LMR_QUIET_MOVE_SCORE, 2);
+            let less_depth_amount = branchless_mask!(remaining_depth > 2 && m_score >= NORMAL_SEARCH_POOR_MOVE_MIN_SCORE, 2);
 
             let r = self.negamax_try_move(
                 remaining_depth,
@@ -462,7 +465,7 @@ impl Ai {
                 new_alpha_i != NEW_ALPHA_I_NEVER_SET,
                 beta,
                 m,
-                moves_end_exclusive
+                moves_end_exclusive // Not adjusted_end_exclusive
             );
 
             if let SingleMoveResult::NewAlpha(score) = r {

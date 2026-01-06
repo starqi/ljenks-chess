@@ -21,6 +21,7 @@ pub enum MoveMetadata {
 }
 
 // Keep minimal in size, to make move generation fast, and move execution slower
+// TOOD (Minor) Copy or clone?
 #[derive(Clone)]
 pub enum MoveDescription {
     /// (From, to, metadata)
@@ -72,6 +73,11 @@ impl MoveList {
     }
 
     #[inline]
+    pub fn v_unsafe(&mut self) -> &mut Vec<MoveWithEval> {
+        &mut self.v
+    }
+
+    #[inline]
     pub fn write_clone(&mut self, m: &MoveWithEval) {
         self.write(m.clone());
     }
@@ -87,19 +93,6 @@ impl MoveList {
             for _ in 0..requested_index - self.v.len() + 1 {
                 self.v.push(MoveWithEval::default());
             }
-        }
-    }
-
-    pub fn sort_subset_by_eval(&mut self, start: usize, end_exclusive: usize) {
-        let s = &mut self.v[start..end_exclusive];
-        s.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
-    }
-
-    #[inline]
-    pub fn write_evals(&mut self, start: usize, end_exclusive: usize, mut to_eval: impl FnMut(&MoveWithEval) -> i32) {
-        for i in start..end_exclusive {
-            let m = &mut self.v[i];
-            m.1 = to_eval(m);
         }
     }
 }

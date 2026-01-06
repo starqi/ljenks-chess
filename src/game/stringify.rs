@@ -94,6 +94,7 @@ pub fn slow_stringify_move_standard(
                     to_str
                 }
             } else {
+                const EXPECT_MSG1: &str = "Expected player_same_piece_locs to be populated in this scenario.";
                 if before.is_capture {
                     format!("{}{}x{}", 
                         piece_str, 
@@ -101,7 +102,7 @@ pub fn slow_stringify_move_standard(
                             from_coord,
                             *_to_coord,
                             piece,
-                            &before.player_same_piece_locs.unwrap(), // TODO IMMEDIATE Exception message
+                            &before.player_same_piece_locs.expect(EXPECT_MSG1),
                             &before.player_piece_locs,
                             &before.opponent_piece_locs
                         ),
@@ -114,7 +115,7 @@ pub fn slow_stringify_move_standard(
                             from_coord,
                             *_to_coord,
                             piece,
-                            &before.player_same_piece_locs.unwrap(),
+                            &before.player_same_piece_locs.expect(EXPECT_MSG1),
                             &before.player_piece_locs,
                             &before.opponent_piece_locs
                         ),

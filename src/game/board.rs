@@ -5,7 +5,6 @@ use crate::*;
 use super::memo::*;
 use super::coords::*;
 use super::entities::*;
-use super::move_list::*;
 use super::move_test::*;
 use super::bitboard::*;
 
@@ -223,7 +222,6 @@ impl Board {
         });
         bb
     }
-
 
     pub fn print_move_list(&self, ml: &MoveList, start: usize, _end_exclusive: usize) {
         let end_exclusive = if _end_exclusive < ml.v().len() {

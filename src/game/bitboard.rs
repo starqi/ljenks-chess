@@ -1,5 +1,6 @@
 use std::fmt::{Error as FmtError, Display, Formatter};
-use super::super::*;
+
+use crate::BITBOARD_PRESETS;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Bitboard(pub u64);
