@@ -415,27 +415,6 @@ impl Ai {
         self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         let moves_end_exclusive = self.moves_buf.write_index;
 
-        // FIXME Re-investigate
-        /*
-        for i in moves_start..moves_end_exclusive {
-
-            let m = self.moves_buf.get_mutable_snapshot(i);
-            let revertable = self.test_board.handle_move(&m);
-            let memo: Option<&MemoData> = self.memo.get(&self.test_board.get_hash());
-
-            const BIG_NUMBER: i32 = 10000;
-            const EVAL_UPPER_BOUND: i32 = 99999;
-            let r = if let Some(MemoData(opponent_score, _, MemoType::Exact(_))) = memo {
-                -*opponent_score * BIG_NUMBER
-            } else {
-                -EVAL_UPPER_BOUND * BIG_NUMBER
-            };
-
-            self.test_board.revert_move(&revertable);
-            (*m).1 = r;
-        }
-        */
-
         if moves_start == moves_end_exclusive {
             return self.get_no_moves_eval(alpha, beta);
         }
@@ -456,7 +435,7 @@ impl Ai {
             // neither attack nor capture and usually passive (e.g. backwards moves).
             // Our simple move ordering logic not good enough to aggressively prune.
             // Check real game logs for a feel of what is being pruned. 
-            let less_depth_amount = branchless_mask!(remaining_depth > 2 && m_score >= NORMAL_SEARCH_POOR_MOVE_MIN_SCORE, 2);
+            let less_depth_amount = branchless_mask!(remaining_depth > 1 && m_score >= NORMAL_SEARCH_POOR_MOVE_MIN_SCORE, 1);
 
             let r = self.negamax_try_move(
                 remaining_depth,

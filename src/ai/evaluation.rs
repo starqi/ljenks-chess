@@ -51,10 +51,10 @@ fn get_positional_sq_worth_white(x: i32, y: i32) -> i32 {
     POSITIONAL_SQUARE_WORTH_WHITE[(y * 8 + x) as usize]
 }
 
+// TODO IMMEDIATE Index by piece???
 /// Maps `PIECE_TO_CONTROL_BADNESS` number as index to higher-the-better control score. 
 static PIECE_VALUE_TO_CONTROL_MULTIPLIER: [i32; 11] = [
-    // I think I was setting queen control mult to 0 to stop sending the queen out?
-    0, 30, 0, 30, 0, 30, 0, 0, 0, 0, 0
+    0, 50, 0, 30, 0, 30, 0, 0, 0, 10, 0
 ];
 
 #[inline]
@@ -81,6 +81,7 @@ pub fn count_material(board: &Board, player: Player) -> i32 {
 }
 
 fn evaluate_player_wo_control(board: &Board, player: Player) -> i32 {
+    // TODO IMMEDIATE Stop computing defended pawn count until after the >= 300 abs score check
 
     let mut value = count_material(board, player);
 
@@ -104,6 +105,7 @@ fn evaluate_player_wo_control(board: &Board, player: Player) -> i32 {
     value * player.multiplier()
 }
 
+/// (Deprecated...)
 /// Returns how much more white controls all squares than black, where control belongs to the side controlling with a lower valued piece.
 /// A square is scaled by position (favouring center, enemy side) and piece value (lower better).
 fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
@@ -146,6 +148,35 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
     white_square_surplus >> CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT // Chess way of multiplying by (1/256)
 }
 
+fn calculate_mobility(board: &Board) -> i32 {
+    let mut totals = [0i32; 2];
+    for player in [Player::White, Player::Black] {
+        let player_idx = player as usize;
+        let player_offset = player as i32;
+
+        let ps = board.get_player_state(player);
+        let mut piece_locs_copy = ps.piece_locs;
+        piece_locs_copy.consume_loop_indices(|index| {
+            if let Square::Occupied(piece, _) = board.get_by_index(index) {
+                let badness = piece_to_control_badness(*piece);
+                let piece_multiplier = PIECE_VALUE_TO_CONTROL_MULTIPLIER[badness as usize];
+
+                // TOOD Take into account self-captures?
+                let attacks = board.get_imaginary_pseudo_move_at(FastCoord(index), *piece, player);
+                let mut attacks_copy = attacks;
+                attacks_copy.consume_loop_indices(|attack_index| {
+                    let attack_coord = FastCoord(attack_index).to_coord();
+                    let y = attack_coord.1 as i32;
+                    let perspective_y = y + player_offset * (7 - 2 * y); // 7 - y if black
+                    let pos_worth = get_positional_sq_worth_white(attack_coord.0 as i32, perspective_y);
+                    totals[player_idx] += pos_worth * piece_multiplier;
+                });
+            }
+        });
+    }
+    (totals[0] - totals[1]) >> CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT // Chess way of multiplying by (1/256)
+}
+
 /// For a player, gets number of pawns defended by another pawn, pawns counted once.
 /// For eval purposes, does not count attackers on top or bottom rank, pointless edge case.
 fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
@@ -178,7 +209,7 @@ pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32
     let black_eval = evaluate_player_wo_control(board, Player::Black);
     let pre_control = white_eval + black_eval;
     if pre_control.abs() >= 300 { return pre_control; }
-    pre_control + calculate_control(board, prepared_af_boards)
+    pre_control + calculate_mobility(board)
 }
 
 pub fn add_mobility_to_vec(board: &Board, vec: &mut Vec<MoveWithEval>) {
@@ -335,6 +366,30 @@ mod test {
         board.set_by_file_rank_test('c', 5, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('e', 5, Square::Occupied(Piece::Pawn, Player::White));
         assert_eq!(2, get_pawndefended_pawn_count(&board, Player::White));
+    }
+
+    #[test]
+    fn calculate_mobility_equal_then_blocked() {
+        let mut board = Board::with_kings_only();
+        board.set_by_file_rank_test('c', 8, Square::Occupied(Piece::Rook, Player::Black));
+        board.set_by_file_rank_test('g', 8, Square::Occupied(Piece::Rook, Player::Black));
+        board.set_by_file_rank_test('c', 1, Square::Occupied(Piece::Rook, Player::White));
+        board.set_by_file_rank_test('g', 1, Square::Occupied(Piece::Rook, Player::White));
+        let mut surplus = calculate_mobility(&board);
+        assert!(surplus == 0);
+        board.set_by_file_rank_test('g', 2, Square::Occupied(Piece::Pawn, Player::White));
+        surplus = calculate_mobility(&board);
+        assert!(surplus < 0);
+        board.set_by_file_rank_test('g', 7, Square::Occupied(Piece::Pawn, Player::Black));
+        surplus = calculate_mobility(&board);
+        assert!(surplus == 0);
+        board.set_by_file_rank_test('g', 2, Square::Occupied(Piece::Pawn, Player::Black));
+        board.set_by_file_rank_test('g', 7, Square::Occupied(Piece::Pawn, Player::White));
+        surplus = calculate_mobility(&board);
+        assert!(surplus == 0);
+        board.set_by_file_rank_test('g', 2, Square::Blank);
+        surplus = calculate_mobility(&board);
+        assert!(surplus > 0);
     }
 }
 

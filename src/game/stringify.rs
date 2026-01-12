@@ -58,7 +58,7 @@ pub fn slow_stringify_unambiguous_coord(
         if candidates_bb.is_set(i, y) { count += 1; }
     }
     //println!("Count along x {}", count);
-    if count <= 1 { return y_to_rank(x).to_string(); }
+    if count <= 1 { return y_to_rank(y).to_string(); }
 
     format!("{}{}", x_to_file(x), y_to_rank(y))
 }
