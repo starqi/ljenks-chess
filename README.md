@@ -7,12 +7,14 @@ https://starqi.github.io/ljenks-chess/
 #### Deployment
 
 npm run build
+
 Copy www/dist/* to gh-pages branch. 
 
 ### TODO
 
+- Tests for early game advanced pawns, should gain advantage
+    - Position evaluator UI
 - Killer move sibling idea is cool
-- Stop running hash move twice
 - Flickering when dragging
 - Promotion PGN
 - AI is thinking graphic, end game screen

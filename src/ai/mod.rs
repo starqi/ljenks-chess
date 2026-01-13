@@ -17,7 +17,7 @@ pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
     temp_moves: MoveList,
-    af_boards: AttackFromBoards,
+    af_boards: AttackFromBoards, // Deprecated
     memo: HashMap<u64, MemoData>,
     useful_memo_hits: usize,
     hash_move_memo_hits: usize,
@@ -72,7 +72,7 @@ impl Ai {
             fast_found_hits: 0,
             node_counter: 0,
             start_ms: 0,
-            ms_till_terminate: 1500,
+            ms_till_terminate: 2000,
             terminated: false,
             min_depth: 7,
             iterative_deepening_depth: 1,
@@ -268,7 +268,7 @@ impl Ai {
             self.useful_memo_hits += 1;
             return adjusted_score; // No score multiplier necessary
         } else {
-            score_multiplier * evaluation::evaluate(&self.test_board, &mut self.af_boards)
+            score_multiplier * evaluation::evaluate(&self.test_board)
         };
 
         if remaining_depth_opt <= 0 { return score; }
@@ -422,12 +422,15 @@ impl Ai {
         self.move_buckets.group_moves_normal(&self.test_board, &self.moves_buf, moves_start, moves_end_exclusive);
         let adjusted_end_exclusive = self.move_buckets.reorder_and_assign_scores(&mut self.moves_buf, moves_start);
 
+        let hash_move2: MoveDescription = if let Some(inner_m) = &hash_move { inner_m.0.clone() } else { MoveDescription::SkipMove };
+
         for i in moves_start..adjusted_end_exclusive {
             // Rust philosophy reminder: unsafe pointer bypass because borrowing `m` chain borrows its owner, self, 
             // and `negamax_try_move` might modify self and `moves_buf` inside self, 
             // thus changing `m` while it's still being borrowed as immutable, "value changing underneath". 
             // But the move list start/end indices prevent this.
             let m: *const MoveWithEval = &self.moves_buf.v()[i];
+            if (*m).0 == hash_move2 { continue; } // Skip hash move
             let m_score = (*m).1;
 
             // [LMR]

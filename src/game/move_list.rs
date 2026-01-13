@@ -22,7 +22,7 @@ pub enum MoveMetadata {
 
 // Keep minimal in size, to make move generation fast, and move execution slower
 // TOOD (Minor) Copy or clone?
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum MoveDescription {
     /// (From, to, metadata)
     NormalMove(FastCoord, FastCoord, MoveMetadata),

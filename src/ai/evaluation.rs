@@ -22,16 +22,10 @@ const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
 const DEFENDED_PAWN_BONUS: i32 = 4;
 
 // [Non-material board eval]
-// 1 key square (100) * PIECE_VALUE_TO_CONTROL_MULTIPLIER (30) / 256 -> ~ 11 cp.
+// 1 key square (100) * CONTROL_BADNESS_TO_CONTROL_MULTIPLIER (30) / 256 -> ~ 11 cp.
 // 5 defended pawns (most of the board) * DEFENDED_PAWN_BONUS (4) -> 20 cp.
 // Positional play is extremely sensitive to these values in practice.
 // For performance, don't compute non-material eval if material is drastically different.
-
-/// Index is `Piece` enum number.
-/// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
-static PIECE_TO_CONTROL_BADNESS: [i32; 6] = [
-    1, 5, 3, 3, 9, 10
-];
 
 static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 
@@ -51,9 +45,21 @@ fn get_positional_sq_worth_white(x: i32, y: i32) -> i32 {
     POSITIONAL_SQUARE_WORTH_WHITE[(y * 8 + x) as usize]
 }
 
-// TODO IMMEDIATE Index by piece???
+// Pawn = 0, Rook, Knight, Bishop, Queen, King
+static PIECE_TO_MOB_MULTIPLIER: [i32; 6] = [
+    50, 20, 30, 30, 10, 0
+];
+
+/// (Deprecated)
+/// Index is `Piece` enum number.
+/// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
+static PIECE_TO_CONTROL_BADNESS: [i32; 6] = [
+    1, 5, 3, 3, 9, 10
+];
+
+/// (Deprecated)
 /// Maps `PIECE_TO_CONTROL_BADNESS` number as index to higher-the-better control score. 
-static PIECE_VALUE_TO_CONTROL_MULTIPLIER: [i32; 11] = [
+static CONTROL_BADNESS_TO_CONTROL_MULTIPLIER: [i32; 11] = [
     0, 50, 0, 30, 0, 30, 0, 0, 0, 10, 0
 ];
 
@@ -62,12 +68,7 @@ pub fn evaluate_piece(piece: Piece) -> i32 {
     PIECE_VALUES[piece as usize] as i32
 }
 
-#[inline]
-pub fn piece_to_control_badness(piece: Piece) -> i32 {
-    PIECE_TO_CONTROL_BADNESS[piece as usize] as i32
-}
-
-pub fn count_material(board: &Board, player: Player) -> i32 {
+pub fn count_positive_material(board: &Board, player: Player) -> i32 {
     let mut value: i32 = 0;
 
     let ps = board.get_player_state(player);
@@ -80,29 +81,25 @@ pub fn count_material(board: &Board, player: Player) -> i32 {
     value
 }
 
-fn evaluate_player_wo_control(board: &Board, player: Player) -> i32 {
-    // TODO IMMEDIATE Stop computing defended pawn count until after the >= 300 abs score check
-
-    let mut value = count_material(board, player);
-
+fn positive_evaluate_player_not_material_mob(board: &Board, player: Player, mut positive_material: i32) -> i32 {
     let ps = board.get_player_state(player);
 
     // Reward pawn push in later stages of game
-    if value <= MIN_MATERIAL_FOR_PAWN_EVAL {
+    if positive_material <= MIN_MATERIAL_FOR_PAWN_EVAL {
         let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
         let mut piece_locs_copy = ps.piece_locs;
         piece_locs_copy.consume_loop_indices(|index| {
             let coord = FastCoord(index).to_coord();
             let is_pawn = matches!(board.get_by_index(index), Square::Occupied(Piece::Pawn, _));
-            value += branchless_mask!(is_pawn, (pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
+            positive_material += branchless_mask!(is_pawn, (pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
         });
     }
 
     let defended_pawn_count = get_pawndefended_pawn_count(board, player);
-    value += defended_pawn_count as i32 * DEFENDED_PAWN_BONUS;
+    positive_material += defended_pawn_count as i32 * DEFENDED_PAWN_BONUS;
 
-    value += branchless_mask!(ps.is_castled, CASTLE_BONUS);
-    value * player.multiplier()
+    positive_material += branchless_mask!(ps.is_castled, CASTLE_BONUS);
+    positive_material
 }
 
 /// (Deprecated...)
@@ -123,7 +120,7 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
             b2.consume_loop_indices(|index| {
                 match board.get_by_index(index) {
                     Square::Occupied(attacking_piece, attacking_player) => {
-                        let badness = piece_to_control_badness(*attacking_piece);
+                        let badness = PIECE_TO_CONTROL_BADNESS[*attacking_piece as usize];
                         let ref mut lowest_ref = lowest_attacker_worth[*attacking_player as usize];
                         *lowest_ref = min(*lowest_ref, badness);
                     },
@@ -138,7 +135,7 @@ fn calculate_control(board: &Board, prepared_af_boards: &mut AttackFromBoards) -
                     x as i32,
                     // Branchless way: If white controlled, normal coordinates. If black controlled, 7 - y
                     zero_if_white_controlled * 7 + one_or_neg_one_or_zero * (y as i32)
-                ) * PIECE_VALUE_TO_CONTROL_MULTIPLIER[lowest_attacker_worth[zero_if_white_controlled as usize] as usize];
+                ) * CONTROL_BADNESS_TO_CONTROL_MULTIPLIER[lowest_attacker_worth[zero_if_white_controlled as usize] as usize];
                 // TODO (???) Two arrays for black and white
                 white_square_surplus += one_or_neg_one_or_zero * square_worth;
             }
@@ -158,8 +155,7 @@ fn calculate_mobility(board: &Board) -> i32 {
         let mut piece_locs_copy = ps.piece_locs;
         piece_locs_copy.consume_loop_indices(|index| {
             if let Square::Occupied(piece, _) = board.get_by_index(index) {
-                let badness = piece_to_control_badness(*piece);
-                let piece_multiplier = PIECE_VALUE_TO_CONTROL_MULTIPLIER[badness as usize];
+                let piece_multiplier = PIECE_TO_MOB_MULTIPLIER[*piece as usize];
 
                 // TOOD Take into account self-captures?
                 let attacks = board.get_imaginary_pseudo_move_at(FastCoord(index), *piece, player);
@@ -168,6 +164,9 @@ fn calculate_mobility(board: &Board) -> i32 {
                     let attack_coord = FastCoord(attack_index).to_coord();
                     let y = attack_coord.1 as i32;
                     let perspective_y = y + player_offset * (7 - 2 * y); // 7 - y if black
+                    // TODO Why is this multiplying? Add? 
+                    // TODO Starting to see how piece-square tables provide long term intuition,
+                    // and would fit here, since search range can't see the wrongness of bad bishop diagonals, or knights on rim.
                     let pos_worth = get_positional_sq_worth_white(attack_coord.0 as i32, perspective_y);
                     totals[player_idx] += pos_worth * piece_multiplier;
                 });
@@ -204,12 +203,17 @@ fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
 }
 
 /// See [Non-material board eval].
-pub fn evaluate(board: &Board, prepared_af_boards: &mut AttackFromBoards) -> i32 {
-    let white_eval = evaluate_player_wo_control(board, Player::White);
-    let black_eval = evaluate_player_wo_control(board, Player::Black);
-    let pre_control = white_eval + black_eval;
-    if pre_control.abs() >= 300 { return pre_control; }
-    pre_control + calculate_mobility(board)
+pub fn evaluate(board: &Board) -> i32 {
+
+    let white_pm = count_positive_material(board, Player::White);
+    let black_pm = count_positive_material(board, Player::Black);
+    let mut e = white_pm - black_pm;
+    if e.abs() >= 300 { return e; }
+
+    e += positive_evaluate_player_not_material_mob(board, Player::White, white_pm);
+    e -= positive_evaluate_player_not_material_mob(board, Player::Black, black_pm);
+    e += calculate_mobility(board);
+    e
 }
 
 pub fn add_mobility_to_vec(board: &Board, vec: &mut Vec<MoveWithEval>) {
