@@ -12,8 +12,42 @@ Copy www/dist/* to gh-pages branch.
 
 ### TODO
 
+- Saw 2 move draw not 3.
+
+    1. e3 e5
+    2. Qg4 d5
+    3. Qh5 g6
+    4. Qxe5+ Qe7
+    5. Bb5+ c6
+    6. Qxh8 cxb5
+    7. Qxg8 Qf6
+    8. Qxh7 Bg4
+    9. Nc3 d4
+    10. Nxb5 Na6
+    11. f3 Bf5
+    12. Nxd4 Qb6
+    13. Nxf5 gxf5
+    14. Qxf5 Nc5
+    15. Qe5+ Be7
+    16. Qf5 Kf8
+    17. Qh7 Ke8
+    18. Qf5 Kd8
+    19. Qxf7 Kc7
+    20. Qxe7+ Kc8
+    21. Qf8+ Kc7
+    22. Qxa8 Kd7
+    23. Qf8 Kc7
+    24. Qf7+ Kd8
+    25. Qf5 Kc7
+    26. Qf8 Kd7
+    27. Qf7+ Kc6
+    28. Qe8+ Kd6
+    29. Qf7 Kc6
+    30. Qe8+ Kd6
+
 - No leading move bug when faced with repetition 
 - I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
+- Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
 - Tests for early game advanced pawns, should gain advantage
     - Position evaluator UI
 - Killer move sibling idea is cool
