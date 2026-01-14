@@ -51,6 +51,9 @@ class Application {
         this.board.addEventListener('touchmove', this.onTouchMove.bind(this));
         this.board.addEventListener('touchend', this.onTouchEnd.bind(this));
 
+        this.evalText = document.getElementById('eval-text');
+        this.evalBar = document.getElementById('eval-bar');
+
         document.getElementById('self-play-btn').addEventListener('click', () => {
             this.onSelfPlayButtonClick();
         });
@@ -126,6 +129,7 @@ class Application {
                     this.moveHistory = [];
                     this.moveNumber = 1;
                     this.redrawMoveList();
+                    this.updateEvaluation(0.0);
 
                     onReady();
                     cbCalled = true;
@@ -134,6 +138,9 @@ class Application {
             } else if (e.data.type === 'ai_move_done') {
                 this.addLastMoveToHistory(e.data.lastMoveStr);
                 this.refreshBoardFromWasmData(e.data.board);
+                if (e.data.evaluation !== undefined) {
+                    this.updateEvaluation(e.data.evaluation);
+                }
                 this.boardActionLock = false;
 
                 if (e.data.isAutoPlay) this.scheduleSelfPlayChain();
@@ -280,6 +287,30 @@ class Application {
             this.onGenericDragEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
         } else {
             this.onGenericDragEnd(-1, -1);
+        }
+    }
+
+    updateEvaluation(evalScore) {
+        if (evalScore === null || evalScore === undefined) {
+            this.evalText.textContent = '0.0';
+            this.updateEvalBarBackground(0);
+            return;
+        }
+
+        const displayEval = (evalScore / 100).toFixed(1);
+        this.evalText.textContent = evalScore >= 0 ? `+${displayEval}` : displayEval;
+        
+        this.updateEvalBarBackground(evalScore);
+    }
+
+    updateEvalBarBackground(evalScore) {
+        evalScore = Math.max(-1000, Math.min(1000, evalScore));
+        const percentage = ((evalScore + 1000) / 2000) * 100;
+        
+        if (this.isWhiteCameraPosition) {
+            this.evalBar.style.background = `linear-gradient(to top, #fff 0%, #fff ${percentage}%, #000 ${percentage}%, #000 100%)`;
+        } else {
+            this.evalBar.style.background = `linear-gradient(to top, #000 0%, #000 ${100 - percentage}%, #fff ${100 - percentage}%, #fff 100%)`;
         }
     }
 

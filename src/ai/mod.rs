@@ -82,11 +82,10 @@ impl Ai {
         }
     }
 
-    fn get_leading_move(&self) -> Option<(&MoveWithEval, i8)> {
+    pub fn get_leading_move_with_score(&self) -> Option<(&MoveWithEval, i8, i32)> {
         match self.memo.get(&self.test_board.get_hash()) {
-            // In this context, fail high means checkmate
-            Some(MemoData(_, remaining_depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
-                Some((best_move, *remaining_depth))
+            Some(MemoData(score, remaining_depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
+                Some((best_move, *remaining_depth, *score * self.test_board.get_player_with_turn().multiplier()))
             },
             _ => {
                 None
@@ -107,8 +106,8 @@ impl Ai {
                 self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
             }
 
-            let leading_move = self.get_leading_move();
-            if let Some((m, depth)) = leading_move {
+            let leading_move = self.get_leading_move_with_score();
+            if let Some((m, depth, _)) = leading_move {
                 console_log!("{}, d={}", self.test_board.stringify_move_for_js_logs(m), depth);
             } else {
                 console_log!("No leading move");
@@ -124,8 +123,8 @@ impl Ai {
         self.assert_king_pos(Player::White);
         self.assert_king_pos(Player::Black);
 
-        let leading_move = self.get_leading_move();
-        let notation = if let Some((best_move, remaining_depth)) = leading_move {
+        let leading_move = self.get_leading_move_with_score();
+        let notation = if let Some((best_move, remaining_depth, _)) = leading_move {
             console_log!("Making move: {} (depth = {})", self.test_board.stringify_move_for_js_logs(best_move), remaining_depth);
 
             let before_info = BeforeMoveInfoForStringify::slow_new(real_board, best_move);

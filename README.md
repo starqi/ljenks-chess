@@ -12,6 +12,8 @@ Copy www/dist/* to gh-pages branch.
 
 ### TODO
 
+- No leading move bug when faced with repetition 
+- I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
 - Tests for early game advanced pawns, should gain advantage
     - Position evaluator UI
 - Killer move sibling idea is cool

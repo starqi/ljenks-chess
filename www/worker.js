@@ -22,8 +22,9 @@ self.onmessage = (e) => {
         }
         const board = getBoardState();
         const lastMoveStr = main.get_last_move_notation();
+        const evaluation = main.get_last_ai_evaluation();
         if (!isAutoPlay) main.refresh_player_moves();
-        postMessage({type: 'ai_move_done', isAutoPlay, board, lastMoveStr, gameEndState: main.get_game_end_state()});
+        postMessage({type: 'ai_move_done', isAutoPlay, board, lastMoveStr, evaluation, gameEndState: main.get_game_end_state()});
     } else if (e.data.type === 'make_human_move') {
         const {fromX, fromY, toX, toY, isAutoPlay} = e.data;
         if (main.try_move(fromX, fromY, toX, toY)) {

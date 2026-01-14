@@ -52,7 +52,8 @@ pub struct Main {
     last_move: Option<String>,
     game_end_state: Option<GameEndState>,
     position_hashes: Vec<u64>,
-    half_moves_without_pawn_move: usize
+    half_moves_without_pawn_move: usize,
+    last_ai_evaluation: Option<i32>
 }
 
 #[wasm_bindgen]
@@ -83,7 +84,8 @@ impl Main {
             last_move: None,
             game_end_state: None,
             position_hashes: position_hashes,
-            half_moves_without_pawn_move: 0
+            half_moves_without_pawn_move: 0,
+            last_ai_evaluation: None
         }
     }
 
@@ -99,6 +101,7 @@ impl Main {
 
         self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         self.last_move = self.ai.make_move(&mut self.board);
+        self.last_ai_evaluation = self.ai.get_leading_move_with_score().map(|(_move, _depth, score)| score);
 
         self.slow_handle_special_end_conditions(self.board.get_player_with_turn().other_player(), None);
         true
@@ -152,6 +155,10 @@ impl Main {
 
     pub fn get_last_move_notation(&self) -> String {
         self.last_move.clone().unwrap_or_default()
+    }
+
+    pub fn get_last_ai_evaluation(&self) -> Option<i32> {
+        self.last_ai_evaluation
     }
 
     // Board class will only be in terms of # of moves unavailable or whether is checking,

@@ -14,8 +14,14 @@
         <div style="display: flex; justify-content: center; gap: 20px;">
             <div>
                 <h1 id="title" style="font-family: sans-serif; text-align: center; color: #aaaaaa;">Ljenks Age 11 (1901)</h1>
-                <div id="board" class="no-select" style="position: relative; margin: auto; color:#aaaaaa">
-                    <img id="dragged" style="position: absolute; visibility: hidden;">
+                <div style="display: flex; gap: 10px;">
+                    <div id="board" class="no-select" style="position: relative; margin: auto; color:#aaaaaa">
+                        <img id="dragged" style="position: absolute; visibility: hidden;">
+                    </div>
+                    <div id="eval-bar-container" style="display: flex; flex-direction: column; align-items: center; width: 40px; height: 480px; background: #222; border-radius: 5px; position: relative;">
+                        <div id="eval-bar" style="width: 20px; height: 400px; background: linear-gradient(to top, #fff 0%, #fff 50%, #000 50%, #000 100%); border-radius: 10px; position: relative; overflow: hidden;"></div>
+                        <div id="eval-text" style="font-family: monospace; color: #aaa; font-size: 14px; margin-top: 5px;">0.0</div>
+                    </div>
                 </div>
             </div>
             <div id="move-list" style="font-family: monospace; color: #aaaaaa; font-size: 14px; padding: 10px; background: #222; border-radius: 5px; overflow-y: auto;">
