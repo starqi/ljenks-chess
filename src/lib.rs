@@ -161,6 +161,27 @@ impl Main {
         self.last_ai_evaluation
     }
 
+    pub fn get_player_with_turn(&self) -> u8 {
+        self.board.get_player_with_turn() as u8
+    }
+
+    pub fn load_fen(&mut self, fen: &str) -> bool {
+        match Board::from_fen(fen) {
+            Ok(new_board) => {
+                self.board = new_board;
+                self.position_hashes = vec![self.board.get_hash()];
+                self.half_moves_without_pawn_move = 0;
+                self.last_move = None;
+                // TODO IMMEDIATE Edge cases: checkmate, stalemate, no kings
+                self.game_end_state = None;
+                self.last_ai_evaluation = None;
+                self.refresh_player_moves();
+                true
+            },
+            Err(_) => false,
+        }
+    }
+
     // Board class will only be in terms of # of moves unavailable or whether is checking,
     // but this excludes formal checkmate, stalemate, 50 move rule, etc.
     fn slow_handle_special_end_conditions(

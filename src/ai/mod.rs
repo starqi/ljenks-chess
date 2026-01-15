@@ -355,12 +355,12 @@ impl Ai {
             //
             // Normal scenario without this is returning the clamped score from memo.
             //
-            // Now detect the memoized best move being actually a draw-by-repetition right before the draw is 
-            // about to happen.
-            // Detect the current player causing a draw OR current player allowing opponent to force draw.
-            // Such a move will replace normal eval to score 0.
-            // Do this by erasing the memo, not using the memoized move, and proceeding 
-            // to the 2nd part of this implementation in `negamax_try_move` section.
+            // Now detect the memoized best move being actually a draw-by-repetition right before the draw is about to happen.
+            // Detect the current player causing a draw OR current player allowing opponent to force draw (is_handled_move_shallow_draw).
+            // Such a move will suddenly replace normal eval to score 0, "rewriting history".
+            // Do this by replacing the memo, setting age such that it disappears immediately and doesn't interfere with future searches,
+            // but lives long enough to not erase a move and end up with no moves.
+            // For the sake of hash move, this is no longer a hash move, we can't say that the old non-0 non-draw eval is the first best move to consider.
             if remaining_depth >= self.iterative_deepening_depth {
                 let mut revertable = RevertableMove::NoOp(0);
                 let before_move_hash = self.test_board.get_hash();
@@ -369,7 +369,7 @@ impl Ai {
                 let is_draw = self.is_handled_move_shallow_draw(moves_start);
                 self.test_board.revert_move(&revertable);
                 if is_draw {
-                    self.memo.remove(&before_move_hash);
+                    self.replace_memo_for_draw(before_move_hash);
                 } else {
                     console_log!("Hash move {}", clamped_score);
                     return clamped_score; 
@@ -501,9 +501,10 @@ impl Ai {
         let before_move_hash = self.test_board.get_hash();
         self.test_board.handle_move(&*m, &mut revertable);
 
-        // [Lame shallow fast draw detection scenario: during negamax]
+        // [Lame shallow fast draw detection scenario: during negamax, part 2]
         // See other section with same name first. 
         // If draw is detected, then no need to recurse, follow same alpha-beta ideas but with score = 0.
+        // Pretend we searched and got score = 0, and rewrite memo ("rewrite history") also with 0. Caller can't tell.
         // Remember to revert the move.
 
         // TODO (Minor) Inline func helper "is_first_depth"
@@ -511,7 +512,7 @@ impl Ai {
             let is_draw = self.is_handled_move_shallow_draw(moves_start);
             if is_draw {
                 console_log!("negamax_try_move.is_draw");
-                self.memo.remove(&before_move_hash);
+                self.replace_memo_for_draw(before_move_hash);
                 self.test_board.revert_move(&revertable);
 
                 if 0 >= beta {
@@ -569,6 +570,14 @@ impl Ai {
         }
     }
 
+    fn replace_memo_for_draw(&mut self, before_move_hash: u64) {
+        if let Some(entry) = self.memo.get_mut(&before_move_hash) {
+            entry.0 = 0; // Score
+            entry.3 = 9999; // Age, pick a big number that it always expires immediately
+        }
+    }
+
+    // See [Lame shallow fast draw detection scenario...] comments.
     unsafe fn is_handled_move_shallow_draw(&mut self, moves_start: usize) -> bool {
         let post_move_hash = self.test_board.get_hash();
         let real_board_positional_hashes: &Vec<u64> = &*self.real_board_positional_hashes;

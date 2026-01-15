@@ -8,6 +8,7 @@ Basic chess engine compiling to WASM, with browser frontend.
 
 ### Style
 - I prefix methods with an underscore if it has a potentially confusing contract, and there is a cleaner (but maybe slower) overload.
+- Prefer self-documenting code over pointless comments.
 
 ### Architecture
 - Tests are in the same file as the implementation under "mod test".

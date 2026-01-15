@@ -1,7 +1,7 @@
 use std::fmt::{Error as FmtError, Display, Formatter};
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Piece {
     Pawn = 0, Rook, Knight, Bishop, Queen, King
 }
@@ -65,7 +65,7 @@ impl Player {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Square {
     Occupied(Piece, Player), Blank
 }

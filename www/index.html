@@ -30,9 +30,19 @@
                 <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
                     <button id="self-play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Self-Play</button>
                     <button id="play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Play</button>
+                    <button id="load-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Load</button>
                 </div>
             </div>
         </div>
+        <div id="fen-popup" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; border: 1px solid #aaa; padding: 20px; z-index: 1000;">
+            <div style="color: #aaa; font-family: sans-serif; margin-bottom: 10px;">Load FEN:</div>
+            <input type="text" id="fen-input" style="width: 300px; padding: 5px; background: #333; color: #aaa; border: 1px solid #aaa; margin-bottom: 10px;" placeholder="Enter FEN notation...">
+            <div style="display: flex; gap: 10px;">
+                <button id="fen-ok" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px;">OK</button>
+                <button id="fen-cancel" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px;">Cancel</button>
+            </div>
+        </div>
+        <div id="fen-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999;"></div>
         <script src="index.js"></script>
     </body>
 </html>

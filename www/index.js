@@ -60,6 +60,9 @@ class Application {
         document.getElementById('play-btn').addEventListener('click', () => {
             this.onPlayButtonClick();
         });
+        document.getElementById('load-btn').addEventListener('click', () => {
+            this.onLoadButtonClick();
+        });
 
         this.dragged = document.getElementById('dragged');
         this.dragged.width = this.SQUARE_LENGTH;
@@ -97,6 +100,23 @@ class Application {
         }
 
         this.worker = null;
+        
+        document.getElementById('fen-ok').addEventListener('click', () => {
+            this.onFenPopupOk();
+        });
+        document.getElementById('fen-cancel').addEventListener('click', () => {
+            this.closeFenPopup();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (document.getElementById('fen-popup').style.display === 'block') {
+                if (e.key === 'Enter') {
+                    this.onFenPopupOk();
+                } else if (e.key === 'Escape') {
+                    this.closeFenPopup();
+                }
+            }
+        });
+        
         this.onPlayButtonClick();
     }
 
@@ -150,6 +170,17 @@ class Application {
                 this.boardActionLock = false;
 
                 if (e.data.isAutoPlay) this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
+            } else if (e.data.type === 'fen_loaded') {
+                // Set camera position based on player with turn (0=White, 1=Black)
+                this.isWhiteCameraPosition = e.data.playerWithTurn === 0;
+                this.refreshBoardFromWasmData(e.data.board);
+                this.moveHistory = [];
+                this.moveNumber = 1;
+                this.redrawMoveList();
+                this.updateEvaluation(0.0);
+                this.boardActionLock = false;
+            } else if (e.data.type === 'fen_invalid') {
+                alert('Invalid FEN string');
             } else {
                 // For errors and other unknown cases, don't perma lock the board
                 this.boardActionLock = false;
@@ -424,6 +455,30 @@ class Application {
         r.x = (r.x / this.SQUARE_LENGTH) >>> 0;
         r.y = (r.y / this.SQUARE_LENGTH) >>> 0;
         return r;
+    }
+
+    onLoadButtonClick() {
+        this.showFenPopup();
+    }
+
+    showFenPopup() {
+        document.getElementById('fen-popup').style.display = 'block';
+        document.getElementById('fen-overlay').style.display = 'block';
+        document.getElementById('fen-input').value = '';
+        document.getElementById('fen-input').focus();
+    }
+
+    closeFenPopup() {
+        document.getElementById('fen-popup').style.display = 'none';
+        document.getElementById('fen-overlay').style.display = 'none';
+    }
+
+    onFenPopupOk() {
+        const fen = document.getElementById('fen-input').value.trim();
+        if (fen) {
+            this.worker.postMessage({type: 'load_fen', fen});
+            this.closeFenPopup();
+        }
     }
 }
 

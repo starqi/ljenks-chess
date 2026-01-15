@@ -35,6 +35,15 @@ self.onmessage = (e) => {
         } else {
             postMessage({type: 'move_invalid'});
         }
+    } else if (e.data.type === 'load_fen') {
+        const {fen} = e.data;
+        if (main.load_fen(fen)) {
+            const board = getBoardState();
+            const playerWithTurn = main.get_player_with_turn();
+            postMessage({type: 'fen_loaded', board, playerWithTurn});
+        } else {
+            postMessage({type: 'fen_invalid'});
+        }
     }
 };
 
