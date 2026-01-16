@@ -208,7 +208,7 @@ pub fn evaluate(board: &Board) -> i32 {
     let white_pm = count_positive_material(board, Player::White);
     let black_pm = count_positive_material(board, Player::Black);
     let mut e = white_pm - black_pm;
-    if e.abs() >= 300 { return e; }
+    // Early return if big material difference is dumb, won't know how to end the game by advancing pieces 
 
     e += positive_evaluate_player_not_material_mob(board, Player::White, white_pm);
     e -= positive_evaluate_player_not_material_mob(board, Player::Black, black_pm);

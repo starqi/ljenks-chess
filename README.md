@@ -14,13 +14,18 @@ Copy www/dist/* to gh-pages branch.
 
 - FENs
     - 2q1k3/8/8/8/8/8/8/4K3 w - - 0 1
+        - Eval for moving king closer for queen-king mate?
+            - What criteria progresses against stalling
     - k7/6Q1/7R/8/8/4q3/8/4K3 w - - 0 1
+- / Loading FEN while AI play is broken
+- Fix FEN red squares
+- Review FEN AI code
+- / Review code: Dragging empty image frame
 - Ask why is NPS faster in late game
 - / No leading move bug when faced with repetition 
-- I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
-- Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
+- x? I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
+- / Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
 - Tests for early game advanced pawns, should gain advantage
-    - Position evaluator UI
 - Killer move sibling idea is cool
 - Flickering when dragging
 - Promotion PGN

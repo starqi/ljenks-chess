@@ -166,6 +166,7 @@ class Application {
                 if (e.data.isAutoPlay) this.scheduleSelfPlayChain();
             } else if (e.data.type === 'human_move_done') {
                 this.addLastMoveToHistory(e.data.lastMoveStr);
+                this.showDraggedOriginalSquare(); // A bit ugly: Need to be before refreshBoardFromWasmData() due to visibility CSS needing to be invisible as the final state
                 this.refreshBoardFromWasmData(e.data.board);
                 this.boardActionLock = false;
 
@@ -173,6 +174,8 @@ class Application {
             } else if (e.data.type === 'fen_loaded') {
                 // Set camera position based on player with turn (0=White, 1=Black)
                 this.isWhiteCameraPosition = e.data.playerWithTurn === 0;
+                // Twice to get rid of board "diffs" between old and new boards
+                this.refreshBoardFromWasmData(e.data.board);
                 this.refreshBoardFromWasmData(e.data.board);
                 this.moveHistory = [];
                 this.moveNumber = 1;
@@ -183,6 +186,7 @@ class Application {
                 alert('Invalid FEN string');
             } else {
                 // For errors and other unknown cases, don't perma lock the board
+                this.showDraggedOriginalSquare();
                 this.boardActionLock = false;
             }
         };
@@ -198,6 +202,13 @@ class Application {
         this.worker.postMessage({type: 'make_human_move', fromX, fromY, toX, toY, isAutoPlay});
     }
 
+    scheduleSelfPlayChain() {
+        this.makeAiMoveAsync(Application.TEMP_DEPTH, true);
+    }
+
+    //////////////////////////////////////////////////
+    // Side buttons
+
     onPlayButtonClick() {
         this.reset(() => {
             if (!this.isWhiteCameraPosition) {
@@ -212,8 +223,30 @@ class Application {
         });
     }
 
-    scheduleSelfPlayChain() {
-        this.makeAiMoveAsync(Application.TEMP_DEPTH, true);
+    onLoadButtonClick() {
+        this.showFenPopup();
+    }
+
+    showFenPopup() {
+        document.getElementById('fen-popup').style.display = 'block';
+        document.getElementById('fen-overlay').style.display = 'block';
+        document.getElementById('fen-input').value = '';
+        document.getElementById('fen-input').focus();
+    }
+
+    closeFenPopup() {
+        document.getElementById('fen-popup').style.display = 'none';
+        document.getElementById('fen-overlay').style.display = 'none';
+    }
+
+    onFenPopupOk() {
+        const fen = document.getElementById('fen-input').value.trim();
+        if (fen) {
+            this.reset(() => {
+                this.worker.postMessage({type: 'load_fen', fen});
+                this.closeFenPopup();
+            });
+        }
     }
 
     //////////////////////////////////////////////////
@@ -222,7 +255,7 @@ class Application {
     onGenericDragStart(clientX, clientY) {
 
         if (this.draggedImage !== null) {
-            // Contract = draggedImage is synced to null if mouse up
+            // Normal behaviour = draggedImage becomes null on mouse up
             // But if any shenanigans with mouse/touch up not being called, then clean up the invisible piece
             this.draggedImage.style.visibility = 'visible';
         }
@@ -252,14 +285,15 @@ class Application {
     }
 
     onGenericDragEnd(clientX, clientY) {
-        if (this.draggedImage === null) return;
+        if (this.draggedImage === null) return; // Shouldn't happen
 
-        this.draggedImage.style.visibility = 'visible';
-        this.draggedImage = null;
         this.dragged.style.visibility = 'hidden';
+        if (this.boardActionLock) { // Snap dragged piece back if locked, otherwise submit move and wait
+            this.showDraggedOriginalSquare();
+            return;
+        }
 
         const sqCoords = this.getSquareCoordsFromClientCoords(clientX, clientY);
-        if (this.boardActionLock) return; // TODO Premoves
         if (this.isWhiteCameraPosition) {
             this.makeHumanMoveAsync(
                 this.draggedSqX,
@@ -276,6 +310,13 @@ class Application {
                 7 - sqCoords.y,
                 true
             );
+        }
+    }
+
+    showDraggedOriginalSquare() {
+        if (this.draggedImage) {
+            this.draggedImage.style.visibility = 'visible';
+            this.draggedImage = null;
         }
     }
 
@@ -455,30 +496,6 @@ class Application {
         r.x = (r.x / this.SQUARE_LENGTH) >>> 0;
         r.y = (r.y / this.SQUARE_LENGTH) >>> 0;
         return r;
-    }
-
-    onLoadButtonClick() {
-        this.showFenPopup();
-    }
-
-    showFenPopup() {
-        document.getElementById('fen-popup').style.display = 'block';
-        document.getElementById('fen-overlay').style.display = 'block';
-        document.getElementById('fen-input').value = '';
-        document.getElementById('fen-input').focus();
-    }
-
-    closeFenPopup() {
-        document.getElementById('fen-popup').style.display = 'none';
-        document.getElementById('fen-overlay').style.display = 'none';
-    }
-
-    onFenPopupOk() {
-        const fen = document.getElementById('fen-input').value.trim();
-        if (fen) {
-            this.worker.postMessage({type: 'load_fen', fen});
-            this.closeFenPopup();
-        }
     }
 }
 
