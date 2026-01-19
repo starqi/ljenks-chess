@@ -112,6 +112,9 @@ class Application {
         document.getElementById('fen-cancel').addEventListener('click', () => {
             this.closeFenPopup();
         });
+        document.getElementById('fen-overlay').addEventListener('click', () => {
+            this.closeFenPopup();
+        });
         document.addEventListener('keydown', (e) => {
             if (document.getElementById('fen-popup').style.display === 'block') {
                 if (e.key === 'Enter') {
@@ -128,7 +131,9 @@ class Application {
     //////////////////////////////////////////////////
     // Web worker interface
 
-    reset(onReady) {
+    reset(onReady, isWhiteCameraPosition) {
+        if (isWhiteCameraPosition === undefined || isWhiteCameraPosition === null) isWhiteCameraPosition = true;
+
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
@@ -144,7 +149,7 @@ class Application {
             console.log('Worker response', e.data);
 
             if (e.data.type === 'ready') {
-                this.isWhiteCameraPosition = true;
+                this.isWhiteCameraPosition = isWhiteCameraPosition;
                 // Twice to get rid of board "diffs" between old and new boards
                 this.refreshBoardFromWasmData(e.data.board);
                 this.refreshBoardFromWasmData(e.data.board);
@@ -220,12 +225,14 @@ class Application {
     //////////////////////////////////////////////////
     // Side buttons
 
+    onPlayButtonClick_isWhiteCameraPosition = false;
     onPlayButtonClick() {
+        this.onPlayButtonClick_isWhiteCameraPosition = !this.onPlayButtonClick_isWhiteCameraPosition;
         this.reset(() => {
             if (!this.isWhiteCameraPosition) {
                 this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
             }
-        });
+        }, this.onPlayButtonClick_isWhiteCameraPosition);
     }
 
     onSelfPlayButtonClick() {
@@ -258,6 +265,8 @@ class Application {
                 this.worker.postMessage({type: 'load_fen', fen});
                 this.closeFenPopup();
             });
+        } else {
+            this.closeFenPopup();
         }
     }
 

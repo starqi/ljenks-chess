@@ -27,19 +27,18 @@
             <div id="move-list" style="font-family: monospace; color: #aaaaaa; font-size: 14px; padding: 10px; background: #222; border-radius: 5px; overflow-y: auto;">
                 <div style="font-weight: bold; margin-bottom: 10px;font-size: 28;">Moves</div>
                 <textarea style="background:#222; color:#aaa; width:200px; height:500px; font-size:22; resize: none;" id="move-list-content"></textarea>
-                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px; font-size: 24;">
                     <button id="self-play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Self-Play</button>
                     <button id="play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Play</button>
                     <button id="load-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Load</button>
                 </div>
             </div>
         </div>
-        <div id="fen-popup" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; border: 1px solid #aaa; padding: 20px; z-index: 1000;">
-            <div style="color: #aaa; font-family: sans-serif; margin-bottom: 10px;">Load FEN:</div>
-            <input type="text" id="fen-input" style="width: 300px; padding: 5px; background: #333; color: #aaa; border: 1px solid #aaa; margin-bottom: 10px;" placeholder="Enter FEN notation...">
-            <div style="display: flex; gap: 10px;">
-                <button id="fen-ok" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px;">OK</button>
-                <button id="fen-cancel" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px;">Cancel</button>
+        <div id="fen-popup" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; border: 1px solid #aaa; padding: 20px; z-index: 1000; font-size:12px;">
+            <input type="text" id="fen-input" style="width: 300px; padding: 5px; background: #333; color: #aaa; border: 1px solid #aaa; margin-bottom: 10px; font-size: 20" placeholder="Enter FEN notation...">
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button id="fen-ok" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px; font-size: 20">OK</button>
+                <button id="fen-cancel" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px; font-size: 20">Cancel</button>
             </div>
         </div>
         <div id="fen-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999;"></div>
