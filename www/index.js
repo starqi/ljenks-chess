@@ -22,9 +22,14 @@ class Application {
     constructor() {
         // Rust code is thought of from white perspective, then conversion is made in JS if playing as black.
         this.isWhiteCameraPosition = true;
-        // If engine is thinking, lock all moves, cannot simply buffer multiple human actions because engine needs to respond  
-        // between each premove and then redraw.
-        this.boardActionLock = true;
+
+        // [Locking]
+        // Lock specifically the ability for human to drag pieces (currently, the only action possible except for the side buttons)
+        // for EVERY request submission to worker, so worker thinking is always a frozen board.
+        // Clicking on the side buttons however will reset the whole worker and the whole screen immediately and cancel all worker operations.
+        // Therefore, when the worker comes back, then unlock. 
+        // If the worker coming back auto-triggers another worker session (auto-play) then don't unlock.
+        this.boardPieceDragLock = false;
 
         this.draggedImage = null;
         this.draggedSqX = 0;
@@ -128,49 +133,51 @@ class Application {
             this.worker.terminate();
             this.worker = null;
         }
-        this.boardActionLock = true;
+        this.boardPieceDragLock = true;
 
         console.log('Creating new worker');
         this.worker = new Worker(new URL('worker.js', import.meta.url));
         this.worker.onerror = (e) => {
             console.error('Worker error: ', e);
         };
-        let cbCalled = false;
         this.worker.onmessage = (e) => {
             console.log('Worker response', e.data);
 
             if (e.data.type === 'ready') {
-                if (!cbCalled) {
-                    this.isWhiteCameraPosition = !this.isWhiteCameraPosition;
-                    // Twice to get rid of board "diffs" between old and new boards
-                    this.refreshBoardFromWasmData(e.data.board);
-                    this.refreshBoardFromWasmData(e.data.board);
+                this.isWhiteCameraPosition = true;
+                // Twice to get rid of board "diffs" between old and new boards
+                this.refreshBoardFromWasmData(e.data.board);
+                this.refreshBoardFromWasmData(e.data.board);
 
-                    this.moveHistory = [];
-                    this.moveNumber = 1;
-                    this.redrawMoveList();
-                    this.updateEvaluation(0.0);
+                this.moveHistory = [];
+                this.moveNumber = 1;
+                this.redrawMoveList();
+                this.updateEvaluation(null);
 
-                    onReady();
-                    cbCalled = true;
-                    this.boardActionLock = false;
-                }
+                this.boardPieceDragLock = false;
+
+                onReady(); // AFTER everything is done
             } else if (e.data.type === 'ai_move_done') {
                 this.addLastMoveToHistory(e.data.lastMoveStr);
                 this.refreshBoardFromWasmData(e.data.board);
                 if (e.data.evaluation !== undefined) {
                     this.updateEvaluation(e.data.evaluation);
                 }
-                this.boardActionLock = false;
 
-                if (e.data.isAutoPlay) this.scheduleSelfPlayChain();
+                if (e.data.isAutoPlay) {
+                    this.scheduleSelfPlayChain();
+                } else {
+                    this.boardPieceDragLock = false;
+                }
             } else if (e.data.type === 'human_move_done') {
                 this.addLastMoveToHistory(e.data.lastMoveStr);
                 this.showDraggedOriginalSquare(); // A bit ugly: Need to be before refreshBoardFromWasmData() due to visibility CSS needing to be invisible as the final state
                 this.refreshBoardFromWasmData(e.data.board);
-                this.boardActionLock = false;
-
-                if (e.data.isAutoPlay) this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
+                if (e.data.isAutoPlay) {
+                    this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
+                } else {
+                    this.boardPieceDragLock = false;
+                }
             } else if (e.data.type === 'fen_loaded') {
                 // Set camera position based on player with turn (0=White, 1=Black)
                 this.isWhiteCameraPosition = e.data.playerWithTurn === 0;
@@ -180,25 +187,29 @@ class Application {
                 this.moveHistory = [];
                 this.moveNumber = 1;
                 this.redrawMoveList();
-                this.updateEvaluation(0.0);
-                this.boardActionLock = false;
+                this.updateEvaluation(null);
+                this.boardPieceDragLock = false;
             } else if (e.data.type === 'fen_invalid') {
                 alert('Invalid FEN string');
-            } else {
-                // For errors and other unknown cases, don't perma lock the board
+                this.boardPieceDragLock = false;
+            } else if (e.data.type === 'human_move_invalid') {
                 this.showDraggedOriginalSquare();
-                this.boardActionLock = false;
+                this.boardPieceDragLock = false;
+            } else if (e.data.type === 'no_more_ai_moves') {
+                // See [Perma lock scenario]
+            } else {
+                alert('Unexpected error: Unknown type ' + e.data.type);
             }
         };
     }
 
     makeAiMoveAsync(depth, isAutoPlay) {
-        this.boardActionLock = true;
+        this.boardPieceDragLock = true;
         this.worker.postMessage({type: 'make_ai_move', depth, isAutoPlay});
     }
 
     makeHumanMoveAsync(fromX, fromY, toX, toY, isAutoPlay) {
-        this.boardActionLock = true;
+        this.boardPieceDragLock = true;
         this.worker.postMessage({type: 'make_human_move', fromX, fromY, toX, toY, isAutoPlay});
     }
 
@@ -243,6 +254,7 @@ class Application {
         const fen = document.getElementById('fen-input').value.trim();
         if (fen) {
             this.reset(() => {
+                this.boardPieceDragLock = true;
                 this.worker.postMessage({type: 'load_fen', fen});
                 this.closeFenPopup();
             });
@@ -288,7 +300,7 @@ class Application {
         if (this.draggedImage === null) return; // Shouldn't happen
 
         this.dragged.style.visibility = 'hidden';
-        if (this.boardActionLock) { // Snap dragged piece back if locked, otherwise submit move and wait
+        if (this.boardPieceDragLock) { // Snap dragged piece back if locked, otherwise submit move and wait
             this.showDraggedOriginalSquare();
             return;
         }
@@ -364,7 +376,7 @@ class Application {
 
     updateEvaluation(evalScore) {
         if (evalScore === null || evalScore === undefined) {
-            this.evalText.textContent = '0.0';
+            this.evalText.textContent = '?';
             this.updateEvalBarBackground(0);
             return;
         }

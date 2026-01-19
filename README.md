@@ -12,22 +12,20 @@ Copy www/dist/* to gh-pages branch.
 
 ### TODO
 
-- FENs
+- * FENs
     - 2q1k3/8/8/8/8/8/8/4K3 w - - 0 1
         - Eval for moving king closer for queen-king mate?
             - What criteria progresses against stalling
     - k7/6Q1/7R/8/8/4q3/8/4K3 w - - 0 1
-- / Loading FEN while AI play is broken
-- Fix FEN red squares
 - Review FEN AI code
-- / Review code: Dragging empty image frame
+- FEN - Stop resetting at Rust level if fail to load
 - Ask why is NPS faster in late game
-- / No leading move bug when faced with repetition 
-- x? I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
 - / Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
+    - I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
+- Why can't mobility reward pawn push? Use sample positions
+    - Then use king as part of mob, test with checkmating ability
 - Tests for early game advanced pawns, should gain advantage
 - Killer move sibling idea is cool
-- Flickering when dragging
 - Promotion PGN
 - AI is thinking graphic, end game screen
 - Review wasm bindgen tutorial, ./pkg, not ./node_modules
@@ -37,7 +35,7 @@ Copy www/dist/* to gh-pages branch.
 - Write notes on how wasm works, check versions
 - Minor: Pointer jumps to &Bitboard worse than copying
 - ! Choose an opening which forces tactical lines?!
-- Pure square control counterexamples: 
+- * Pure square control counterexamples: 
     - Long range bishop with all target squares pawn controlled -> not valued
 - TODO IMMEDIATE
 - Clean up linter warnings
@@ -55,13 +53,11 @@ Copy www/dist/* to gh-pages branch.
 - Is CC not fully correct
     - Promotions
     - Currently has if statement, which doesn't count checks...
-- Take into account attacked piece value
 - Count re-search statistics
-- If checked, don't do second round of move tests
+- If checked, don't do second round of move tests?
 - Promotion UI
-- Faster coarser sort?
 - Memo unit tests
-- Personal musings - recursive null-move-ish evaluations  
+- ? Personal musings - recursive null-move-ish evaluations  
 - Abstract away 63 - X, and remove 63 part
 - Branchless tricks with repr u8 on data enum
 - Draw when kings only

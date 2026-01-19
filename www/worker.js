@@ -17,7 +17,7 @@ self.onmessage = (e) => {
     if (e.data.type === 'make_ai_move') {
         const {depth, isAutoPlay} = e.data;
         if (!main.make_ai_move()) {
-            postMessage({type: 'move_invalid'});
+            postMessage({type: 'no_more_ai_moves'});
             return;
         }
         const board = getBoardState();
@@ -33,7 +33,7 @@ self.onmessage = (e) => {
             if (!isAutoPlay) main.refresh_player_moves();
             postMessage({type: 'human_move_done', isAutoPlay, board, lastMoveStr, gameEndState: main.get_game_end_state()});
         } else {
-            postMessage({type: 'move_invalid'});
+            postMessage({type: 'human_move_invalid'});
         }
     } else if (e.data.type === 'load_fen') {
         const {fen} = e.data;
