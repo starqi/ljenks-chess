@@ -38,7 +38,7 @@ class Application {
         this.moveHistory = [];
         this.moveNumber = 1;
 
-        this.SQUARE_LENGTH = (0.9 * Math.min(
+        this.SQUARE_LENGTH = (0.75 * Math.min(
             window.innerWidth - document.getElementById('move-list').getBoundingClientRect().width,
             window.innerHeight - document.getElementById('title').getBoundingClientRect().height
         ) / 8) >>> 0;
