@@ -12,12 +12,9 @@ Copy www/dist/* to gh-pages branch.
 
 ### TODO
 
-- * FENs
-    - 2q1k3/8/8/8/8/8/8/4K3 w - - 0 1
-        - Eval for moving king closer for queen-king mate?
-            - What criteria progresses against stalling
-    - k7/6Q1/7R/8/8/4q3/8/4K3 w - - 0 1
 - Review FEN AI code
+- Tailwind?!
+- Get rid of ? evaluation and figure out why it loves e6
 - FEN - Stop resetting at Rust level if fail to load
 - Ask why is NPS faster in late game
 - / Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
@@ -76,3 +73,9 @@ Usage
 - "npm run serve" is enough to compile everything: Rust and JS
     - Doesn't work if not serving from web server
 - ? Need syncWebAssembly
+
+
+### FENs
+
+- 2q1k3/8/8/8/8/8/8/4K3 w - - 0 1
+- k7/6Q1/7R/8/8/4q3/8/4K3 w - - 0 1

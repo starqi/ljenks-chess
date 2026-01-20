@@ -39,7 +39,7 @@ const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;
 
 #[wasm_bindgen]
 #[derive(Clone)]
-pub enum GameEndState { Checkmate = 0, Stalemate = 1, RepetitionCalled = 2 }
+pub enum GameEndState { WhiteWin = 0, BlackWin = 1, Stalemate = 2, Repetition = 3 }
 
 #[wasm_bindgen]
 pub struct Main {
@@ -213,18 +213,22 @@ impl Main {
         }
 
         self.game_end_state = if is_checkmate {
-            Some(GameEndState::Checkmate)
+            if original_player == Player::White {
+                Some(GameEndState::WhiteWin)
+            } else {
+                Some(GameEndState::BlackWin)
+            }
         } else if is_stalemate {
             Some(GameEndState::Stalemate)
         } else {
             let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
             if repetition_count >= 3 {
                 console_log!("Repetition called {}", repetition_count);
-                Some(GameEndState::RepetitionCalled)
+                Some(GameEndState::Repetition)
             } else {
                 if self.half_moves_without_pawn_move >= NO_PAWN_HALF_MOVES_DRAW_THRESHOLD {
                     console_log!("Repetition called no pawn moves {}", self.half_moves_without_pawn_move);
-                    Some(GameEndState::RepetitionCalled)
+                    Some(GameEndState::Repetition)
                 } else {
                     None
                 }

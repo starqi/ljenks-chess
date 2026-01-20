@@ -123,9 +123,58 @@ class Application {
                     this.closeFenPopup();
                 }
             }
+            if (document.getElementById('game-over-popup').style.display === 'block') {
+                if (e.key === 'Escape' || e.key === 'Enter') {
+                    this.closeGameOverPopup();
+                }
+            }
+        });
+        
+        document.getElementById('game-over-close').addEventListener('click', () => {
+            this.closeGameOverPopup();
+        });
+        document.getElementById('game-over-overlay').addEventListener('click', () => {
+            this.closeGameOverPopup();
         });
         
         this.onPlayButtonClick();
+    }
+
+    showGameOverPopup(state) {
+        const title = document.getElementById('game-over-title');
+        const body = document.getElementById('game-over-body');
+        
+        let message = "";
+        let titleText = "Game Over";
+        
+        switch(state) {
+            case 0: // WhiteWin
+                titleText = "Checkmate!";
+                message = "White wins!";
+                break;
+            case 1: // BlackWin
+                titleText = "Checkmate!";
+                message = "Black wins!";
+                break;
+            case 2: // Stalemate
+                titleText = "Draw";
+                message = "Stalemate";
+                break;
+            case 3: // Repetition
+                titleText = "Draw";
+                message = "Repetition or 50-move rule";
+                break;
+        }
+        
+        title.textContent = titleText;
+        body.textContent = message;
+        document.getElementById('game-over-overlay').style.display = 'block';
+        document.getElementById('game-over-popup').style.display = 'block';
+    }
+
+    closeGameOverPopup() {
+        document.getElementById('game-over-overlay').style.display = 'none';
+        document.getElementById('game-over-popup').style.display = 'none';
     }
 
     //////////////////////////////////////////////////
@@ -139,6 +188,7 @@ class Application {
             this.worker = null;
         }
         this.boardPieceDragLock = true;
+        this.closeGameOverPopup();
 
         console.log('Creating new worker');
         this.worker = new Worker(new URL('worker.js', import.meta.url));
@@ -169,7 +219,10 @@ class Application {
                     this.updateEvaluation(e.data.evaluation);
                 }
 
-                if (e.data.isAutoPlay) {
+                if (e.data.gameEndState !== undefined && e.data.gameEndState !== null) {
+                    this.boardPieceDragLock = true;
+                    this.showGameOverPopup(e.data.gameEndState);
+                } else if (e.data.isAutoPlay) {
                     this.scheduleSelfPlayChain();
                 } else {
                     this.boardPieceDragLock = false;
@@ -178,7 +231,11 @@ class Application {
                 this.addLastMoveToHistory(e.data.lastMoveStr);
                 this.showDraggedOriginalSquare(); // A bit ugly: Need to be before refreshBoardFromWasmData() due to visibility CSS needing to be invisible as the final state
                 this.refreshBoardFromWasmData(e.data.board);
-                if (e.data.isAutoPlay) {
+                
+                if (e.data.gameEndState !== undefined && e.data.gameEndState !== null) {
+                    this.boardPieceDragLock = true;
+                    this.showGameOverPopup(e.data.gameEndState);
+                } else if (e.data.isAutoPlay) {
                     this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
                 } else {
                     this.boardPieceDragLock = false;
@@ -201,7 +258,7 @@ class Application {
                 this.showDraggedOriginalSquare();
                 this.boardPieceDragLock = false;
             } else if (e.data.type === 'no_more_ai_moves') {
-                // See [Perma lock scenario]
+                console.error('AI has no moves but game end was not detected!');
             } else {
                 alert('Unexpected error: Unknown type ' + e.data.type);
             }

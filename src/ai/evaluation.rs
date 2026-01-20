@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{min, max};
 use super::super::*;
 use super::super::game::entities::*;
 use super::super::game::bitboard::*;
@@ -11,13 +11,31 @@ static PIECE_VALUES: [i32; 6] = [
     100, 500, 300, 300, 900, 0 // Pretty sure king can be zero for this engine
 ];
 
+//////////////////////////////////////////////////
+// (Deprecated...)
+
 const PAWN_PUSH_BONUS: i32 = 10;
 pub const MIN_MATERIAL_FOR_PAWN_EVAL: i32 = 2500;
+const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
+static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
+/// Index is `Piece` enum number.
+/// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
+static PIECE_TO_CONTROL_BADNESS: [i32; 6] = [
+    1, 5, 3, 3, 9, 10
+];
+/// Maps `PIECE_TO_CONTROL_BADNESS` number as index to higher-the-better control score. 
+static CONTROL_BADNESS_TO_CONTROL_MULTIPLIER: [i32; 11] = [
+    0, 50, 0, 30, 0, 30, 0, 0, 0, 10, 0
+];
+
+//////////////////////////////////////////////////
+
+const ENDGAME_TAPER_START: i32 = 3048;
+const ENDGAME_TAPER_RANGE: i32 = 2048; // 2^11
 const CASTLE_BONUS: i32 = 50;
 const MOVE_ORDER_ATTACK_BONUS: i32 = 50;
 const MOVE_ORDER_CASTLE_VAL: i32 = 80;
 const MOVE_ORDER_MOB_SQ_VAL: i32 = 1;
-const PIECE_VALUE_BOUND_FOR_CONTROL: i32 = 10;
 const CONTROL_SURPLUS_TO_EVAL_DOWNSCALE_SHIFT: i32 = 8;
 const DEFENDED_PAWN_BONUS: i32 = 4;
 
@@ -25,9 +43,6 @@ const DEFENDED_PAWN_BONUS: i32 = 4;
 // 1 key square (100) * CONTROL_BADNESS_TO_CONTROL_MULTIPLIER (30) / 256 -> ~ 11 cp.
 // 5 defended pawns (most of the board) * DEFENDED_PAWN_BONUS (4) -> 20 cp.
 // Positional play is extremely sensitive to these values in practice.
-// For performance, don't compute non-material eval if material is drastically different.
-
-static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 
 /// Controlling enemy territory = good, controlling own territory = useless, control center = good.
 static POSITIONAL_SQUARE_WORTH_WHITE: [i32; 64] = [
@@ -50,18 +65,6 @@ static PIECE_TO_MOB_MULTIPLIER: [i32; 6] = [
     50, 20, 30, 30, 10, 0
 ];
 
-/// (Deprecated)
-/// Index is `Piece` enum number.
-/// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
-static PIECE_TO_CONTROL_BADNESS: [i32; 6] = [
-    1, 5, 3, 3, 9, 10
-];
-
-/// (Deprecated)
-/// Maps `PIECE_TO_CONTROL_BADNESS` number as index to higher-the-better control score. 
-static CONTROL_BADNESS_TO_CONTROL_MULTIPLIER: [i32; 11] = [
-    0, 50, 0, 30, 0, 30, 0, 0, 0, 10, 0
-];
 
 #[inline]
 pub fn evaluate_piece(piece: Piece) -> i32 {
@@ -84,16 +87,17 @@ pub fn count_positive_material(board: &Board, player: Player) -> i32 {
 fn positive_evaluate_player_not_material_mob(board: &Board, player: Player, mut positive_material: i32) -> i32 {
     let ps = board.get_player_state(player);
 
+    //TODO Marked for removal, mobility suffices?
     // Reward pawn push in later stages of game
-    if positive_material <= MIN_MATERIAL_FOR_PAWN_EVAL {
-        let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
-        let mut piece_locs_copy = ps.piece_locs;
-        piece_locs_copy.consume_loop_indices(|index| {
-            let coord = FastCoord(index).to_coord();
-            let is_pawn = matches!(board.get_by_index(index), Square::Occupied(Piece::Pawn, _));
-            positive_material += branchless_mask!(is_pawn, (pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
-        });
-    }
+    //if positive_material <= MIN_MATERIAL_FOR_PAWN_EVAL {
+    //    let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
+    //    let mut piece_locs_copy = ps.piece_locs;
+    //    piece_locs_copy.consume_loop_indices(|index| {
+    //        let coord = FastCoord(index).to_coord();
+    //        let is_pawn = matches!(board.get_by_index(index), Square::Occupied(Piece::Pawn, _));
+    //        positive_material += branchless_mask!(is_pawn, (pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
+    //    });
+    //}
 
     let defended_pawn_count = get_pawndefended_pawn_count(board, player);
     positive_material += defended_pawn_count as i32 * DEFENDED_PAWN_BONUS;
@@ -202,17 +206,71 @@ fn get_pawndefended_pawn_count(board: &Board, player: Player) -> u8 {
     defended_bb.pop_count() as u8
 }
 
+static CENTER_MANHATTAN: [i32; 64] = [
+    14, 12, 10, 8, 8, 10, 12, 14,
+    12, 10,  8, 6, 6,  8, 10, 12,
+    10,  8,  6, 4, 4,  6,  8, 10,
+     8,  6,  4, 2, 2,  4,  6,  8,
+     8,  6,  4, 2, 2,  4,  6,  8,
+    10,  8,  6, 4, 4,  6,  8, 10,
+    12, 10,  8, 6, 6,  8, 10, 12,
+    14, 12, 10, 8, 8, 10, 12, 14,
+];
+
+fn dist_chebyshev(sq1_index: u8, sq2_index: u8) -> i32 {
+    // Higher 3 bits, lower 3 bits; y, x
+    let r1 = (sq1_index >> 3) as i32;
+    let c1 = (sq1_index & 7) as i32;
+    let r2 = (sq2_index >> 3) as i32;
+    let c2 = (sq2_index & 7) as i32;
+    max((r1 - r2).abs(), (c1 - c2).abs())
+}
+
+/// A common and tested way to encourage aggressive kings cornering the other king  
+fn calculate_mop_up(board: &Board, white_pm: i32, black_pm: i32) -> i32 {
+
+    // [Stupid draw detection hack]
+    // If we didn't have this at all, note sometimes the best PV line
+    // involves a 3 move repetition within it, and the engine changes its mind right before it is about to draw, 
+    // preventing a simple queen + king checkmate:
+    // 2q1k3/8/8/8/8/8/8/4K3 w - - 0 1
+    // But if king is encouraged to move, this doesn't happen.
+
+    let white_king = board.get_player_state(Player::White).king_location._lsb_to_index();
+    let black_king = board.get_player_state(Player::Black).king_location._lsb_to_index();
+    
+    // Drive enemy king to corner: 4 * center_dist (Max 56)
+    // Close in with our king: 10 * (7 - dist) (Max 70)
+    if white_pm > black_pm {
+        4 * CENTER_MANHATTAN[black_king as usize] + 10 * (7 - dist_chebyshev(white_king, black_king))
+    } else if black_pm > white_pm {
+        -(4 * CENTER_MANHATTAN[white_king as usize] + 10 * (7 - dist_chebyshev(white_king, black_king)))
+    } else {
+        0
+    }
+}
+
 /// See [Non-material board eval].
 pub fn evaluate(board: &Board) -> i32 {
 
     let white_pm = count_positive_material(board, Player::White);
     let black_pm = count_positive_material(board, Player::Black);
     let mut e = white_pm - black_pm;
-    // Early return if big material difference is dumb, won't know how to end the game by advancing pieces 
+
+    // (Do not do early return if big material difference, won't know how to end the game by advancing pieces )
 
     e += positive_evaluate_player_not_material_mob(board, Player::White, white_pm);
     e -= positive_evaluate_player_not_material_mob(board, Player::Black, black_pm);
     e += calculate_mobility(board);
+
+    let total_material = white_pm + black_pm;
+    if total_material < ENDGAME_TAPER_START {
+        // As total material goes below taper start, the first number rises from 0 until upper bound, which is ~ when material is only 10
+        let weight = (ENDGAME_TAPER_START - total_material).min(ENDGAME_TAPER_RANGE);
+        let mop_up = calculate_mop_up(board, white_pm, black_pm);
+        e += (mop_up * weight) >> 11; // mop_up * (weight / 2048) where weight is (0, 2048]
+    }
+
     e
 }
 
@@ -394,6 +452,36 @@ mod test {
         board.set_by_file_rank_test('g', 2, Square::Blank);
         surplus = calculate_mobility(&board);
         assert!(surplus > 0);
+    }
+
+    #[test]
+    fn mop_up_eval_test() {
+        let mut board = Board::with_kings_only();
+        // White King at E1, Black King at E8. Material equal. Mop up 0.
+        assert_eq!(calculate_mop_up(&board, 0, 0), 0);
+
+        // Give White a Queen. Material difference 900. Mop up should trigger.
+        // White King E1, Black King E8.
+        // Black King Center Dist: E8 (4, 7). Index 60. CENTER_MANHATTAN[60] = 8. 4*8 = 32.
+        // Kings Dist: E1(4,0) to E8(4,7). Dist = 7. 10*(7-7)=0.
+        // Total = 32.
+        let mop_up = calculate_mop_up(&board, 900, 0);
+        assert_eq!(mop_up, 32);
+
+        // Move Black King to corner (A1). A1 is index 56. CENTER_MANHATTAN[56] = 14. 4*14 = 56.
+        // Kings Dist: E1(4,0) to A1(0,7). dx=4, dy=7. max=7. 10*(7-7)=0.
+        // Total = 56.
+        // Should be higher (better for White).
+        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(0, 7).0);
+        let mop_up_corner = calculate_mop_up(&board, 900, 0);
+        assert!(mop_up_corner > mop_up);
+
+        // Move White King closer (C2). C2 is index 50.
+        // Kings Dist: C2(2,6) to A1(0,7). dx=2, dy=1. max=2. 10*(7-2)=50.
+        // Total = 56 + 50 = 106.
+        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(2, 6).0);
+        let mop_up_closer = calculate_mop_up(&board, 900, 0);
+        assert!(mop_up_closer > mop_up_corner);
     }
 }
 

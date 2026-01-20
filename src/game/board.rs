@@ -814,6 +814,7 @@ impl Board {
     }
 
     /// Builds up the `AttackFromBoards` for both players.
+    /// Not used anymore for now...
     pub fn rewrite_af_boards_both_players(&self, result: &mut AttackFromBoards) {
         result.reset();
         let mut piece_locs_clone = self.get_player_state(Player::White).piece_locs.clone();
@@ -828,6 +829,7 @@ impl Board {
 
     /// Precondition: `origin` piece is `player`'s piece.
     /// Builds up the `AttackFromBoards` for one piece at `origin` owned by `player`.
+    /// Not used anymore for now...
     fn update_af_board_at(&self, origin: FastCoord, player: Player, result: &mut AttackFromBoards) {
         let curr_state = self.get_player_state(player);
         let opponent_state = self.get_player_state(player.other_player());
