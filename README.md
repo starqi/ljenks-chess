@@ -16,6 +16,35 @@ Copy www/dist/* to gh-pages branch.
 - Tailwind?!
 - Get rid of ? evaluation and figure out why it loves e6
 - FEN - Stop resetting at Rust level if fail to load
+- TODO IMMEDIATE
+- ??? Why mated, clearly broken
+
+    1. e3 e5
+    2. Nc3 Nf6
+    3. Nf3 Nc6
+    4. Bb5 Be7
+    5. Bxc6 dxc6
+    6. Nxe5 O-O
+    7. O-O Bd6
+    8. d4 Nd7
+    9. Nc4 Bxh2+
+    10. Kxh2 Qh4+
+    11. Kg1 Nf6
+    12. Ne5 Re8
+    13. g3 Qh6
+    14. b3 Bh3
+    15. e4 g5
+    16. Re1 Rxe5
+    17. dxe5 Ng4
+    18. e6 fxe6
+    19. Qd2 Rf8
+    20. Qd4 Bg2
+    21. Kxg2 Qh2+
+    22. Kf1 Rxf2+
+    23. Qxf2 Qxf2#
+
+- Shit talking based on score drop 
+- WASM SIMD opportunities
 - Ask why is NPS faster in late game
 - / Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
     - I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
@@ -63,7 +92,7 @@ Copy www/dist/* to gh-pages branch.
 Read again TODO
 - Debruijin indices
 - Wasm Bindgen
-- Rust lifetimes
+- Rust lifetimes, '_
 - Rust split() collect() magic
 
 --------------------------------------------------

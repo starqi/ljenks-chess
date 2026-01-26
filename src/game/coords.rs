@@ -52,6 +52,7 @@ pub enum Error {
 /// x, y
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
 pub struct Coord(pub u8, pub u8);
+// TODO Is this struct even necessary?
 
 impl Display for Coord {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {

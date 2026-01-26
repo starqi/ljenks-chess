@@ -9,4 +9,3 @@ pub mod searchable_moves;
 #[macro_use]
 pub mod bitboard;
 pub mod bitboard_presets;
-pub mod stringify;

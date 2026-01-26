@@ -11,7 +11,7 @@ use super::game::board::*;
 use super::extern_funcs::{random, now};
 use crate::branchless_mask;
 use crate::{console_log};
-use crate::slow_stringify_move_standard;
+use crate::game::board::slow_stringify_move_standard;
 
 pub struct Ai {
     moves_buf: MoveList,

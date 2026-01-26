@@ -21,7 +21,7 @@ use game::searchable_moves::*;
 use game::move_list::*;
 use wasm_bindgen::prelude::*;
 
-use crate::game::stringify::slow_stringify_move_standard;
+use crate::game::board::slow_stringify_move_standard;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
