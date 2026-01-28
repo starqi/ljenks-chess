@@ -7,12 +7,12 @@ pub mod global_macros {
 
     #[macro_export]
     macro_rules! console_log {
-        ($($t:tt)*) => (crate::custom_log!(crate::extern_funcs::log, $($t)*))
+        ($($t:tt)*) => (crate::custom_log!(crate::platform::log, $($t)*))
     }
 
     #[macro_export]
     macro_rules! console_error {
-        ($($t:tt)*) => (crate::custom_log!(crate::extern_funcs::error, $($t)*))
+        ($($t:tt)*) => (crate::custom_log!(crate::platform::error, $($t)*))
     }
 
     #[macro_export]

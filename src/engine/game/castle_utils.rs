@@ -1,7 +1,7 @@
 use super::move_list::*;
 use super::entities::*;
 use super::coords::*;
-use super::super::*;
+use crate::{console_log};
 
 /// Size 2 arrays are indexed by `Player` enum numbers.
 /// When not split by oo/ooo, first index: `CastleType` enum number, then `Player` enum number

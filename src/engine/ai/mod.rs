@@ -8,10 +8,18 @@ use super::game::entities::*;
 use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
-use super::extern_funcs::{random, now};
+use crate::platform::{random, now};
 use crate::branchless_mask;
 use crate::{console_log};
-use crate::game::board::slow_stringify_move_standard;
+use super::game::board::slow_stringify_move_standard;
+
+pub struct SearchResult {
+    pub score: i32,
+    pub nodes_searched: u64,
+    pub time_ms: u128,
+    pub nps: u64,
+    pub best_move: Option<String>,
+}
 
 pub struct Ai {
     moves_buf: MoveList,
@@ -24,6 +32,7 @@ pub struct Ai {
     fast_found_hits: usize,
     node_counter: u64,
     start_ms: u128,
+    // TODO IMMEDIATE Configurable config
     ms_till_terminate: u128, // Configuration
     terminated: bool,
     min_depth: i8, // Configuration
@@ -99,6 +108,11 @@ impl Ai {
 
         self.start_ms = now();
         self.terminated = false;
+        self.node_counter = 0;
+        self.useful_memo_hits = 0;
+        self.hash_move_memo_hits = 0;
+        self.fast_found_hits = 0;
+
         for d in (self.min_depth..=99).step_by(2) {
             console_log!("\nBegin depth {}", d);
             self.iterative_deepening_depth = d;
@@ -150,11 +164,6 @@ impl Ai {
             now() - self.start_ms
         );
         console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
-
-        self.node_counter = 0;
-        self.useful_memo_hits = 0;
-        self.hash_move_memo_hits = 0;
-        self.fast_found_hits = 0;
 
         //self.memo.clear();
         console_log!("Memo aging, before size = {}", self.memo.len());
@@ -313,8 +322,7 @@ impl Ai {
         alpha
     }
 
-    /// Will assume ownership over all move list elements from `moves_start`
-    /// Only calculates score
+    /// Will assume ownership over all move list elements from `moves_start`.
     unsafe fn negamax(
         &mut self,
         remaining_depth: i8,

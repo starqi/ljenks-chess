@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use super::coords::*;
 use super::move_list::*;
-use super::super::*;
+use super::entities::*;
+use super::super::{CASTLE_UTILS};
+use crate::{console_log};
 
 /// (src, dest)
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]

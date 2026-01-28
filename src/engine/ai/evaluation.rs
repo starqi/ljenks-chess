@@ -1,10 +1,12 @@
 use std::cmp::{min, max};
-use super::super::*;
 use super::super::game::entities::*;
+use super::super::game::coords::*;
 use super::super::game::bitboard::*;
 use super::super::game::board::*;
 use super::super::game::move_test::*;
 use super::super::game::move_list::*;
+use super::super::{CASTLE_UTILS, BITBOARD_PRESETS};
+use crate::branchless_mask;
 
 /// Matches `Piece` enum number
 static PIECE_VALUES: [i32; 6] = [

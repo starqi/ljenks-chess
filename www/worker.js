@@ -1,6 +1,6 @@
 import * as wasm from './node_modules/ljenks-chess';
 
-let main = wasm.Main.new();
+let main = new wasm.Main();
 
 function getBoardState() {
     const board = [];

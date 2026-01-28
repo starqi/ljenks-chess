@@ -92,8 +92,10 @@ Copy www/dist/* to gh-pages branch.
 Read again TODO
 - Debruijin indices
 - Wasm Bindgen
+- lazy_static macros
 - Rust lifetimes, '_
 - Rust split() collect() magic
+- Rust parse() magic
 
 --------------------------------------------------
 

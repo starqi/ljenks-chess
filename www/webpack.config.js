@@ -9,6 +9,11 @@ module.exports = {
         path: path.resolve(__dirname, 'dist'),
         filename: 'index.js',
     },
+    // Enabling ANY of these slowed down NPS by 4x, why? TODO
+    //optimization: { // https://webpack.js.org/configuration/optimization/#optimizationminimize
+    //    minimize: true
+    //},
+    //devtool: 'source-map',
     plugins: [
         new CopyWebpackPlugin({
             patterns: [
@@ -31,10 +36,8 @@ module.exports = {
     ],
     //mode: 'development',
     mode: 'production',
-    // Enabling this slowed down NPS by 4x
-    //devtool: 'source-map',
     experiments: {
-        asyncWebAssembly: true // TODO Review
+        asyncWebAssembly: true // TODO IMMEDIATE Review
     },
     module: {
         rules: [
