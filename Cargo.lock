@@ -84,6 +84,7 @@ name = "ljenks-chess"
 version = "0.0.1"
 dependencies = [
  "console_error_panic_hook",
+ "getrandom",
  "lazy_static",
  "rand",
  "wasm-bindgen",

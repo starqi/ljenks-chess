@@ -8,10 +8,27 @@ use super::game::entities::*;
 use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
-use super::extern_funcs::{random, now};
+use crate::extern_funcs::{random, now};
 use crate::branchless_mask;
 use crate::{console_log};
 use crate::game::board::slow_stringify_move_standard;
+
+/// Configuration for search operations
+#[derive(Clone, Copy, Default)]
+pub struct SearchConfig {
+    pub depth: i8,
+    pub time_limit_ms: Option<u128>,
+}
+
+/// Result of a search operation
+#[derive(Clone)]
+pub struct SearchResult {
+    pub score: i32,
+    pub nodes_searched: u64,
+    pub time_ms: u128,
+    pub nps: u64,
+    pub best_move: Option<String>,
+}
 
 pub struct Ai {
     moves_buf: MoveList,
@@ -79,6 +96,50 @@ impl Ai {
             real_board_positional_hashes: 0 as *const Vec<u64>,
             half_moves_without_pawn_move: 0 as *const usize,
             move_buckets: MoveBuckets::new(),
+        }
+    }
+
+    /// Evaluate a position and return search results
+    /// This is the main interface for the CLI tool
+    pub fn evaluate_position(&mut self, board: &Board, config: SearchConfig) -> SearchResult {
+        self.test_board.clone_from(board);
+        self.min_depth = config.depth;
+        self.ms_till_terminate = config.time_limit_ms.unwrap_or(2000);
+        self.start_ms = now();
+        self.terminated = false;
+        self.node_counter = 0;
+
+        let mut best_score = 0;
+        let mut best_move_notation = None;
+
+        for d in (self.min_depth..=config.depth).step_by(2) {
+            self.iterative_deepening_depth = d;
+            unsafe {
+                best_score = self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
+            }
+
+            if self.terminated || (now() - self.start_ms > self.ms_till_terminate) {
+                break;
+            }
+
+            if let Some((best_move, _, _)) = self.get_leading_move_with_score() {
+                best_move_notation = Some(self.test_board.stringify_move_for_js_logs(best_move));
+            }
+        }
+
+        let elapsed = now() - self.start_ms;
+        let nps = if elapsed > 0 {
+            ((self.node_counter as f64) * 1000.0 / (elapsed as f64)).round() as u64
+        } else {
+            0
+        };
+
+        SearchResult {
+            score: best_score * board.get_player_with_turn().multiplier(),
+            nodes_searched: self.node_counter,
+            time_ms: elapsed,
+            nps,
+            best_move: best_move_notation,
         }
     }
 

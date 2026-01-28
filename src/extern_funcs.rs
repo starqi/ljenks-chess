@@ -1,8 +1,4 @@
-#[cfg(test)]
-use rand::prelude::*;
-#[cfg(test)]
-use std::time::Instant;
-
+#[cfg(feature = "wasm")]
 mod definitions {
     use wasm_bindgen::prelude::*;
 
@@ -15,50 +11,53 @@ mod definitions {
         #[wasm_bindgen(js_namespace = console)]
         pub fn error(s: &str);
 
+        // Supposed to be f64 for JS, look it up 
+
         #[wasm_bindgen(js_namespace = Math)]
         pub fn random() -> f64;
 
         #[wasm_bindgen(js_namespace = Date)]
-        pub fn now() -> u32;
+        pub fn now() -> f64;
     }
 }
 
-#[cfg(test)]
-pub fn log(s: &str) {
-    println!("{}", s);
-}
+#[cfg(feature = "wasm")]
+pub use definitions::{log, error, random};
 
-#[cfg(not(test))]
-pub fn log(s: &str) {
-    definitions::log(s);
-}
-
-#[cfg(test)]
-pub fn error(s: &str) {
-    eprintln!("{}", s);
-}
-
-#[cfg(not(test))]
-pub fn error(s: &str) {
-    definitions::error(s);
-}
-
-#[cfg(test)]
-pub fn random() -> f64 {
-    thread_rng().gen()
-}
-
-#[cfg(not(test))]
-pub fn random() -> f64 {
-    definitions::random()
-}
-
-#[cfg(test)]
+#[cfg(feature = "wasm")]
 pub fn now() -> u128 {
-    Instant::now().elapsed().as_millis()
+    definitions::now() as u128 // Type cast, cannot directly re-export like log, error
 }
 
-#[cfg(not(test))]
-pub fn now() -> u128 {
-    definitions::now() as u128
+mod native {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    pub fn log(s: &str) {
+        println!("{}", s);
+    }
+
+    pub fn error(s: &str) {
+        eprintln!("{}", s);
+    }
+
+    #[cfg(feature = "rand")]
+    pub fn random() -> f64 {
+        use rand::thread_rng;
+        thread_rng().gen()
+    }
+
+    #[cfg(not(feature = "rand"))]
+    pub fn random() -> f64 {
+        0.5
+    }
+
+    pub fn now() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u128
+    }
 }
+
+#[cfg(not(feature = "wasm"))]
+pub use native::{log, error, random, now};

@@ -5,15 +5,25 @@ authors = ["starqi <helloimzirui@gmail.com>"]
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["console_error_panic_hook", "wee_alloc", "my_debug"]
-my_debug = []
+default = ["wasm"]
+my_debug = [] # Project verbosity toggle
+wasm = ["wasm-bindgen", "console_error_panic_hook", "wee_alloc", "my_debug"] # Use JS random
+cli = ["dep:rand", "getrandom"]
+test = ["dep:rand"]
+
+[[bin]]
+name = "chess-cli"
+path = "src/main.rs"
+required-features = ["cli"]
 
 [dependencies]
-wasm-bindgen = "0.2.92"
+wasm-bindgen = { version = "0.2.92", optional = true }
 lazy_static = "1.5.0"
+rand = { version = "0.8.5", optional = true }
+getrandom = { version = "0.2", optional = true }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
