@@ -1,32 +1,18 @@
-#[macro_use]
-extern crate lazy_static;
+// TODO IMMEDIATE Delete all wasm features here?
 
 #[cfg(feature = "wasm")]
 extern crate console_error_panic_hook;
 
-// TODO IMMEDIATE cfg(test)? feature?
-#[cfg(test)]
-extern crate rand;
-
-pub mod extern_funcs;
+mod engine;
+mod platform; 
+#[macro_use]
 mod macros;
-mod game;
-mod ai;
-
-use ai::*;
-use game::bitboard_presets::*;
-use game::memo::*;
-use game::coords::*;
-use game::entities::*;
-use game::board::*;
-use game::castle_utils::*;
-use game::searchable_moves::*;
-use game::move_list::*;
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-use crate::game::board::slow_stringify_move_standard;
+use engine::*;
+use crate::engine::game::board::slow_stringify_move_standard;
 
 // WASM bindgen recommendation.
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
@@ -34,18 +20,17 @@ use crate::game::board::slow_stringify_move_standard;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-lazy_static! {
-    pub static ref CASTLE_UTILS: CastleUtils = CastleUtils::new();
-    pub static ref RANDOM_NUMBER_KEYS: RandomNumberKeys = RandomNumberKeys::new();
-    pub static ref BITBOARD_PRESETS: BitboardPresets = BitboardPresets::new();
-}
-
-const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;
-
+#[cfg(feature = "wasm")]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone)]
-pub enum GameEndState { WhiteWin = 0, BlackWin = 1, Stalemate = 2, Repetition = 3 }
+pub enum GameEndState { 
+    WhiteWin = 0, 
+    BlackWin = 1, 
+    Stalemate = 2, 
+    Repetition = 3 
+}
 
+#[cfg(feature = "wasm")]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Main {
     board: Board,
@@ -61,15 +46,16 @@ pub struct Main {
     last_ai_evaluation: Option<i32>
 }
 
+#[cfg(feature = "wasm")]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 impl Main {
 
     // I believe wasm_bindgen(constructor) caused it to require proper JS new keyword instead of function name new
     #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
     pub fn new() -> Main {
-        #[cfg(feature = "wasm")]
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
+        // TODO Is this necessary?
         // Initialize lazy
         let _ = &CASTLE_UTILS.oo_sqs;
         let _ = &CASTLE_UTILS.ooo_sqs;
@@ -199,6 +185,7 @@ impl Main {
         }
     }
 
+    // TODO IMMEDIATE Does this belong here?
     // Board class will only be in terms of # of moves unavailable or whether is checking,
     // but this excludes formal checkmate, stalemate, 50 move rule, etc.
     fn slow_handle_special_end_conditions(

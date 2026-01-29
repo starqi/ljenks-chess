@@ -5,21 +5,14 @@ pub mod global_macros {
         ($log_func:expr, $($t:tt)*) => ($log_func(&format_args!($($t)*).to_string()))
     }
 
-    #[cfg(feature = "my_debug")]
     #[macro_export]
     macro_rules! console_log {
-        ($($t:tt)*) => (crate::custom_log!(crate::extern_funcs::log, $($t)*))
-    }
-
-    #[cfg(not(feature = "my_debug"))]
-    #[macro_export]
-    macro_rules! console_log {
-        ($($t:tt)*) => ()
+        ($($t:tt)*) => (crate::custom_log!(crate::platform::log, $($t)*))
     }
 
     #[macro_export]
     macro_rules! console_error {
-        ($($t:tt)*) => (crate::custom_log!(crate::extern_funcs::error, $($t)*))
+        ($($t:tt)*) => (crate::custom_log!(crate::platform::error, $($t)*))
     }
 
     #[macro_export]

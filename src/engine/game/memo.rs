@@ -1,5 +1,5 @@
-use super::super::extern_funcs::random;
-use super::super::*;
+use crate::platform::random;
+use crate::{console_log};
 
 fn get_random_u64() -> u64 {
     let mut a = ((u16::MAX as f64) * random()) as u64;

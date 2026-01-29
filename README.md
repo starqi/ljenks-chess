@@ -95,6 +95,7 @@ Read again TODO
 - lazy_static macros
 - Rust lifetimes, '_
 - Rust split() collect() magic
+- Rust parse() magic
 
 --------------------------------------------------
 

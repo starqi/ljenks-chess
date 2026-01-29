@@ -37,7 +37,7 @@ module.exports = {
     //mode: 'development',
     mode: 'production',
     experiments: {
-        asyncWebAssembly: true // TODO Review
+        asyncWebAssembly: true // TODO IMMEDIATE Review
     },
     module: {
         rules: [

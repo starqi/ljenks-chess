@@ -8,20 +8,11 @@ use super::game::entities::*;
 use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
-use crate::extern_funcs::{random, now};
+use crate::platform::{random, now};
 use crate::branchless_mask;
 use crate::{console_log};
-use crate::game::board::slow_stringify_move_standard;
+use super::game::board::slow_stringify_move_standard;
 
-/// Configuration for search operations
-#[derive(Clone, Copy, Default)]
-pub struct SearchConfig {
-    pub depth: i8,
-    pub time_limit_ms: Option<u128>,
-}
-
-/// Result of a search operation
-#[derive(Clone)]
 pub struct SearchResult {
     pub score: i32,
     pub nodes_searched: u64,
@@ -41,6 +32,7 @@ pub struct Ai {
     fast_found_hits: usize,
     node_counter: u64,
     start_ms: u128,
+    // TODO IMMEDIATE Configurable config
     ms_till_terminate: u128, // Configuration
     terminated: bool,
     min_depth: i8, // Configuration
@@ -99,50 +91,6 @@ impl Ai {
         }
     }
 
-    /// Evaluate a position and return search results
-    /// This is the main interface for the CLI tool
-    pub fn evaluate_position(&mut self, board: &Board, config: SearchConfig) -> SearchResult {
-        self.test_board.clone_from(board);
-        self.min_depth = config.depth;
-        self.ms_till_terminate = config.time_limit_ms.unwrap_or(2000);
-        self.start_ms = now();
-        self.terminated = false;
-        self.node_counter = 0;
-
-        let mut best_score = 0;
-        let mut best_move_notation = None;
-
-        for d in (self.min_depth..=config.depth).step_by(2) {
-            self.iterative_deepening_depth = d;
-            unsafe {
-                best_score = self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
-            }
-
-            if self.terminated || (now() - self.start_ms > self.ms_till_terminate) {
-                break;
-            }
-
-            if let Some((best_move, _, _)) = self.get_leading_move_with_score() {
-                best_move_notation = Some(self.test_board.stringify_move_for_js_logs(best_move));
-            }
-        }
-
-        let elapsed = now() - self.start_ms;
-        let nps = if elapsed > 0 {
-            ((self.node_counter as f64) * 1000.0 / (elapsed as f64)).round() as u64
-        } else {
-            0
-        };
-
-        SearchResult {
-            score: best_score * board.get_player_with_turn().multiplier(),
-            nodes_searched: self.node_counter,
-            time_ms: elapsed,
-            nps,
-            best_move: best_move_notation,
-        }
-    }
-
     pub fn get_leading_move_with_score(&self) -> Option<(&MoveWithEval, i8, i32)> {
         match self.memo.get(&self.test_board.get_hash()) {
             Some(MemoData(score, remaining_depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
@@ -160,6 +108,11 @@ impl Ai {
 
         self.start_ms = now();
         self.terminated = false;
+        self.node_counter = 0;
+        self.useful_memo_hits = 0;
+        self.hash_move_memo_hits = 0;
+        self.fast_found_hits = 0;
+
         for d in (self.min_depth..=99).step_by(2) {
             console_log!("\nBegin depth {}", d);
             self.iterative_deepening_depth = d;
@@ -211,11 +164,6 @@ impl Ai {
             now() - self.start_ms
         );
         console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
-
-        self.node_counter = 0;
-        self.useful_memo_hits = 0;
-        self.hash_move_memo_hits = 0;
-        self.fast_found_hits = 0;
 
         //self.memo.clear();
         console_log!("Memo aging, before size = {}", self.memo.len());
@@ -374,8 +322,7 @@ impl Ai {
         alpha
     }
 
-    /// Will assume ownership over all move list elements from `moves_start`
-    /// Only calculates score
+    /// Will assume ownership over all move list elements from `moves_start`.
     unsafe fn negamax(
         &mut self,
         remaining_depth: i8,
