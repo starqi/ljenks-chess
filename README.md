@@ -44,6 +44,7 @@ Copy www/dist/* to gh-pages branch.
     23. Qxf2 Qxf2#
 
 - Shit talking based on score drop 
+- Solutions for index.js linter errors
 - WASM SIMD opportunities
 - Ask why is NPS faster in late game
 - / Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
@@ -63,7 +64,6 @@ Copy www/dist/* to gh-pages branch.
 - ! Choose an opening which forces tactical lines?!
 - * Pure square control counterexamples: 
     - Long range bishop with all target squares pawn controlled -> not valued
-- TODO IMMEDIATE
 - Clean up linter warnings
     - Dead code
 - Evaluation

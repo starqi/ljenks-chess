@@ -38,11 +38,11 @@ fn set_blockable_ray(
     blockers: &Bitboard
 ) {
     let direction_num = direction as usize;
-    let ray = BITBOARD_PRESETS.rays[direction_num][origin.0 as usize];
+    let ray = bitboard_presets().rays[direction_num][origin.0 as usize];
     // There will always be at least 1 blocker, even for an empty board
-    let blocked_at = Bitboard((ray.0 & blockers.0) | BITBOARD_PRESETS.ensure_blocker[ensure_blocker_index].0);
+    let blocked_at = Bitboard((ray.0 & blockers.0) | bitboard_presets().ensure_blocker[ensure_blocker_index].0);
     let first_blocked_at_index = get_first_blocker_index(&blocked_at);
-    let past_blocked_ray = BITBOARD_PRESETS.rays[direction_num][first_blocked_at_index as usize].0;
+    let past_blocked_ray = bitboard_presets().rays[direction_num][first_blocked_at_index as usize].0;
     let moves = Bitboard(past_blocked_ray ^ ray.0);
     b.0 |= moves.0;
 }
@@ -257,14 +257,14 @@ pub fn queen_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, opp
 
 #[inline]
 pub fn _write_knight_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard) -> Bitboard {
-    let mut jumps = Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0);
+    let mut jumps = Bitboard(bitboard_presets().knight_jumps[origin.value() as usize].0);
     unset_own_pieces(&mut jumps, curr_player_piece_locs);
     jumps
 }
 
 #[inline]
 pub fn _write_knight_moves_self_capture(origin: FastCoord) -> Bitboard {
-    Bitboard(BITBOARD_PRESETS.knight_jumps[origin.value() as usize].0)
+    Bitboard(bitboard_presets().knight_jumps[origin.value() as usize].0)
 }
 
 pub fn write_knight_moves(ml: &mut MoveList, origin: FastCoord, curr_player_piece_locs: &Bitboard) {
@@ -299,7 +299,7 @@ pub fn knight_hits_king(origin: FastCoord, curr_player_piece_locs: &Bitboard, op
 
 #[inline]
 pub fn _write_king_moves(origin: FastCoord, curr_player_piece_locs: &Bitboard) -> Bitboard {
-    let mut m = Bitboard(BITBOARD_PRESETS.king_moves[origin.value() as usize].0);
+    let mut m = Bitboard(bitboard_presets().king_moves[origin.value() as usize].0);
     unset_own_pieces(&mut m, curr_player_piece_locs);
     m
 }
@@ -338,7 +338,7 @@ fn _write_pawn_captures(
 ) -> Bitboard {
     let curr_player_num = curr_player as usize;
     let index = origin.value() as usize;
-    Bitboard(BITBOARD_PRESETS.pawn_captures[curr_player_num][index].0 & opponent_piece_locs_inc_en_passant.0)
+    Bitboard(bitboard_presets().pawn_captures[curr_player_num][index].0 & opponent_piece_locs_inc_en_passant.0)
 }
 
 // Not public, don't expose `slide_push_blockers` internal,
@@ -357,11 +357,11 @@ fn _write_pawn_moves(
 
     // Blockers which block pushes, i.e. everyone's pieces, excluding the current pawn, b/c current pawn can't block itself.
     let push_blockers_without_pawn = Bitboard((curr_player_piece_locs.0 | opponent_piece_locs.0) & !(origin_as_bitboard.0)).0;
-    // Convert to mask, blocker positions have 0, all else 1 -> masked against BITBOARD_PRESETS.pawn_pushes -> cannot push pawn to blocked position.
+    // Convert to mask, blocker positions have 0, all else 1 -> masked against get_bitboard_presets().pawn_pushes -> cannot push pawn to blocked position.
     // For 2 square jumps: confusing trick, but do a "motion blur" of the blockers towards the opponent direction,
     // this doesn't make a difference for 1 square push, but lets the mask approach work for 2 square jumps.
     let push_blockers_without_pawn2_mask = !(slide_push_blockers(push_blockers_without_pawn) | push_blockers_without_pawn);
-    let push_locs = BITBOARD_PRESETS.pawn_pushes[curr_player_num][index].0 & push_blockers_without_pawn2_mask;
+    let push_locs = bitboard_presets().pawn_pushes[curr_player_num][index].0 & push_blockers_without_pawn2_mask;
     let capture_locs = _write_pawn_captures(origin, curr_player, &Bitboard(opponent_piece_locs.0 | en_passant_extra_target.0));
     Bitboard(push_locs | capture_locs.0)
 }
@@ -395,7 +395,7 @@ pub fn write_white_pawn_moves(
     let player_num = Player::White as usize;
     let origin_index = origin.value() as usize;
     
-    let double_push_mask = BITBOARD_PRESETS.pawn_move_masks[player_num][origin_index].double_push;
+    let double_push_mask = bitboard_presets().pawn_move_masks[player_num][origin_index].double_push;
     
     consume_pawn_moves_staged(b, origin, ml, double_push_mask, *en_passant_extra_target);
 }
@@ -448,7 +448,7 @@ pub fn write_black_pawn_moves(
     let player_num = Player::Black as usize;
     let origin_index = origin.value() as usize;
     
-    let double_push_mask = BITBOARD_PRESETS.pawn_move_masks[player_num][origin_index].double_push;
+    let double_push_mask = bitboard_presets().pawn_move_masks[player_num][origin_index].double_push;
     
     consume_pawn_moves_staged(b, origin, ml, double_push_mask, *en_passant_extra_target);
 }

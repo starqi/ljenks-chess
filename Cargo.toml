@@ -16,7 +16,7 @@ default = ["wasm"] # Language server will read this
 # Or never change and recommend cargo build --no-default-features -F cli                               
 # Mutually exclusive features - only one should be enabled at a time
 wasm = ["wasm-bindgen", "console_error_panic_hook", "wee_alloc", "my_debug"] # Use JS random
-cli = ["dep:rand", "getrandom"]
+cli = ["dep:rand"]
 
 # CLI binary - only built when cli feature is enabled
 [[bin]]
@@ -28,9 +28,6 @@ required-features = ["cli"]
 wasm-bindgen = { version = "0.2.92", optional = true }
 lazy_static = "1.5.0"
 rand = { version = "0.8.5", optional = true }
-getrandom = { version = "0.2", optional = true }
-# TODO IMMEDIATE Do we need getrandom
-# TODO IMMEDIATE Why slow NPS again?
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

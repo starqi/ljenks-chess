@@ -13,14 +13,6 @@ use crate::branchless_mask;
 use crate::{console_log};
 use super::game::board::slow_stringify_move_standard;
 
-pub struct SearchResult {
-    pub score: i32,
-    pub nodes_searched: u64,
-    pub time_ms: u128,
-    pub nps: u64,
-    pub best_move: Option<String>,
-}
-
 pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,

@@ -2,6 +2,7 @@ Basic chess engine compiling to WASM, with browser frontend.
 
 ### Basics
 - Run "cargo check" to find compile errors and warnings.
+- Run "npm run build" instead "www" folder to build/check WASM build. 
 - Run "cargo test" to run unit tests.
     - "Eyeball" tests don't have assertions, you can un-ignore them, run and check the output, but it won't fail.
 - Use cargo check and test as a feedback loop for verifying features. 

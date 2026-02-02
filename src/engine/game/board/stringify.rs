@@ -50,7 +50,6 @@ pub struct AfterMoveInfoForStringify {
     pub is_checkmate: bool,
 }
 
-// TODO IMMEDIATE Nc5xe4 is a thing right?
 /// e.g. For Nxe4, fills in Nc5xe4, or the c part of Ra1 -> Rac1.
 /// Does not handle pawns, do that elsewhere.
 /// Does not handle castle or special moves, that's why `piece` is required.

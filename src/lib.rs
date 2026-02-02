@@ -1,6 +1,3 @@
-// TODO IMMEDIATE Delete all wasm features here?
-
-#[cfg(feature = "wasm")]
 extern crate console_error_panic_hook;
 
 mod engine;
@@ -8,7 +5,6 @@ mod platform;
 #[macro_use]
 mod macros;
 
-#[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
 use engine::*;
@@ -20,8 +16,7 @@ use crate::engine::game::board::slow_stringify_move_standard;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[cfg(feature = "wasm")]
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[wasm_bindgen]
 #[derive(Clone)]
 pub enum GameEndState { 
     WhiteWin = 0, 
@@ -30,8 +25,7 @@ pub enum GameEndState {
     Repetition = 3 
 }
 
-#[cfg(feature = "wasm")]
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[wasm_bindgen]
 pub struct Main {
     board: Board,
     ai: Ai,
@@ -46,24 +40,16 @@ pub struct Main {
     last_ai_evaluation: Option<i32>
 }
 
-#[cfg(feature = "wasm")]
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[wasm_bindgen]
 impl Main {
 
     // I believe wasm_bindgen(constructor) caused it to require proper JS new keyword instead of function name new
-    #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
+    #[wasm_bindgen(constructor)]
     pub fn new() -> Main {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-        // TODO Is this necessary?
-        // Initialize lazy
-        let _ = &CASTLE_UTILS.oo_sqs;
-        let _ = &CASTLE_UTILS.ooo_sqs;
-        let _ = &CASTLE_UTILS.king_traversal_coords;
-        let _ = &CASTLE_UTILS.draggable_coords;
-        let _ = &RANDOM_NUMBER_KEYS.squares;
-        let _ = &BITBOARD_PRESETS.knight_jumps;
-        let _ = &BITBOARD_PRESETS.rays;
+        // Initialize globals explicitly
+        init_globals();
 
         let board = Board::new();
         let initial_hash = board.get_hash();
@@ -83,12 +69,12 @@ impl Main {
         }
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn get_game_end_state(&self) -> Option<GameEndState> {
         self.game_end_state.clone()
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn make_ai_move(&mut self) -> bool {
         if self.game_end_state.is_some() {
             console_log!("Game has ended, cannot make AI move");
@@ -103,7 +89,7 @@ impl Main {
         true
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn refresh_player_moves(&mut self) {
         self.move_list.write_index = 0;
         self.board.get_moves(&mut self.temp, &mut self.move_list);
@@ -114,7 +100,7 @@ impl Main {
         self.searchable.reset_from_move_list(self.board.get_player_with_turn(), &mut self.move_list, 0, end_exclusive);
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> bool {
         if self.game_end_state.is_some() {
             console_log!("Game has ended, cannot make AI move");
@@ -141,7 +127,7 @@ impl Main {
         }
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn get_piece(&self, x: i32, y: i32) -> i8 {
         if let Ok(Square::Occupied(piece, player)) = self.board.get_by_xy_safe(x, y) {
             ((*piece as u8) + 1) as i8 * player.multiplier() as i8
@@ -152,22 +138,22 @@ impl Main {
         }
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn get_last_move_notation(&self) -> String {
         self.last_move.clone().unwrap_or_default()
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn get_last_ai_evaluation(&self) -> Option<i32> {
         self.last_ai_evaluation
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn get_player_with_turn(&self) -> u8 {
         self.board.get_player_with_turn() as u8
     }
 
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    #[wasm_bindgen]
     pub fn load_fen(&mut self, fen: &str) -> bool {
         match Board::from_fen(fen) {
             Ok(new_board) => {

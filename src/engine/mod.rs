@@ -1,6 +1,3 @@
-// Shared chess engine code - used by both CLI and WASM
-// TODO IMMEDIATE ???
-
 pub mod game;
 pub mod ai;
 
@@ -15,21 +12,28 @@ pub use game::castle_utils::*;
 pub use game::searchable_moves::*;
 pub use game::move_list::*;
 
-use lazy_static::lazy_static;
+use std::sync::OnceLock;
 
-lazy_static! {
-    pub static ref CASTLE_UTILS: CastleUtils = CastleUtils::new();
-    pub static ref RANDOM_NUMBER_KEYS: RandomNumberKeys = RandomNumberKeys::new();
-    pub static ref BITBOARD_PRESETS: BitboardPresets = BitboardPresets::new();
+pub static CASTLE_UTILS: OnceLock<CastleUtils> = OnceLock::new();
+pub static RANDOM_NUMBER_KEYS: OnceLock<RandomNumberKeys> = OnceLock::new();
+pub static BITBOARD_PRESETS: OnceLock<BitboardPresets> = OnceLock::new();
+
+pub fn init_globals() {
+    CASTLE_UTILS.get_or_init(|| CastleUtils::new());
+    RANDOM_NUMBER_KEYS.get_or_init(|| RandomNumberKeys::new());
+    BITBOARD_PRESETS.get_or_init(|| BitboardPresets::new());
 }
 
-// Constants
+pub fn castle_utils() -> &'static CastleUtils {
+    CASTLE_UTILS.get().expect("CASTLE_UTILS not initialized")
+}
+
+pub fn random_number_keys() -> &'static RandomNumberKeys {
+    RANDOM_NUMBER_KEYS.get().expect("RANDOM_NUMBER_KEYS not initialized")
+}
+
+pub fn bitboard_presets() -> &'static BitboardPresets {
+    BITBOARD_PRESETS.get().expect("BITBOARD_PRESETS not initialized")
+}
+
 pub const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;
-
-#[derive(Clone, Debug)]
-pub enum GameEndState { 
-    WhiteWin = 0, 
-    BlackWin = 1, 
-    Stalemate = 2, 
-    Repetition = 3 
-}

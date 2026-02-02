@@ -183,6 +183,11 @@ class Application {
     reset(onReady, isWhiteCameraPosition) {
         if (isWhiteCameraPosition === undefined || isWhiteCameraPosition === null) isWhiteCameraPosition = true;
 
+        // Creating worker before termination dodges Firefox "bug" causing massive NPS slow down,
+        // hypothesis: internals not liking terminate() immediately followed by making a new worker due to some sort of compiled code clean up.   
+        // Using shared thread array for quick termination -> hoops to jump through regarding security and providing "require-corp" headers.
+        console.log('Creating new worker before terminate');
+        const replacementWorker = new Worker(new URL('worker.js', import.meta.url));
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
@@ -190,8 +195,7 @@ class Application {
         this.boardPieceDragLock = true;
         this.closeGameOverPopup();
 
-        console.log('Creating new worker');
-        this.worker = new Worker(new URL('worker.js', import.meta.url));
+        this.worker = replacementWorker;
         this.worker.onerror = (e) => {
             console.error('Worker error: ', e);
         };

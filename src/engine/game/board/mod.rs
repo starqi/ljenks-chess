@@ -104,8 +104,8 @@ impl Board {
             en_passant_extra_target: TargetSquare::new()
         };
         board.set_standard_rows();
-        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(CASTLE_UTILS.pre_castle_king_sq[Player::White as usize].0);
-        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(CASTLE_UTILS.pre_castle_king_sq[Player::Black as usize].0);
+        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(castle_utils().pre_castle_king_sq[Player::White as usize].0);
+        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(castle_utils().pre_castle_king_sq[Player::Black as usize].0);
         board.hash = board.calculate_hash();
         board
     }
@@ -164,20 +164,20 @@ impl Board {
         let bs = self.get_player_state(Player::Black);
 
         if ws.moved_castle_piece[CastleType::Oo as usize] {
-            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Oo as usize][Player::White as usize]; 
+            h ^= random_number_keys().moved_castle_piece[CastleType::Oo as usize][Player::White as usize]; 
         }
         if ws.moved_castle_piece[CastleType::Ooo as usize] {
-            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Ooo as usize][Player::White as usize]; 
+            h ^= random_number_keys().moved_castle_piece[CastleType::Ooo as usize][Player::White as usize]; 
         }
 
         if bs.moved_castle_piece[CastleType::Oo as usize] {
-            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Oo as usize][Player::Black as usize]; 
+            h ^= random_number_keys().moved_castle_piece[CastleType::Oo as usize][Player::Black as usize]; 
         }
         if bs.moved_castle_piece[CastleType::Ooo as usize] {
-            h ^= RANDOM_NUMBER_KEYS.moved_castle_piece[CastleType::Ooo as usize][Player::Black as usize]; 
+            h ^= random_number_keys().moved_castle_piece[CastleType::Ooo as usize][Player::Black as usize]; 
         } 
 
-        if self.get_player_with_turn() == Player::White { h ^= RANDOM_NUMBER_KEYS.is_white_to_play; }
+        if self.get_player_with_turn() == Player::White { h ^= random_number_keys().is_white_to_play; }
         
         if self.en_passant_extra_target.has_target() {
             h ^= Self::get_loc_hash(self.en_passant_extra_target.index);
@@ -202,12 +202,12 @@ impl Board {
 
     #[inline]
     fn get_square_hash(i: usize, piece: Piece, player: Player) -> u64 {
-        RANDOM_NUMBER_KEYS.squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
+        random_number_keys().squares[i * PER_SQUARE_LEN + (piece as usize) + (player as usize) * PIECE_LEN]
     }
 
     #[inline]
     fn get_loc_hash(index: u8) -> u64 {
-        RANDOM_NUMBER_KEYS.locations[index as usize]
+        random_number_keys().locations[index as usize]
     }
 
     //////////////////////////////////////////////////

@@ -7,9 +7,10 @@ pub enum FenError {
     InvalidActiveColor,
     InvalidCastlingRights,
     InvalidEnPassantSquare,
-    // TODO
-    InvalidHalfmoveClock,
-    InvalidFullmoveNumber,
+
+    // TODO (Minor)
+    //InvalidHalfmoveClock,
+    //InvalidFullmoveNumber,
 }
 
 impl Display for FenError {
@@ -20,8 +21,8 @@ impl Display for FenError {
             FenError::InvalidActiveColor => write!(f, "Invalid active color"),
             FenError::InvalidCastlingRights => write!(f, "Invalid castling rights"),
             FenError::InvalidEnPassantSquare => write!(f, "Invalid en passant square"),
-            FenError::InvalidHalfmoveClock => write!(f, "Invalid halfmove clock"),
-            FenError::InvalidFullmoveNumber => write!(f, "Invalid fullmove number"),
+            //FenError::InvalidHalfmoveClock => write!(f, "Invalid halfmove clock"),
+            //FenError::InvalidFullmoveNumber => write!(f, "Invalid fullmove number"),
         }
     }
 }
@@ -43,6 +44,7 @@ impl Board {
         Ok(board)
     }
 
+    /// No half-move and full move counter implemented at the moment. 
     pub fn load_fen(&mut self, fen: &str) -> Result<(), FenError> {
         let parts: Vec<&str> = fen.trim().split_whitespace().collect();
         if parts.len() != 6 {
@@ -61,9 +63,6 @@ impl Board {
         self.parse_castling_rights(parts[2])?;
         self.parse_en_passant(parts[3])?;
 
-        // Skip halfmove clock and fullmove number for now (not used in this implementation)
-        // TODO IMMEDIATE
- 
         self.update_derived_state();
         self.hash = self.calculate_hash();
 

@@ -5,8 +5,8 @@ use super::super::game::bitboard::*;
 use super::super::game::board::*;
 use super::super::game::move_test::*;
 use super::super::game::move_list::*;
-use super::super::{CASTLE_UTILS, BITBOARD_PRESETS};
 use crate::branchless_mask;
+use crate::bitboard_presets;
 
 /// Matches `Piece` enum number
 static PIECE_VALUES: [i32; 6] = [
@@ -296,7 +296,7 @@ pub fn add_mobility_to_vec(board: &Board, vec: &mut Vec<MoveWithEval>) {
                 let piece_atks = Bitboard(moves.0 & opp_state.piece_locs.0);
                 score += branchless_mask!(piece_atks.0 != 0, MOVE_ORDER_ATTACK_BONUS);
 
-                let mut important_sq_moves = Bitboard(moves.0 & (BITBOARD_PRESETS.central_squares.0 | BITBOARD_PRESETS.opponent_squares[*src_player as usize].0));
+                let mut important_sq_moves = Bitboard(moves.0 & (bitboard_presets().central_squares.0 | bitboard_presets().opponent_squares[*src_player as usize].0));
                 score += important_sq_moves.consume_pop_count() as i32 * mobility_score;
             }
         } else if let MoveDescription::Castle(_) = m.description() {

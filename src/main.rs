@@ -6,8 +6,11 @@ mod platform;
 mod macros;
 
 use engine::*;
+use engine::init_globals;
 
 fn main() {
+    init_globals();
+    
     const DEFAULT_DEPTH: i8 = 7;
     let args: Vec<String> = env::args().collect();
     

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use super::coords::*;
 use super::move_list::*;
 use super::entities::*;
-use super::super::{CASTLE_UTILS};
+use super::super::{castle_utils};
 use crate::{console_log};
 
 /// (src, dest)
@@ -31,7 +31,7 @@ impl SearchableMoves {
                     self.map.insert(SearchableMoveKey(*from, *to), m.clone());
                 }
                 MoveDescription::Castle(castle_type) => {
-                    for (from, to) in (CASTLE_UTILS.draggable_coords[*castle_type as usize][curr_player as usize]).iter() {
+                    for (from, to) in (castle_utils().draggable_coords[*castle_type as usize][curr_player as usize]).iter() {
                         self.map.insert(SearchableMoveKey(*from, *to), m.clone());
                     }
                 }

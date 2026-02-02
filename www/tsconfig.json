@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "module": "es2020",
     "strict": false,
     "checkJs": true,
     "allowJs": true,

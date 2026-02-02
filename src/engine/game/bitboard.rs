@@ -1,6 +1,6 @@
 use std::fmt::{Error as FmtError, Display, Formatter};
 
-use crate::BITBOARD_PRESETS;
+use crate::bitboard_presets;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Bitboard(pub u64);
@@ -109,7 +109,7 @@ impl Bitboard {
         // - All Debruijn sequence substrings are 1 to 1 to 0-63
         // - Each unique isolated LSB will shift 1-to-1 to a unique Debruijn substring, which is 0-63; do another 1-to-1 map st.
         //   traversing the board via LSB yields consecutive 0 to 63
-        BITBOARD_PRESETS.debruijn_indices[(((self.0 & (!self.0 + 1)).wrapping_mul(BITBOARD_PRESETS.debruijn_sequence)) >> 58) as usize]
+        bitboard_presets().debruijn_indices[(((self.0 & (!self.0 + 1)).wrapping_mul(bitboard_presets().debruijn_sequence)) >> 58) as usize]
     }
 
     /// Precondition: Bitboard value is not 0
@@ -126,7 +126,7 @@ impl Bitboard {
         x |= x >> 32;
         x >>= 1;
         x = x.wrapping_add(1);
-        BITBOARD_PRESETS.debruijn_indices[((x.wrapping_mul(BITBOARD_PRESETS.debruijn_sequence)) >> 58) as usize]
+        bitboard_presets().debruijn_indices[((x.wrapping_mul(bitboard_presets().debruijn_sequence)) >> 58) as usize]
     }
 
     pub fn consume_loop_indices(&mut self, mut cb: impl FnMut(u8) -> ()) {

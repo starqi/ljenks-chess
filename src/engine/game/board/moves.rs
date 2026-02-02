@@ -37,9 +37,9 @@ impl Board {
             },
             RevertableMove::Castle(castle_type, old_hash, old_moved_castle_piece, old_king_location, old_en_passant_target) => {
                 let sqs: &[BeforeAfterSquare] = if *castle_type == CastleType::Oo {
-                    &CASTLE_UTILS.oo_sqs[opponent as usize]
+                    &castle_utils().oo_sqs[opponent as usize]
                 } else {
-                    &CASTLE_UTILS.ooo_sqs[opponent as usize]
+                    &castle_utils().ooo_sqs[opponent as usize]
                 };
                 self.apply_before_after_sqs(sqs, false);
 
@@ -109,8 +109,8 @@ impl Board {
     /// Some ridiculous branchless implementation
     fn update_castle_state_hash(&mut self, player: Player, moved_oo: bool, moved_ooo: bool) {
         let player_num = player as usize;
-        let oo_key = RANDOM_NUMBER_KEYS.moved_castle_piece[0][player_num];
-        let ooo_key = RANDOM_NUMBER_KEYS.moved_castle_piece[1][player_num];
+        let oo_key = random_number_keys().moved_castle_piece[0][player_num];
+        let ooo_key = random_number_keys().moved_castle_piece[1][player_num];
 
         let c: [u64; 2] = [0, !0];
 
@@ -269,9 +269,9 @@ impl Board {
 
                 let sqs: &[BeforeAfterSquare];
                 if *castle_type == CastleType::Oo {
-                    sqs = &CASTLE_UTILS.oo_sqs[curr_player_num];
+                    sqs = &castle_utils().oo_sqs[curr_player_num];
                 } else {
-                    sqs = &CASTLE_UTILS.ooo_sqs[curr_player_num];
+                    sqs = &castle_utils().ooo_sqs[curr_player_num];
                 }
                 self.apply_before_after_sqs(sqs, true);
                 // We moved the king, so we moved a castle piece for both castles, set both flags
@@ -279,7 +279,7 @@ impl Board {
 
                 let curr_state = self.get_player_state_mut(curr_player);
                 curr_state.is_castled = true; // Does not need to be part of hash, but is useful to AI
-                curr_state.king_location = Bitboard::from_index(CASTLE_UTILS.post_castle_king_sq[*castle_type as usize][curr_player_num].0);
+                curr_state.king_location = Bitboard::from_index(castle_utils().post_castle_king_sq[*castle_type as usize][curr_player_num].0);
 
                 result
             }
@@ -288,7 +288,7 @@ impl Board {
             }
         };
 
-        self.hash ^= RANDOM_NUMBER_KEYS.is_white_to_play;
+        self.hash ^= random_number_keys().is_white_to_play;
         self.player_with_turn = self.player_with_turn.other_player();
     }
 
@@ -320,12 +320,12 @@ impl Board {
             let curr_player_num = curr_player as usize;
 
             let blank_coords: &[FastCoord] = if castle_type == CastleType::Oo {
-                &CASTLE_UTILS.oo_blank_coords[curr_player_num]
+                &castle_utils().oo_blank_coords[curr_player_num]
             } else {
-                &CASTLE_UTILS.ooo_blank_coords[curr_player_num]
+                &castle_utils().ooo_blank_coords[curr_player_num]
             };
 
-            if self._can_castle(blank_coords, &CASTLE_UTILS.king_traversal_coords[castle_type as usize][curr_player as usize], curr_player) {
+            if self._can_castle(blank_coords, &castle_utils().king_traversal_coords[castle_type as usize][curr_player as usize], curr_player) {
                 move_list.write(MoveWithEval(MoveDescription::Castle(castle_type), 0));
             }
         }
@@ -366,7 +366,7 @@ impl Board {
             king_potential_rook_atks: _write_rook_moves(opponent_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
             king_potential_bishop_atks: _write_bishop_moves(opponent_king_coord, &curr_state.piece_locs, &opponent_state.piece_locs),
             king_potential_knight_atks: _write_knight_moves(opponent_king_coord, &curr_state.piece_locs),
-            king_potential_pawn_atks: BITBOARD_PRESETS.pawn_captures[opponent as usize][opponent_king_coord.0 as usize]
+            king_potential_pawn_atks: bitboard_presets().pawn_captures[opponent as usize][opponent_king_coord.0 as usize]
         };
 
         temp_moves.write_index = 0;
