@@ -22,7 +22,7 @@ self.onmessage = (e) => {
         }
         const board = getBoardState();
         const lastMoveStr = main.get_last_move_notation();
-        const evaluation = main.get_last_ai_evaluation();
+        const evaluation = main.get_last_move_ai_eval();
         if (!isAutoPlay) main.refresh_player_moves();
         postMessage({type: 'ai_move_done', isAutoPlay, board, lastMoveStr, evaluation, gameEndState: main.get_game_end_state()});
     } else if (e.data.type === 'make_human_move') {
@@ -40,7 +40,8 @@ self.onmessage = (e) => {
         if (main.load_fen(fen)) {
             const board = getBoardState();
             const playerWithTurn = main.get_player_with_turn();
-            postMessage({type: 'fen_loaded', board, playerWithTurn});
+            const evaluation = main.evaluate();
+            postMessage({type: 'fen_loaded', board, playerWithTurn, evaluation});
         } else {
             postMessage({type: 'fen_invalid'});
         }

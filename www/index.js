@@ -69,7 +69,7 @@ class Application {
             this.onLoadButtonClick();
         });
 
-        this.dragged = document.getElementById('dragged');
+        this.dragged = /** @type {HTMLImageElement} */ (document.getElementById('dragged'));
         this.dragged.width = this.SQUARE_LENGTH;
         this.dragged.height = this.SQUARE_LENGTH;
 
@@ -83,8 +83,8 @@ class Application {
 
             for (let i = 0; i < 8; ++i) {
                 const square = document.createElement('span');
-                square.style.width = this.SQUARE_LENGTH;
-                square.style.height = this.SQUARE_LENGTH;
+                square.style.width = this.SQUARE_LENGTH + 'px';
+                square.style.height = this.SQUARE_LENGTH + 'px';
                 square.style.display = 'inline-block';
                 square.style.backgroundColor = (i + delta) % 2 === 0 ? '#eeeeee' : '#915355';
                 square.dataset.backgroundColor = square.style.backgroundColor;
@@ -253,7 +253,7 @@ class Application {
                 this.moveHistory = [];
                 this.moveNumber = 1;
                 this.redrawMoveList();
-                this.updateEvaluation(null);
+                this.updateEvaluation(e.data.evaluation);
                 this.boardPieceDragLock = false;
             } else if (e.data.type === 'fen_invalid') {
                 alert('Invalid FEN string');
@@ -286,20 +286,22 @@ class Application {
     //////////////////////////////////////////////////
     // Side buttons
 
-    onPlayButtonClick_isWhiteCameraPosition = false;
+    buttonFlipper = false; // ONLY used by play and self-play buttons 
+
     onPlayButtonClick() {
-        this.onPlayButtonClick_isWhiteCameraPosition = !this.onPlayButtonClick_isWhiteCameraPosition;
+        this.buttonFlipper = !this.buttonFlipper;
         this.reset(() => {
             if (!this.isWhiteCameraPosition) {
                 this.makeAiMoveAsync(Application.TEMP_DEPTH, false);
             }
-        }, this.onPlayButtonClick_isWhiteCameraPosition);
+        }, this.buttonFlipper);
     }
 
     onSelfPlayButtonClick() {
+        this.buttonFlipper = !this.buttonFlipper;
         this.reset(() => {
             this.scheduleSelfPlayChain();
-        });
+        }, this.buttonFlipper);
     }
 
     onLoadButtonClick() {
@@ -309,7 +311,7 @@ class Application {
     showFenPopup() {
         document.getElementById('fen-popup').style.display = 'block';
         document.getElementById('fen-overlay').style.display = 'block';
-        document.getElementById('fen-input').value = '';
+        /** @type {HTMLInputElement} */ (document.getElementById('fen-input')).value = '';
         document.getElementById('fen-input').focus();
     }
 
@@ -319,7 +321,7 @@ class Application {
     }
 
     onFenPopupOk() {
-        const fen = document.getElementById('fen-input').value.trim();
+        const fen = /** @type {HTMLInputElement} */ (document.getElementById('fen-input')).value.trim();
         if (fen) {
             this.reset(() => {
                 this.boardPieceDragLock = true;
@@ -532,7 +534,7 @@ class Application {
     }
 
     redrawMoveList() {
-        const moveListContent = document.getElementById('move-list-content');
+        const moveListContent = /** @type {HTMLTextAreaElement} */ (document.getElementById('move-list-content'));
         moveListContent.value = '';
         for (let i = 0; i < this.moveHistory.length; i += 2) {
             

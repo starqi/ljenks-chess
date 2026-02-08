@@ -37,7 +37,7 @@ pub struct Main {
     game_end_state: Option<GameEndState>,
     position_hashes: Vec<u64>,
     half_moves_without_pawn_move: usize,
-    last_ai_evaluation: Option<i32>
+    last_move_ai_eval: Option<i32>
 }
 
 #[wasm_bindgen]
@@ -65,7 +65,7 @@ impl Main {
             game_end_state: None,
             position_hashes: position_hashes,
             half_moves_without_pawn_move: 0,
-            last_ai_evaluation: None
+            last_move_ai_eval: None
         }
     }
 
@@ -83,7 +83,7 @@ impl Main {
 
         self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         self.last_move = self.ai.make_move(&mut self.board);
-        self.last_ai_evaluation = self.ai.get_leading_move_with_score().map(|(_move, _depth, score)| score);
+        self.last_move_ai_eval = self.ai.get_leading_move_with_score().map(|(_move, _depth, score)| score);
 
         self.slow_handle_special_end_conditions(self.board.get_player_with_turn().other_player(), None);
         true
@@ -144,8 +144,17 @@ impl Main {
     }
 
     #[wasm_bindgen]
-    pub fn get_last_ai_evaluation(&self) -> Option<i32> {
-        self.last_ai_evaluation
+    pub fn get_last_move_ai_eval(&self) -> Option<i32> {
+        self.last_move_ai_eval
+    }
+
+    #[wasm_bindgen]
+    pub fn evaluate(&mut self) -> Option<i32> {
+        if self.game_end_state.is_some() {
+            return None;
+        }
+        self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
+        self.ai.evaluate(&self.board)
     }
 
     #[wasm_bindgen]
@@ -162,7 +171,7 @@ impl Main {
                 self.half_moves_without_pawn_move = 0;
                 self.last_move = None;
                 self.game_end_state = None;
-                self.last_ai_evaluation = None;
+                self.last_move_ai_eval = None;
                 self.refresh_player_moves();
                 true
             },

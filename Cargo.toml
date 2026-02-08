@@ -4,21 +4,17 @@ version = "0.0.1"
 authors = ["starqi <helloimzirui@gmail.com>"]
 edition = "2021"
 
-# Only build as library when using WASM
+[features]
+my_debug = [] # Project verbosity toggle
+default = ["wasm"] # Language server will read this version
+# Mutually exclusive features - only one of [wasm, cli] should be enabled at a time
+wasm = ["wasm-bindgen", "console_error_panic_hook", "wee_alloc", "my_debug"] # Use JS random
+cli = ["dep:rand"]
+
 [lib]
 crate-type = ["cdylib"]
 required-features = ["wasm"]
 
-[features]
-my_debug = [] # Project verbosity toggle
-default = ["wasm"] # Language server will read this 
-# TODO IMMEDIATE Test changing this
-# Or never change and recommend cargo build --no-default-features -F cli                               
-# Mutually exclusive features - only one should be enabled at a time
-wasm = ["wasm-bindgen", "console_error_panic_hook", "wee_alloc", "my_debug"] # Use JS random
-cli = ["dep:rand"]
-
-# CLI binary - only built when cli feature is enabled
 [[bin]]
 name = "chess-cli"
 path = "src/main.rs"

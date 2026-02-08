@@ -96,9 +96,9 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, real_board: &mut Board) -> Option<(String, IsPawn)> {
-
-        self.test_board.clone_from(real_board);
+    /// Internal vars will change, memo will be updated (which contains the result), but nothing directly returned
+    fn run_search(&mut self, source_board: &Board) {
+        self.test_board.clone_from(source_board);
 
         self.start_ms = now();
         self.terminated = false;
@@ -121,15 +121,38 @@ impl Ai {
                 console_log!("No leading move");
             }
 
-            if self.terminated { 
+            if self.terminated {
                 console_log!("Terminated due to time");
-                break; 
+                break;
             }
         }
 
         self.test_board.assert_hash();
         self.assert_king_pos(Player::White);
         self.assert_king_pos(Player::Black);
+    }
+
+    fn post_search_cleanup(&mut self) {
+        console_log!(
+            "Useful memo hits - {}, hash move memo hits - {}, size - {}, fast found - {}, time - {}",
+            self.useful_memo_hits,
+            self.hash_move_memo_hits,
+            self.memo.len(),
+            self.fast_found_hits,
+            now() - self.start_ms
+        );
+        console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
+
+        console_log!("Memo aging, before size = {}", self.memo.len());
+        for (_, MemoData(_, _, _, age)) in self.memo.iter_mut() {
+            *age += 1;
+        }
+        self.memo.retain(|_, MemoData(_, _, _, age)| *age <= 5);
+        console_log!("Memo aging, after size = {}", self.memo.len());
+    }
+
+    pub fn make_move(&mut self, real_board: &mut Board) -> Option<(String, IsPawn)> {
+        self.run_search(real_board);
 
         let leading_move = self.get_leading_move_with_score();
         let result = if let Some((best_move, remaining_depth, _)) = leading_move {
@@ -150,25 +173,16 @@ impl Ai {
             console_log!("No move");
             None
         };
-        console_log!(
-            "Useful memo hits - {}, hash move memo hits - {}, size - {}, fast found - {}, time - {}",
-            self.useful_memo_hits,
-            self.hash_move_memo_hits,
-            self.memo.len(),
-            self.fast_found_hits,
-            now() - self.start_ms
-        );
-        console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
 
-        //self.memo.clear();
-        console_log!("Memo aging, before size = {}", self.memo.len());
-        for (_, MemoData(_, _, _, age)) in self.memo.iter_mut() {
-            *age += 1;
-        }
-        self.memo.retain(|_, MemoData(_, _, _, age)| *age <= 5);
-        console_log!("Memo aging, after size = {}", self.memo.len());
+        self.post_search_cleanup();
 
         result
+    }
+
+    pub fn evaluate(&mut self, board: &Board) -> Option<i32> {
+        self.run_search(board);
+        self.post_search_cleanup();
+        self.get_leading_move_with_score().map(|(_, _, score)| score)
     }
 
     fn assert_king_pos(&self, player: Player) {

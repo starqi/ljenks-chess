@@ -10,6 +10,27 @@ npm run build
 
 Copy www/dist/* to gh-pages branch. 
 
+##### CLI
+
+Note the project is setup so that default features is WASM for language server,
+so in the build command here, need to specify "cli" features and turn off default features,
+and cargo check doesn't work either because it scans everything including the WASM bindgen code. 
+
+```bash
+cargo build --release --bin chess-cli --no-default-features -F cli
+./target/release/chess-cli <FEN> [depth]
+```
+
+Evaluate the starting position at depth 10:
+```bash
+./target/release/chess-cli "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+```
+
+Evaluate a tactical position at depth 12:
+```bash
+./target/release/chess-cli "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3" 12
+```
+
 ### TODO
 
 - Review FEN AI code
@@ -19,6 +40,7 @@ Copy www/dist/* to gh-pages branch.
 - TODO IMMEDIATE
 - ??? Why mated, clearly broken
 
+    5rk1/ppp4p/2p1p2q/6p1/4P1n1/1PN3Pb/P1PQ1P2/R1B1R1K1 w - - 2 20
     1. e3 e5
     2. Nc3 Nf6
     3. Nf3 Nc6

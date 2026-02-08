@@ -1,17 +1,25 @@
 {
   "compilerOptions": {
     "module": "es2020",
+    "moduleResolution": "bundler", // Allow importing PNG files syntax from Webpack
     "strict": false,
     "checkJs": true,
     "allowJs": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "."
+    "rootDir": ".",
+    "lib": ["es2020", "dom"], // "dom": Target frontend "window"/"document" classes
+    "target": "es2020",
+    "skipLibCheck": true // Stop checking d.ts types for libs
   },
   "include": [
-    "**/*.js"
+    "index.js",
+    "worker.js",
+    "loader.js",
+    "types.d.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "dist"
   ]
 }
