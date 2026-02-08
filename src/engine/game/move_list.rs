@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use super::coords::*;
 use super::entities::*;
 

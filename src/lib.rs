@@ -33,7 +33,7 @@ pub struct Main {
     temp: MoveList,
     move_list: MoveList,
     searchable: SearchableMoves,
-    last_move: Option<String>,
+    last_move: Option<(String, IsPawn)>,
     game_end_state: Option<GameEndState>,
     position_hashes: Vec<u64>,
     half_moves_without_pawn_move: usize,
@@ -140,7 +140,7 @@ impl Main {
 
     #[wasm_bindgen]
     pub fn get_last_move_notation(&self) -> String {
-        self.last_move.clone().unwrap_or_default()
+        self.last_move.clone().map(|x| x.0).unwrap_or_default()
     }
 
     #[wasm_bindgen]
@@ -161,7 +161,6 @@ impl Main {
                 self.position_hashes = vec![self.board.get_hash()];
                 self.half_moves_without_pawn_move = 0;
                 self.last_move = None;
-                // TODO IMMEDIATE Edge cases: checkmate, stalemate, no kings
                 self.game_end_state = None;
                 self.last_ai_evaluation = None;
                 self.refresh_player_moves();
@@ -171,12 +170,13 @@ impl Main {
         }
     }
 
-    // TODO IMMEDIATE Does this belong here?
     // Board class will only be in terms of # of moves unavailable or whether is checking,
     // but this excludes formal checkmate, stalemate, 50 move rule, etc.
     fn slow_handle_special_end_conditions(
         &mut self,
         original_player: Player,
+        // Provide this if caller delegates to this method to set self.last_move, minor private method shenanigans:
+        // self.ai generates notation, but self.board is not "self.player" so doesn't include notation
         before_info_if_setting_last_move: Option<(&BeforeMoveInfoForStringify, &MoveWithEval)>
     ) {
         let is_check = self.board.is_checking(original_player);
@@ -187,19 +187,21 @@ impl Main {
         if let Some((before, m)) = before_info_if_setting_last_move {
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
             let notation = slow_stringify_move_standard(m, before, &after_info);
-            self.last_move = Some(notation);
+            self.last_move = Some(
+                (notation, matches!(before.piece, Some(Piece::Pawn)))
+            );
         }
 
         let current_hash = self.board.get_hash();
         self.position_hashes.push(current_hash);
 
-        if let Some(m) = &self.last_move {
-            if m.len() == 2 { // TODO IMMEDIATE Proper pawn detection, repeated code?
+        if let Some((str, is_pawn)) = &self.last_move { // Expecting last_move to always be set, always called properly as a private method
+            if *is_pawn {
                 self.half_moves_without_pawn_move = 1;
             } else {
                 self.half_moves_without_pawn_move += 1;
             }
-            console_log!("half_moves_without_pawn_move {} {}", self.half_moves_without_pawn_move, m);
+            console_log!("half_moves_without_pawn_move {} {}", self.half_moves_without_pawn_move, str);
         }
 
         self.game_end_state = if is_checkmate {

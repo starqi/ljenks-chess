@@ -52,6 +52,8 @@ static MAX_EVAL: i32 = 999999;
 
 static RANDOMIZATION_DIFF: i32 = 20; // Too high (50) -> game never ends from weird stall moves...?
 
+pub type IsPawn = bool;
+
 impl Ai {
 
     /// Must be called, second "new". Had issues with wasm tracking Rust lifetimes, and couldn't do it in constructor...
@@ -94,7 +96,7 @@ impl Ai {
         }
     }
 
-    pub fn make_move(&mut self, real_board: &mut Board) -> Option<String> {
+    pub fn make_move(&mut self, real_board: &mut Board) -> Option<(String, IsPawn)> {
 
         self.test_board.clone_from(real_board);
 
@@ -130,11 +132,12 @@ impl Ai {
         self.assert_king_pos(Player::Black);
 
         let leading_move = self.get_leading_move_with_score();
-        let notation = if let Some((best_move, remaining_depth, _)) = leading_move {
+        let result = if let Some((best_move, remaining_depth, _)) = leading_move {
             console_log!("Making move: {} (depth = {})", self.test_board.stringify_move_for_js_logs(best_move), remaining_depth);
 
             let before_info = BeforeMoveInfoForStringify::slow_new(real_board, best_move);
             let original_player = real_board.get_player_with_turn();
+            let is_pawn = matches!(real_board.get_moved_piece(best_move), Some(Piece::Pawn));
 
             real_board.handle_move_no_revert(best_move);
 
@@ -142,7 +145,7 @@ impl Ai {
             let is_checkmate = is_check && real_board.has_no_legal_moves();
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
 
-            Some(slow_stringify_move_standard(best_move, &before_info, &after_info))
+            Some((slow_stringify_move_standard(best_move, &before_info, &after_info), is_pawn))
         } else {
             console_log!("No move");
             None
@@ -165,7 +168,7 @@ impl Ai {
         self.memo.retain(|_, MemoData(_, _, _, age)| *age <= 5);
         console_log!("Memo aging, after size = {}", self.memo.len());
 
-        notation
+        result
     }
 
     fn assert_king_pos(&self, player: Player) {

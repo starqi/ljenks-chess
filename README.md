@@ -13,9 +13,9 @@ Copy www/dist/* to gh-pages branch.
 ### TODO
 
 - Review FEN AI code
+- FEN - Stop resetting at Rust level if fail to load
 - Tailwind?!
 - Get rid of ? evaluation and figure out why it loves e6
-- FEN - Stop resetting at Rust level if fail to load
 - TODO IMMEDIATE
 - ??? Why mated, clearly broken
 
@@ -46,12 +46,6 @@ Copy www/dist/* to gh-pages branch.
 - Shit talking based on score drop 
 - Solutions for index.js linter errors
 - WASM SIMD opportunities
-- Ask why is NPS faster in late game
-- / Saw queen check me to a draw w/o pushing mass amount of pieces -- CONSEQUENCE OF IGNORED MOBILITY WHEN WINNING
-    - I think pawn push incentive is too low compared to mob, that's why knight keeps checking my king in the end game with +10 pawns
-- Why can't mobility reward pawn push? Use sample positions
-    - Then use king as part of mob, test with checkmating ability
-- Tests for early game advanced pawns, should gain advantage
 - Killer move sibling idea is cool
 - Promotion PGN
 - AI is thinking graphic, end game screen
@@ -64,8 +58,6 @@ Copy www/dist/* to gh-pages branch.
 - ! Choose an opening which forces tactical lines?!
 - * Pure square control counterexamples: 
     - Long range bishop with all target squares pawn controlled -> not valued
-- Clean up linter warnings
-    - Dead code
 - Evaluation
     - Moving pieces out of the way, similar to synergy -> not a problem anymore? Emergent fixed...
     - Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
@@ -87,7 +79,11 @@ Copy www/dist/* to gh-pages branch.
 - Abstract away 63 - X, and remove 63 part
 - Branchless tricks with repr u8 on data enum
 - Draw when kings only
+
+Minor
 - King safety
+- Clean up linter warnings
+    - Dead code
 
 Read again TODO
 - Debruijin indices

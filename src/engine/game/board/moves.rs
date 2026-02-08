@@ -83,6 +83,15 @@ impl Board {
         false
     }
 
+    pub fn get_moved_piece(&self, m: &MoveWithEval) -> Option<Piece> {
+        if let MoveDescription::NormalMove(from_coord, _, _) = m.description() {
+            if let Square::Occupied(piece, _) = self.get_by_index(from_coord.value()) {
+                return Some(*piece);
+            }
+        }
+        None
+    }
+
     /// No hash changes
     fn apply_before_after_sqs(&mut self, sqs: &[BeforeAfterSquare], is_after: bool) {
         if is_after {

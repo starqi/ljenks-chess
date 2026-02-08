@@ -18,16 +18,7 @@ impl BeforeMoveInfoForStringify {
         let opponent_state = before_board.get_player_state(opponent);
         Self {
             is_capture: before_board.is_capture(m),
-            piece: match m.description() {
-                MoveDescription::NormalMove(from_coord, _, _) => {
-                    if let Square::Occupied(p, _) = before_board.get_by_index(from_coord.value()) {
-                        Some(*p)
-                    } else {
-                        None
-                    }
-                },
-                _ => None,
-            },
+            piece: before_board.get_moved_piece(m),
             player_piece_locs: player_state.piece_locs,
             opponent_piece_locs: opponent_state.piece_locs,
             player_same_piece_locs: match m.description() {
