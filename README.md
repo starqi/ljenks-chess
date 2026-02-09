@@ -20,13 +20,16 @@ npm run build
 cd www
 npm run serve # Enough to compile everything: Rust and JS, doesn't work if not serving from web server
 
+cargo check # WASM compile check (not CLI)
+cargo test # Unit tests
+
 ```
 
-##### CLI
+#### CLI (For NNUE, not used as a normal engine)
 
-Note the project is setup so that default features is WASM for language server,
-so in the build command here, need to specify "cli" features and turn off default features,
-and cargo check doesn't work either because it scans everything including the WASM bindgen code. 
+Note the project is setup so that default features is for WASM, and language servers will use this setting.
+In the non-WASM build command here, need to specify "cli" feature and turn off default features.
+Cargo check also doesn't work because it scans everything including the WASM bindgen code. 
 
 ```bash
 cargo build --release --bin chess-cli --no-default-features -F cli
@@ -61,7 +64,6 @@ Evaluate a tactical position at depth 12:
     12. Bg6+ Kg8
     13. Qh7#
 
-- REGRESSION? Auto play when dragging enemy piece
 - Review FEN AI code
 - FEN - Stop resetting at Rust level if fail to load
 - Tailwind?!
@@ -76,37 +78,34 @@ Evaluate a tactical position at depth 12:
 - Promotion PGN
 - AI is thinking graphic, end game screen
 - Review wasm bindgen tutorial, ./pkg, not ./node_modules
-- Review thread local macro
 - / AI scan for major inefficiencies
     - Profiler
 - Write notes on how wasm works, check versions
-- Minor: Pointer jumps to &Bitboard worse than copying
+- Perf: Pointer jumps to &Bitboard worse than copying?
 - ! Choose an opening which forces tactical lines?!
-- * Pure square control counterexamples: 
+- Write comment? Pure square control counterexamples: 
     - Long range bishop with all target squares pawn controlled -> not valued
 - Evaluation
     - Moving pieces out of the way, similar to synergy -> not a problem anymore? Emergent fixed...
-    - Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
+    - Fixed already? Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
         - Should be able to make queen balanced like this, instead of 0
-    - Use a table for square importance
-        - Add king area to it
     - Castle bonus should be replaced with king safety?
-    - Tapered pawn push eval
-    - Pawn structure
     - Piece synergy?
 - Is CC not fully correct
     - Promotions
     - Currently has if statement, which doesn't count checks...
 - Count re-search statistics
-- If checked, don't do second round of move tests?
-- Promotion UI
+- !? If checked, don't do second round of move tests?
+- Finish promotions and UI
 - Memo unit tests
 - ? Personal musings - recursive null-move-ish evaluations  
 - Abstract away 63 - X, and remove 63 part
 - Branchless tricks with repr u8 on data enum
-- Draw when kings only
+- Draw when kings only still not done
 
 Minor
+- "I prefix methods with an underscore if it has a potentially confusing contract, and there is a cleaner (but maybe slower) overload."
+    - Apply to stuff in ai/lib
 - // Enabling ANY of these slowed down NPS by 4x, why? TODO (Minor)
 - King safety
 - Clean up linter warnings
@@ -120,6 +119,7 @@ Read again
 - Rust split() collect() magic
 - Rust parse() magic
 - Rust from/into
+- Thread local macro
 
 --------------------------------------------------
 
