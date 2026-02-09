@@ -52,7 +52,16 @@ static MAX_EVAL: i32 = 999999;
 
 static RANDOMIZATION_DIFF: i32 = 20; // Too high (50) -> game never ends from weird stall moves...?
 
-pub type IsPawn = bool;
+/// Comprehensive info about the best move in a position.
+pub struct BestMoveInfo {
+    /// Helps with 50 move rule
+    pub is_pawn: bool,
+    pub remaining_depth: i8,
+    pub score: i32,
+    /// Standard chess notation
+    pub notation: String,
+    pub m: MoveWithEval,
+}
 
 impl Ai {
 
@@ -85,18 +94,11 @@ impl Ai {
         }
     }
 
-    pub fn get_leading_move_with_score(&self) -> Option<(&MoveWithEval, i8, i32)> {
-        match self.memo.get(&self.test_board.get_hash()) {
-            Some(MemoData(score, remaining_depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
-                Some((best_move, *remaining_depth, *score * self.test_board.get_player_with_turn().multiplier()))
-            },
-            _ => {
-                None
-            }
-        }
-    }
-
-    /// Internal vars will change, memo will be updated (which contains the result), but nothing directly returned
+    /// Shared search func.
+    /// Internal vars will mutate, memo will mutate (which contains best move), but nothing directly returned here.
+    /// Interface is odd but this is performance code, and it's also private.
+    /// (If this is called many times, eventually it will be too late to get the best move from memo 
+    /// since it is outdated and removed.)
     fn run_search(&mut self, source_board: &Board) {
         self.test_board.clone_from(source_board);
 
@@ -114,7 +116,7 @@ impl Ai {
                 self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
             }
 
-            let leading_move = self.get_leading_move_with_score();
+            let leading_move = self.get_leading_move(&self.test_board);
             if let Some((m, depth, _)) = leading_move {
                 console_log!("{}, d={}", self.test_board.stringify_move_for_js_logs(m), depth);
             } else {
@@ -132,7 +134,7 @@ impl Ai {
         self.assert_king_pos(Player::Black);
     }
 
-    fn post_search_cleanup(&mut self) {
+    fn log_search_stats(&self) {
         console_log!(
             "Useful memo hits - {}, hash move memo hits - {}, size - {}, fast found - {}, time - {}",
             self.useful_memo_hits,
@@ -142,6 +144,9 @@ impl Ai {
             now() - self.start_ms
         );
         console_log!("Nodes - {}, NPS - {}", self.node_counter, (self.node_counter as f64 / ((now() - self.start_ms) as f64 / 1000.)).round());
+    }
+
+    fn age_memo(&mut self) {
 
         console_log!("Memo aging, before size = {}", self.memo.len());
         for (_, MemoData(_, _, _, age)) in self.memo.iter_mut() {
@@ -151,38 +156,71 @@ impl Ai {
         console_log!("Memo aging, after size = {}", self.memo.len());
     }
 
-    pub fn make_move(&mut self, real_board: &mut Board) -> Option<(String, IsPawn)> {
-        self.run_search(real_board);
+    /// Pulls out the leading move from the memo given a board state.
+    /// The memo needs to be generated first from search. 
+    /// Ugly interface, private.
+    fn get_leading_move(&self, board: &Board) -> Option<(&MoveWithEval, i8, i32)> {
+        match self.memo.get(&board.get_hash()) {
+            Some(MemoData(score, remaining_depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
+                Some((best_move, *remaining_depth, *score * board.get_player_with_turn().multiplier()))
+            },
+            _ => {
+                None
+            }
+        }
+    }
 
-        let leading_move = self.get_leading_move_with_score();
-        let result = if let Some((best_move, remaining_depth, _)) = leading_move {
-            console_log!("Making move: {} (depth = {})", self.test_board.stringify_move_for_js_logs(best_move), remaining_depth);
-
-            let before_info = BeforeMoveInfoForStringify::slow_new(real_board, best_move);
+    /// Takes the leading move from the stateful memo, keyed by the hash of input board, and applies to the input board. 
+    /// The memo needs to be generated first from search. 
+    /// This process produces standard chess notation so a full `BestMoveInfo` is returned.
+    /// Ugly interface, private.
+    fn apply_leading_move(&self, real_board: &mut Board) -> Option<BestMoveInfo> {
+        let leading_move_copy = if let Some((best_move, remaining_depth, score)) = self.get_leading_move(&real_board) {
+            Some((best_move.clone(), remaining_depth, score))
+        } else {
+            None
+        };
+        if let Some((best_move, remaining_depth, score)) = leading_move_copy {
+            let before_info = BeforeMoveInfoForStringify::slow_new(real_board, &best_move);
             let original_player = real_board.get_player_with_turn();
-            let is_pawn = matches!(real_board.get_moved_piece(best_move), Some(Piece::Pawn));
+            let is_pawn = matches!(real_board.get_moved_piece(&best_move), Some(Piece::Pawn));
 
-            real_board.handle_move_no_revert(best_move);
+            real_board.handle_move_no_revert(&best_move);
 
             let is_check = real_board.is_checking(original_player);
             let is_checkmate = is_check && real_board.has_no_legal_moves();
             let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
 
-            Some((slow_stringify_move_standard(best_move, &before_info, &after_info), is_pawn))
+            Some(BestMoveInfo {
+                is_pawn,
+                remaining_depth,
+                score,
+                notation: slow_stringify_move_standard(&best_move, &before_info, &after_info),
+                m: best_move.clone()
+            })
         } else {
-            console_log!("No move");
             None
-        };
-
-        self.post_search_cleanup();
-
-        result
+        }
     }
 
-    pub fn evaluate(&mut self, board: &Board) -> Option<i32> {
+    pub fn make_move(&mut self, real_board: &mut Board) -> Option<BestMoveInfo> {
+        self.run_search(real_board);
+        let leading_move_ext = self.apply_leading_move(real_board);
+        if let Some(ref x) = leading_move_ext {
+            console_log!("Making move: {} (depth = {})", self.test_board.stringify_move_for_js_logs(&x.m), x.remaining_depth);
+        } else {
+            console_log!("No move");
+        }
+        self.log_search_stats();
+        self.age_memo();
+        leading_move_ext
+    }
+
+    pub fn evaluate(&mut self, board: &Board) -> Option<BestMoveInfo> {
         self.run_search(board);
-        self.post_search_cleanup();
-        self.get_leading_move_with_score().map(|(_, _, score)| score)
+        self.log_search_stats();
+        let mut board2 = board.clone();
+        self.apply_leading_move(&mut board2)
     }
 
     fn assert_king_pos(&self, player: Player) {

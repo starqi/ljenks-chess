@@ -1,3 +1,4 @@
+// TODO How does this work as part of build process?
 import * as wasm from './node_modules/ljenks-chess';
 
 let main = new wasm.Main();
@@ -16,20 +17,21 @@ self.onmessage = (e) => {
     console.log('Worker received', e.data);
     if (e.data.type === 'make_ai_move') {
         const {depth, isAutoPlay} = e.data;
-        if (!main.make_ai_move()) {
+        const moveInfo = main.make_ai_move();
+        if (!moveInfo) {
             postMessage({type: 'no_more_ai_moves'});
             return;
         }
         const board = getBoardState();
-        const lastMoveStr = main.get_last_move_notation();
-        const evaluation = main.get_last_move_ai_eval();
+        const lastMoveStr = moveInfo.notation;
+        const evaluation = moveInfo.score;
         if (!isAutoPlay) main.refresh_player_moves();
         postMessage({type: 'ai_move_done', isAutoPlay, board, lastMoveStr, evaluation, gameEndState: main.get_game_end_state()});
     } else if (e.data.type === 'make_human_move') {
         const {fromX, fromY, toX, toY, isAutoPlay} = e.data;
-        if (main.try_move(fromX, fromY, toX, toY)) {
+        const lastMoveStr = main.try_move(fromX, fromY, toX, toY);
+        if (lastMoveStr) {
             const board = getBoardState();
-            const lastMoveStr = main.get_last_move_notation();
             if (!isAutoPlay) main.refresh_player_moves();
             postMessage({type: 'human_move_done', isAutoPlay, board, lastMoveStr, gameEndState: main.get_game_end_state()});
         } else {
@@ -40,8 +42,8 @@ self.onmessage = (e) => {
         if (main.load_fen(fen)) {
             const board = getBoardState();
             const playerWithTurn = main.get_player_with_turn();
-            const evaluation = main.evaluate();
-            postMessage({type: 'fen_loaded', board, playerWithTurn, evaluation});
+            const bestMoveInfo = main.evaluate();
+            postMessage({type: 'fen_loaded', board, playerWithTurn, evaluation: bestMoveInfo.score, bestMoveStr: bestMoveInfo.notation});
         } else {
             postMessage({type: 'fen_invalid'});
         }

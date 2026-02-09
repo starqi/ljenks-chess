@@ -89,18 +89,6 @@ pub fn count_positive_material(board: &Board, player: Player) -> i32 {
 fn positive_evaluate_player_not_material_mob(board: &Board, player: Player, mut positive_material: i32) -> i32 {
     let ps = board.get_player_state(player);
 
-    //TODO Marked for removal, mobility suffices?
-    // Reward pawn push in later stages of game
-    //if positive_material <= MIN_MATERIAL_FOR_PAWN_EVAL {
-    //    let pawn_y_consts = PAWN_Y_CONSTANTS[player as usize];
-    //    let mut piece_locs_copy = ps.piece_locs;
-    //    piece_locs_copy.consume_loop_indices(|index| {
-    //        let coord = FastCoord(index).to_coord();
-    //        let is_pawn = matches!(board.get_by_index(index), Square::Occupied(Piece::Pawn, _));
-    //        positive_material += branchless_mask!(is_pawn, (pawn_y_consts.0 + pawn_y_consts.1 * (coord.1 as i32)) * PAWN_PUSH_BONUS);
-    //    });
-    //}
-
     let defended_pawn_count = get_pawndefended_pawn_count(board, player);
     positive_material += defended_pawn_count as i32 * DEFENDED_PAWN_BONUS;
 

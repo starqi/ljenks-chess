@@ -18,11 +18,36 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
 #[derive(Clone)]
-pub enum GameEndState { 
-    WhiteWin = 0, 
-    BlackWin = 1, 
-    Stalemate = 2, 
-    Repetition = 3 
+pub enum GameEndState {
+    WhiteWin = 0,
+    BlackWin = 1,
+    Stalemate = 2,
+    Repetition = 3
+}
+
+#[wasm_bindgen]
+pub struct BestMoveInfoJs {
+    pub is_pawn: bool,
+    pub remaining_depth: i8,
+    pub score: i32,
+    notation: String,
+}
+
+#[wasm_bindgen]
+impl BestMoveInfoJs {
+    #[wasm_bindgen(getter)]
+    pub fn notation(&self) -> String { self.notation.clone() }
+}
+
+impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
+    fn from(info: engine::ai::BestMoveInfo) -> Self {
+        Self {
+            is_pawn: info.is_pawn,
+            remaining_depth: info.remaining_depth,
+            score: info.score,
+            notation: info.notation,
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -33,13 +58,12 @@ pub struct Main {
     temp: MoveList,
     move_list: MoveList,
     searchable: SearchableMoves,
-    last_move: Option<(String, IsPawn)>,
     game_end_state: Option<GameEndState>,
     position_hashes: Vec<u64>,
     half_moves_without_pawn_move: usize,
-    last_move_ai_eval: Option<i32>
 }
 
+// This struct does not need to be fast like main engine.
 #[wasm_bindgen]
 impl Main {
 
@@ -61,11 +85,9 @@ impl Main {
             temp: MoveList::new(50),
             move_list: MoveList::new(50),
             searchable: SearchableMoves::new(),
-            last_move: None,
             game_end_state: None,
             position_hashes: position_hashes,
-            half_moves_without_pawn_move: 0,
-            last_move_ai_eval: None
+            half_moves_without_pawn_move: 0
         }
     }
 
@@ -75,18 +97,25 @@ impl Main {
     }
 
     #[wasm_bindgen]
-    pub fn make_ai_move(&mut self) -> bool {
+    pub fn make_ai_move(&mut self) -> Option<BestMoveInfoJs> {
         if self.game_end_state.is_some() {
             console_log!("Game has ended, cannot make AI move");
-            return false;
+            return None;
         }
 
         self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
-        self.last_move = self.ai.make_move(&mut self.board);
-        self.last_move_ai_eval = self.ai.get_leading_move_with_score().map(|(_move, _depth, score)| score);
-
-        self.slow_handle_special_end_conditions(self.board.get_player_with_turn().other_player(), None);
-        true
+        let best_move_info = self.ai.make_move(&mut self.board);
+        let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn);
+        if let Some(is_pawn) = is_pawn_holder {
+            let mut temp_var = false;
+            let mut temp_var2 = false;
+            let mut temp_var3 = false;
+            self.handle_special_end_conditions(self.board.get_player_with_turn().other_player(), is_pawn, &mut temp_var, &mut temp_var2, &mut temp_var3);
+            best_move_info.map(BestMoveInfoJs::from)
+        } else {
+            console_error!("No moves, but game has not ended?!");
+            None
+        }
     }
 
     #[wasm_bindgen]
@@ -101,29 +130,32 @@ impl Main {
     }
 
     #[wasm_bindgen]
-    pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> bool {
+    pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> Option<String> {
         if self.game_end_state.is_some() {
-            console_log!("Game has ended, cannot make AI move");
-            return false;
+            console_log!("Game has ended, cannot make move");
+            return None;
         }
 
-        if check_i32_xy(from_x, from_y).is_err() { return false; }
-        if check_i32_xy(to_x, to_y).is_err() { return false; }
+        if check_i32_xy(from_x, from_y).is_err() { return None; }
+        if check_i32_xy(to_x, to_y).is_err() { return None; }
 
-        let _m = self.searchable.get_move(&Coord(from_x as u8, from_y as u8), &Coord(to_x as u8, to_y as u8));
-        if let Some(m) = _m {
-            let m_clone = m.clone(); // Dodge borrow checker
+        let m_clone = self.searchable.get_move(&Coord(from_x as u8, from_y as u8), &Coord(to_x as u8, to_y as u8)).map(|x| x.clone());
+        if let Some(ref m) = m_clone {
             let before_info = BeforeMoveInfoForStringify::slow_new(&self.board, m);
             let original_player = self.board.get_player_with_turn();
+            let is_pawn = matches!(self.board.get_moved_piece(m), Some(Piece::Pawn));
 
             self.board.handle_move_no_revert(m);
             self.board.assert_hash();
 
-            self.slow_handle_special_end_conditions(original_player, Some((&before_info, &m_clone)));
-
-            true
+            let mut is_checkmate = false;
+            let mut is_stalemate = false;
+            let mut is_check = false;
+            self.handle_special_end_conditions(original_player, is_pawn, &mut is_checkmate, &mut is_stalemate, &mut is_check);
+            let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
+            Some(slow_stringify_move_standard(m, &before_info, &after_info))
         } else {
-            false
+            None
         }
     }
 
@@ -139,22 +171,12 @@ impl Main {
     }
 
     #[wasm_bindgen]
-    pub fn get_last_move_notation(&self) -> String {
-        self.last_move.clone().map(|x| x.0).unwrap_or_default()
-    }
-
-    #[wasm_bindgen]
-    pub fn get_last_move_ai_eval(&self) -> Option<i32> {
-        self.last_move_ai_eval
-    }
-
-    #[wasm_bindgen]
-    pub fn evaluate(&mut self) -> Option<i32> {
+    pub fn evaluate(&mut self) -> Option<BestMoveInfoJs> {
         if self.game_end_state.is_some() {
             return None;
         }
         self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
-        self.ai.evaluate(&self.board)
+        self.ai.evaluate(&self.board).map(BestMoveInfoJs::from)
     }
 
     #[wasm_bindgen]
@@ -169,9 +191,7 @@ impl Main {
                 self.board = new_board;
                 self.position_hashes = vec![self.board.get_hash()];
                 self.half_moves_without_pawn_move = 0;
-                self.last_move = None;
                 self.game_end_state = None;
-                self.last_move_ai_eval = None;
                 self.refresh_player_moves();
                 true
             },
@@ -179,47 +199,41 @@ impl Main {
         }
     }
 
-    // Board class will only be in terms of # of moves unavailable or whether is checking,
-    // but this excludes formal checkmate, stalemate, 50 move rule, etc.
-    fn slow_handle_special_end_conditions(
+    /// Handles precise game end conditions.
+    /// Board struct will only be in terms of # of moves unavailable or whether is checking,
+    /// but this excludes formal checkmate, stalemate, 50 move rule, etc.
+    fn handle_special_end_conditions(
         &mut self,
         original_player: Player,
-        // Provide this if caller delegates to this method to set self.last_move, minor private method shenanigans:
-        // self.ai generates notation, but self.board is not "self.player" so doesn't include notation
-        before_info_if_setting_last_move: Option<(&BeforeMoveInfoForStringify, &MoveWithEval)>
-    ) {
-        let is_check = self.board.is_checking(original_player);
-        let has_no_legal_moves = self.board.has_no_legal_moves();
-        let is_checkmate = is_check && has_no_legal_moves;
-        let is_stalemate = !is_check && has_no_legal_moves;
+        is_last_move_pawn: bool,
 
-        if let Some((before, m)) = before_info_if_setting_last_move {
-            let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
-            let notation = slow_stringify_move_standard(m, before, &after_info);
-            self.last_move = Some(
-                (notation, matches!(before.piece, Some(Piece::Pawn)))
-            );
-        }
+        // Output immediate vars to help caller
+        is_checkmate_output: &mut bool,
+        is_stalemate_output: &mut bool,
+        is_check_output: &mut bool
+    ) {
+        *is_check_output = self.board.is_checking(original_player);
+        let has_no_legal_moves = self.board.has_no_legal_moves();
+        *is_checkmate_output = *is_check_output && has_no_legal_moves;
+        *is_stalemate_output = !*is_check_output && has_no_legal_moves;
 
         let current_hash = self.board.get_hash();
         self.position_hashes.push(current_hash);
 
-        if let Some((str, is_pawn)) = &self.last_move { // Expecting last_move to always be set, always called properly as a private method
-            if *is_pawn {
-                self.half_moves_without_pawn_move = 1;
-            } else {
-                self.half_moves_without_pawn_move += 1;
-            }
-            console_log!("half_moves_without_pawn_move {} {}", self.half_moves_without_pawn_move, str);
+        if is_last_move_pawn {
+            self.half_moves_without_pawn_move = 1;
+        } else {
+            self.half_moves_without_pawn_move += 1;
         }
+        console_log!("half_moves_without_pawn_move {}", self.half_moves_without_pawn_move);
 
-        self.game_end_state = if is_checkmate {
+        self.game_end_state = if *is_checkmate_output {
             if original_player == Player::White {
                 Some(GameEndState::WhiteWin)
             } else {
                 Some(GameEndState::BlackWin)
             }
-        } else if is_stalemate {
+        } else if *is_stalemate_output {
             Some(GameEndState::Stalemate)
         } else {
             let repetition_count = self.position_hashes.iter().filter(|&&h| h == current_hash).count();
@@ -248,15 +262,15 @@ mod test {
         main.refresh_player_moves();
 
         // Test pawn move e2-e4
-        assert!(main.try_move(4, 6, 4, 4)); // e2 to e4
-        assert_eq!(main.get_last_move_notation(), "e4");
+        let r = main.try_move(4, 6, 4, 4);
+        assert_eq!(r.unwrap_or_default(), "e4");
 
         // Reset for next test
         let mut main = Main::new();
         main.refresh_player_moves();
 
         // Test knight move g1-f3
-        assert!(main.try_move(6, 7, 5, 5)); // g1 to f3
-        assert_eq!(main.get_last_move_notation(), "Nf3");
+        let r2 = main.try_move(6, 7, 5, 5); // g1 to f3
+        assert_eq!(r2.unwrap_or_default(), "Nf3");
     }
 }

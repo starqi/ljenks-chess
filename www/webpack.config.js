@@ -9,11 +9,13 @@ module.exports = {
         path: path.resolve(__dirname, 'dist'),
         filename: 'index.js',
     },
-    // Enabling ANY of these slowed down NPS by 4x, why? TODO
+    // Enabling ANY of these slowed down NPS by 4x, why? TODO (Minor)
     //optimization: { // https://webpack.js.org/configuration/optimization/#optimizationminimize
     //    minimize: true
     //},
     //devtool: 'source-map',
+    //mode: 'development',
+    mode: 'production',
     plugins: [
         new CopyWebpackPlugin({
             patterns: [
@@ -26,18 +28,9 @@ module.exports = {
             forceMode: "production",
             //forceMode: "development",
         }),
-        /*
-        TODO What is this?
-        new webpack.ProvidePlugin({
-            TextDecoder: ['text-encoding', 'TextDecoder'],
-            TextEncoder: ['text-encoding', 'TextEncoder']
-        })
-        */
     ],
-    //mode: 'development',
-    mode: 'production',
     experiments: {
-        asyncWebAssembly: true // TODO IMMEDIATE Review
+        asyncWebAssembly: true // AI recommended this is mature enough to be "true"
     },
     module: {
         rules: [

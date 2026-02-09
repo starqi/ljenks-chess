@@ -1,14 +1,26 @@
 ### A basic chess engine
 
-Rust, WASM, messing around
-
 https://starqi.github.io/ljenks-chess/
 
-#### Deployment
+Rust, WASM, messing around.
 
+Rough goal:
+- Simple obvious hand evaluations -> emergent ability through search and NNUE.
+- Add some entertainment features. 
+- Don't care about formal UCI compliance.
+
+#### WASM
+
+```bash
+# Deploy to gh-pages
 npm run build
+# Copy www/dist/* to gh-pages branch. 
 
-Copy www/dist/* to gh-pages branch. 
+# Local testing
+cd www
+npm run serve # Enough to compile everything: Rust and JS, doesn't work if not serving from web server
+
+```
 
 ##### CLI
 
@@ -33,38 +45,30 @@ Evaluate a tactical position at depth 12:
 
 ### TODO
 
+- What the fuck?
+
+    1. d4 e6
+    2. e4 Qh4
+    3. Nc3 Bb4
+    4. Nf3 Qxe4+
+    5. Be2 Bxc3+
+    6. bxc3 Ne7
+    7. O-O O-O
+    8. Bd3 Qc6
+    9. Ng5 Qxc3
+    10. Bxh7+ Kh8
+    11. Qh5 Qd3
+    12. Bg6+ Kg8
+    13. Qh7#
+
+- REGRESSION? Auto play when dragging enemy piece
 - Review FEN AI code
 - FEN - Stop resetting at Rust level if fail to load
 - Tailwind?!
 - Get rid of ? evaluation and figure out why it loves e6
 - TODO IMMEDIATE
-- ??? Why mated, clearly broken
-
-    5rk1/ppp4p/2p1p2q/6p1/4P1n1/1PN3Pb/P1PQ1P2/R1B1R1K1 w - - 2 20
-    1. e3 e5
-    2. Nc3 Nf6
-    3. Nf3 Nc6
-    4. Bb5 Be7
-    5. Bxc6 dxc6
-    6. Nxe5 O-O
-    7. O-O Bd6
-    8. d4 Nd7
-    9. Nc4 Bxh2+
-    10. Kxh2 Qh4+
-    11. Kg1 Nf6
-    12. Ne5 Re8
-    13. g3 Qh6
-    14. b3 Bh3
-    15. e4 g5
-    16. Re1 Rxe5
-    17. dxe5 Ng4
-    18. e6 fxe6
-    19. Qd2 Rf8
-    20. Qd4 Bg2
-    21. Kxg2 Qh2+
-    22. Kf1 Rxf2+
-    23. Qxf2 Qxf2#
-
+- Performance bottlenecks review
+- // TODO How does this work as part of build process?
 - Shit talking based on score drop 
 - Solutions for index.js linter errors
 - WASM SIMD opportunities
@@ -103,28 +107,25 @@ Evaluate a tactical position at depth 12:
 - Draw when kings only
 
 Minor
+- // Enabling ANY of these slowed down NPS by 4x, why? TODO (Minor)
 - King safety
 - Clean up linter warnings
     - Dead code
 
-Read again TODO
+Read again
 - Debruijin indices
 - Wasm Bindgen
 - lazy_static macros
 - Rust lifetimes, '_
 - Rust split() collect() magic
 - Rust parse() magic
+- Rust from/into
 
 --------------------------------------------------
-
-Usage
-
-- "npm run serve" is enough to compile everything: Rust and JS
-    - Doesn't work if not serving from web server
-- ? Need syncWebAssembly
-
 
 ### FENs
 
 - 2q1k3/8/8/8/8/8/8/4K3 w - - 0 1
 - k7/6Q1/7R/8/8/4q3/8/4K3 w - - 0 1
+- 5rk1/ppp4p/2p1p2q/6p1/4P1n1/1PN3Pb/P1PQ1P2/R1B1R1K1 w - - 2 20
+    - Win without getting mated in volatile position, works when given enough depth

@@ -54,13 +54,8 @@ fn main() {
     
     // TODO IMMEDIATE Run it on a file of FENs
     let notation = ai.make_move(&mut board);
-    if let Some((n, _)) = notation {
-        let score = ai.get_leading_move_with_score().map(|(_move, _depth, score)| score);
-        if let Some(s) = score {
-            println!("{} {}", n, s);
-        } else {
-            eprintln!("Unexpected notation with no score {}", n);
-        }
+    if let Some(best_move_info) = notation {
+        println!("{} {}", best_move_info.notation, best_move_info.score);
     } else {
         println!("No move!");
     }
