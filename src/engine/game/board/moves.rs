@@ -342,6 +342,7 @@ impl Board {
 
     /// Get moves for the *current* player
     pub fn get_moves(&mut self, temp_moves: &mut MoveList, result: &mut MoveList) {
+        // TODO temp_moves unnecessary? Try it
 
         let curr_player = self.get_player_with_turn();
 

@@ -26,7 +26,7 @@ module.exports = {
         new WasmPackPlugin({
             crateDirectory: path.resolve(__dirname, ".."),
             forceMode: "production",
-            //forceMode: "development",
+            extraArgs: "-- --no-default-features --features wasm",
         }),
     ],
     experiments: {

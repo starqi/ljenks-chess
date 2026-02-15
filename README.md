@@ -9,27 +9,29 @@ Rough goal:
 - Add some entertainment features. 
 - Don't care about formal UCI compliance.
 
+#### Tests, compile check
+
+These don't require "cli" or "wasm" features, and just scan/test everything, see Cargo.toml philosophy.
+```bash
+cargo check
+cargo test
+cargo test my_test_name -- --nocapture
+```
+
 #### WASM
 
 ```bash
+
 # Deploy to gh-pages
-npm run build
+npm run build # Both JS and Rust
 # Copy www/dist/* to gh-pages branch. 
 
 # Local testing
 cd www
-npm run serve # Enough to compile everything: Rust and JS, doesn't work if not serving from web server
-
-cargo check # WASM compile check (not CLI)
-cargo test # Unit tests
-
+npm run serve # Enough to compile everything: btoh Rust and JS. Doesn't work if not serving from web server (open up HTML file).
 ```
 
 #### CLI (For NNUE, not used as a normal engine)
-
-Note the project is setup so that default features is for WASM, and language servers will use this setting.
-In the non-WASM build command here, need to specify "cli" feature and turn off default features.
-Cargo check also doesn't work because it scans everything including the WASM bindgen code. 
 
 ```bash
 cargo build --release --bin chess-cli --no-default-features -F cli
@@ -65,10 +67,13 @@ Evaluate a tactical position at depth 12:
     13. Qh7#
 
 - Review FEN AI code
+- // TODO temp_moves unnecessary? Try it
+- / Review new main.rs AI code
 - FEN - Stop resetting at Rust level if fail to load
 - Tailwind?!
 - Get rid of ? evaluation and figure out why it loves e6
 - TODO IMMEDIATE
+- // TODO Refactor into struct
 - Performance bottlenecks review
 - // TODO How does this work as part of build process?
 - Shit talking based on score drop 

@@ -17,7 +17,7 @@ pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
     temp_moves: MoveList,
-    af_boards: AttackFromBoards, // Deprecated
+    //af_boards: AttackFromBoards, // Deprecated
     memo: HashMap<u64, MemoData>,
     useful_memo_hits: usize,
     hash_move_memo_hits: usize,
@@ -26,6 +26,7 @@ pub struct Ai {
     start_ms: u128,
     // TODO IMMEDIATE Configurable config
     ms_till_terminate: u128, // Configuration
+    max_nodes: Option<u64>, // Configuration
     terminated: bool,
     min_depth: i8, // Configuration
     iterative_deepening_depth: i8,
@@ -77,7 +78,7 @@ impl Ai {
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
             temp_moves: MoveList::new(50),
-            af_boards: AttackFromBoards::new(),
+            //af_boards: AttackFromBoards::new(),
             memo: HashMap::new(),
             useful_memo_hits: 0,
             hash_move_memo_hits: 0,
@@ -85,6 +86,7 @@ impl Ai {
             node_counter: 0,
             start_ms: 0,
             ms_till_terminate: 2000,
+            max_nodes: None,
             terminated: false,
             min_depth: 7,
             iterative_deepening_depth: 1,
@@ -223,6 +225,36 @@ impl Ai {
         self.apply_leading_move(&mut board2)
     }
 
+    pub fn make_random_move(&mut self, real_board: &mut Board) -> Option<BestMoveInfo> {
+        self.moves_buf.write_index = 0; // Same as make_move and run_search starting at 0 as usual
+        self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
+        if self.moves_buf.write_index <= 0 {
+            return None; // No moves
+        }
+
+        let random_index = (crate::platform::random() * self.moves_buf.write_index as f64) as usize;
+        let m = self.moves_buf.v()[random_index].0.clone();
+
+        let move_with_eval = MoveWithEval(m, 0);
+        let before_info = BeforeMoveInfoForStringify::slow_new(real_board, &move_with_eval);
+        let original_player = real_board.get_player_with_turn();
+        let is_pawn = matches!(real_board.get_moved_piece(&move_with_eval), Some(Piece::Pawn));
+
+        real_board.handle_move_no_revert(&move_with_eval);
+
+        let is_check = real_board.is_checking(original_player);
+        let is_checkmate = is_check && real_board.has_no_legal_moves();
+        let after_info = AfterMoveInfoForStringify { is_check, is_checkmate };
+
+        Some(BestMoveInfo {
+            is_pawn,
+            remaining_depth: 0,
+            score: 0,
+            notation: slow_stringify_move_standard(&move_with_eval, &before_info, &after_info),
+            m: move_with_eval
+        })
+    }
+
     fn assert_king_pos(&self, player: Player) {
         if let Square::Occupied(Piece::King, _) = self.test_board.get_by_index(self.test_board.get_player_state(player).king_location._lsb_to_index()) {
         } else {
@@ -250,14 +282,18 @@ impl Ai {
 
     /// Node counter increase coupled with check to not miss an increment
     /// [Termination]
-    /// Search should use a fake beta cutoff to escape recursively, 
+    /// Search should use a fake beta cutoff to escape recursively,
     /// then check if `self.terminated` to see if it's a real beta cutoff.
     fn increment_node_check_termination(&mut self) -> bool {
+        const TIMES_PER_SECOND_APPROX: u64 = 10;
+        const NPS_EXPECTATION: u64 = 1_000_000;
+        const EVERY: u64 = NPS_EXPECTATION / TIMES_PER_SECOND_APPROX;
         self.node_counter += 1;
         self.terminated = self.terminated || (
-            self.node_counter % 50000 == 0 &&
+            self.node_counter % EVERY == 0 &&
             self.iterative_deepening_depth > self.min_depth &&
-            now() - self.start_ms > self.ms_till_terminate
+            (now() - self.start_ms > self.ms_till_terminate ||
+             self.max_nodes.map_or(false, |max| self.node_counter >= max))
         );
         self.terminated
     }

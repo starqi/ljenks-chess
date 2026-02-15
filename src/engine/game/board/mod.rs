@@ -9,12 +9,14 @@ use super::move_test::*;
 use super::bitboard::*;
 
 // Child modules
+mod compressed;
 mod fen;
 mod nnue;
 mod moves;
 mod stringify;
 
 // Public re-exports
+pub use compressed::*;
 pub use fen::*;
 pub use nnue::*;
 pub use moves::*;

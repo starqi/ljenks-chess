@@ -12,28 +12,28 @@ pub use game::castle_utils::*;
 pub use game::searchable_moves::*;
 pub use game::move_list::*;
 
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 
-pub static CASTLE_UTILS: OnceLock<CastleUtils> = OnceLock::new();
-pub static RANDOM_NUMBER_KEYS: OnceLock<RandomNumberKeys> = OnceLock::new();
-pub static BITBOARD_PRESETS: OnceLock<BitboardPresets> = OnceLock::new();
+pub static CASTLE_UTILS: LazyLock<CastleUtils> = LazyLock::new(|| CastleUtils::new());
+pub static RANDOM_NUMBER_KEYS: LazyLock<RandomNumberKeys> = LazyLock::new(|| RandomNumberKeys::new());
+pub static BITBOARD_PRESETS: LazyLock<BitboardPresets> = LazyLock::new(|| BitboardPresets::new());
 
 pub fn init_globals() {
-    CASTLE_UTILS.get_or_init(|| CastleUtils::new());
-    RANDOM_NUMBER_KEYS.get_or_init(|| RandomNumberKeys::new());
-    BITBOARD_PRESETS.get_or_init(|| BitboardPresets::new());
+    LazyLock::force(&CASTLE_UTILS);
+    LazyLock::force(&RANDOM_NUMBER_KEYS);
+    LazyLock::force(&BITBOARD_PRESETS);
 }
 
 pub fn castle_utils() -> &'static CastleUtils {
-    CASTLE_UTILS.get().expect("CASTLE_UTILS not initialized")
+    &CASTLE_UTILS
 }
 
 pub fn random_number_keys() -> &'static RandomNumberKeys {
-    RANDOM_NUMBER_KEYS.get().expect("RANDOM_NUMBER_KEYS not initialized")
+    &RANDOM_NUMBER_KEYS
 }
 
 pub fn bitboard_presets() -> &'static BitboardPresets {
-    BITBOARD_PRESETS.get().expect("BITBOARD_PRESETS not initialized")
+    &BITBOARD_PRESETS
 }
 
 pub const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;

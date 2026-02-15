@@ -1,3 +1,4 @@
+#[cfg(feature = "wasm")]
 extern crate console_error_panic_hook;
 
 mod engine;
@@ -5,6 +6,7 @@ mod platform;
 #[macro_use]
 mod macros;
 
+#[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
 use engine::*;
@@ -16,7 +18,7 @@ use crate::engine::game::board::slow_stringify_move_standard;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[wasm_bindgen]
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone)]
 pub enum GameEndState {
     WhiteWin = 0,
@@ -25,7 +27,7 @@ pub enum GameEndState {
     Repetition = 3
 }
 
-#[wasm_bindgen]
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct BestMoveInfoJs {
     pub is_pawn: bool,
     pub remaining_depth: i8,
@@ -33,9 +35,9 @@ pub struct BestMoveInfoJs {
     notation: String,
 }
 
-#[wasm_bindgen]
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 impl BestMoveInfoJs {
-    #[wasm_bindgen(getter)]
+    #[cfg_attr(feature = "wasm", wasm_bindgen(getter))]
     pub fn notation(&self) -> String { self.notation.clone() }
 }
 
@@ -50,7 +52,7 @@ impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
     }
 }
 
-#[wasm_bindgen]
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Main {
     board: Board,
     ai: Ai,
@@ -64,12 +66,13 @@ pub struct Main {
 }
 
 // This struct does not need to be fast like main engine.
-#[wasm_bindgen]
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 impl Main {
 
     // I believe wasm_bindgen(constructor) caused it to require proper JS new keyword instead of function name new
-    #[wasm_bindgen(constructor)]
+    #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
     pub fn new() -> Main {
+        #[cfg(feature = "wasm")]
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
         // Initialize globals explicitly
@@ -91,12 +94,12 @@ impl Main {
         }
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn get_game_end_state(&self) -> Option<GameEndState> {
         self.game_end_state.clone()
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn make_ai_move(&mut self) -> Option<BestMoveInfoJs> {
         if self.game_end_state.is_some() {
             console_log!("Game has ended, cannot make AI move");
@@ -118,7 +121,7 @@ impl Main {
         }
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn refresh_player_moves(&mut self) {
         self.move_list.write_index = 0;
         self.board.get_moves(&mut self.temp, &mut self.move_list);
@@ -129,7 +132,7 @@ impl Main {
         self.searchable.reset_from_move_list(self.board.get_player_with_turn(), &mut self.move_list, 0, end_exclusive);
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn try_move(&mut self, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> Option<String> {
         if self.game_end_state.is_some() {
             console_log!("Game has ended, cannot make move");
@@ -159,7 +162,7 @@ impl Main {
         }
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn get_piece(&self, x: i32, y: i32) -> i8 {
         if let Ok(Square::Occupied(piece, player)) = self.board.get_by_xy_safe(x, y) {
             ((*piece as u8) + 1) as i8 * player.multiplier() as i8
@@ -170,7 +173,7 @@ impl Main {
         }
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn evaluate(&mut self) -> Option<BestMoveInfoJs> {
         if self.game_end_state.is_some() {
             return None;
@@ -179,12 +182,12 @@ impl Main {
         self.ai.evaluate(&self.board).map(BestMoveInfoJs::from)
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn get_player_with_turn(&self) -> u8 {
         self.board.get_player_with_turn() as u8
     }
 
-    #[wasm_bindgen]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn load_fen(&mut self, fen: &str) -> bool {
         match Board::from_fen(fen) {
             Ok(new_board) => {
