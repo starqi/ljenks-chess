@@ -16,8 +16,8 @@ impl Board {
     ///   - Bit 3: Black did castle O-O-O
     ///   - Bits 2..0: unused
     /// - Byte 33: en passant file + 1 (0 = no ep, 1..8 = file a..h)
-    pub fn export_compressed(&self) -> [u8; COMPRESSED_SIZE] {
-        let mut data = [0u8; COMPRESSED_SIZE];
+    pub fn export_compressed(&self, data: &mut [u8; COMPRESSED_SIZE]) {
+        for i in 0..COMPRESSED_SIZE { data[i] = 0; }
 
         for i in 0..64 {
             let nibble = match self.d[i] {
@@ -38,7 +38,7 @@ impl Board {
         flags |= (bs.moved_castle_piece[CastleType::Oo as usize] as u8) << 4;
         flags |= (bs.moved_castle_piece[CastleType::Ooo as usize] as u8) << 3;
 
-        println!("CASTLE DEBUG ON EXPORT {:?} {:?}", ws.moved_castle_piece, bs.moved_castle_piece);
+        //println!("CASTLE DEBUG ON EXPORT {:?} {:?}", ws.moved_castle_piece, bs.moved_castle_piece);
 
         data[32] = flags;
         let ep_code = if self.en_passant_extra_target.has_target() {
@@ -47,8 +47,7 @@ impl Board {
             0
         };
         data[33] = ep_code;
-        println!("FLAGS BYTE ON EXPORT {:?}, EP CODE {:?}", flags, ep_code);
-        data
+        //println!("FLAGS BYTE ON EXPORT {:?}, EP CODE {:?}", flags, ep_code);
     }
 
     pub fn import_compressed(&mut self, data: &[u8; COMPRESSED_SIZE]) {
@@ -81,7 +80,7 @@ impl Board {
 
         let flags = data[32];
         let ep_code = data[33];
-        println!("FLAGS BYTE ON IMPORT {:?}, EP CODE {:?}", flags, ep_code);
+        //println!("FLAGS BYTE ON IMPORT {:?}, EP CODE {:?}", flags, ep_code);
 
         self.player_with_turn = if (flags & 0x80) != 0 { Player::Black } else { Player::White };
 
@@ -91,7 +90,7 @@ impl Board {
         let psmw_ooo = (flags & 0x20) != 0;
         psmw.moved_castle_piece[CastleType::Ooo as usize] = psmw_ooo;
         psmw.is_castled = psmw_oo || psmw_ooo;
-        println!("CASTLE DEBUG ON IMPORT WHITE {:?}", psmw.moved_castle_piece);
+        //println!("CASTLE DEBUG ON IMPORT WHITE {:?}", psmw.moved_castle_piece);
 
         let psmb = self.get_player_state_mut(Player::Black); // Fascinating how Rust complains if psmb is placed right below psmw
         let psmb_oo = (flags & 0x10) != 0;
@@ -99,7 +98,7 @@ impl Board {
         let psmb_ooo = (flags & 0x08) != 0;
         psmb.moved_castle_piece[CastleType::Ooo as usize] = psmb_ooo;
         psmb.is_castled = psmb_oo || psmb_ooo;
-        println!("CASTLE DEBUG ON IMPORT BLACK {:?}", psmb.moved_castle_piece);
+        //println!("CASTLE DEBUG ON IMPORT BLACK {:?}", psmb.moved_castle_piece);
 
         if ep_code > 0 {
             let file = ep_code - 1;
@@ -144,7 +143,8 @@ mod test {
     #[test]
     fn test_roundtrip_starting_position() {
         let board = Board::new();
-        let data = board.export_compressed();
+        let mut data = [0u8; COMPRESSED_SIZE];
+        board.export_compressed(&mut data);
         let mut restored = Board::with_kings_only();
         restored.import_compressed(&data);
         assert_boards_equal(&board, &restored);
@@ -153,8 +153,9 @@ mod test {
     #[test]
     fn test_roundtrip_kings_only() {
         let board = Board::with_kings_only();
-        let data = board.export_compressed();
-        let mut restored = Board::with_kings_only();
+        let mut data = [0u8; COMPRESSED_SIZE];
+        board.export_compressed(&mut data);
+        let mut restored = Board::new();
         restored.import_compressed(&data);
         assert_boards_equal(&board, &restored);
     }
@@ -181,7 +182,8 @@ mod test {
         assert!(found, "Double pawn jump should exist");
         assert!(board.en_passant_extra_target.has_target());
 
-        let data = board.export_compressed();
+        let mut data = [0u8; COMPRESSED_SIZE];
+        board.export_compressed(&mut data);
         let mut restored = Board::with_kings_only();
         restored.import_compressed(&data);
         assert_boards_equal(&board, &restored);
@@ -193,7 +195,8 @@ mod test {
         board.get_player_state_mut(Player::White).moved_castle_piece[CastleType::Oo as usize] = true;
         board.get_player_state_mut(Player::Black).moved_castle_piece[CastleType::Ooo as usize] = true;
 
-        let data = board.export_compressed();
+        let mut data = [0u8; COMPRESSED_SIZE];
+        board.export_compressed(&mut data);
         let mut restored = Board::with_kings_only();
         restored.import_compressed(&data);
 
@@ -212,29 +215,11 @@ mod test {
         board.handle_move_no_revert(&MoveWithEval(MoveDescription::SkipMove, 0));
         assert_eq!(board.get_player_with_turn(), Player::Black);
 
-        let data = board.export_compressed();
+        let mut data = [0u8; COMPRESSED_SIZE];
+        board.export_compressed(&mut data);
         let mut restored = Board::with_kings_only();
         restored.import_compressed(&data);
         assert_eq!(restored.get_player_with_turn(), Player::Black);
-        assert_boards_equal(&board, &restored);
-    }
-
-    #[test]
-    fn test_roundtrip_mid_game() {
-        let mut board = Board::new();
-        let mut temp = MoveList::new(50);
-        let mut result = MoveList::new(50);
-        board.get_moves(&mut temp, &mut result);
-        for m in result.v() {
-            if let MoveDescription::NormalMove(_, _, MoveMetadata::DoublePawnJump) = m.description() {
-                board.handle_move_no_revert(m);
-                break;
-            }
-        }
-
-        let data = board.export_compressed();
-        let mut restored = Board::with_kings_only();
-        restored.import_compressed(&data);
         assert_boards_equal(&board, &restored);
     }
 }

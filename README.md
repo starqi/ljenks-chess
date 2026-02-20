@@ -35,17 +35,9 @@ npm run serve # Enough to compile everything: btoh Rust and JS. Doesn't work if 
 
 ```bash
 cargo build --release --bin chess-cli --no-default-features -F cli
-./target/release/chess-cli <FEN> [depth]
-```
 
-Evaluate the starting position at depth 10:
-```bash
-./target/release/chess-cli "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-```
-
-Evaluate a tactical position at depth 12:
-```bash
-./target/release/chess-cli "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3" 12
+# Generate positions into output file, see options
+./target/release/chess-cli <binary output filename>
 ```
 
 ### TODO
@@ -70,11 +62,11 @@ Evaluate a tactical position at depth 12:
 - // TODO temp_moves unnecessary? Try it
 - / Review new main.rs AI code
 - FEN - Stop resetting at Rust level if fail to load
-- Tailwind?!
 - Get rid of ? evaluation and figure out why it loves e6
 - TODO IMMEDIATE
 - // TODO Refactor into struct
 - Performance bottlenecks review
+- Bitbucket & other places backup
 - // TODO How does this work as part of build process?
 - Shit talking based on score drop 
 - Solutions for index.js linter errors
@@ -125,6 +117,8 @@ Read again
 - Rust parse() magic
 - Rust from/into
 - Thread local macro
+- derive Parser, clap
+- dyn
 
 --------------------------------------------------
 

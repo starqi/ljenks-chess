@@ -23,7 +23,7 @@ require-features = ["cli"] # Makes no sense for WASM target due to file system a
 wasm-bindgen = { version = "0.2.92", optional = true }
 lazy_static = "1.5.0"
 rand = { version = "0.8.5", optional = true }
-bytemuck = "1.16"
+clap = { version = "4.5", features = ["derive"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

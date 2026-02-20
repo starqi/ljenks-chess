@@ -2,15 +2,15 @@
 extern crate console_error_panic_hook;
 
 mod engine;
-mod platform; 
+mod platform;
 #[macro_use]
 mod macros;
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-use engine::*;
-use crate::engine::game::board::slow_stringify_move_standard;
+pub use engine::*;
+pub use engine::game::board::slow_stringify_move_standard;
 
 // WASM bindgen recommendation.
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
@@ -19,12 +19,23 @@ use crate::engine::game::board::slow_stringify_move_standard;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum GameEndState {
     WhiteWin = 0,
     BlackWin = 1,
     Stalemate = 2,
     Repetition = 3
+}
+
+impl std::fmt::Display for GameEndState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GameEndState::WhiteWin => write!(f, "WhiteWin"),
+            GameEndState::BlackWin => write!(f, "BlackWin"),
+            GameEndState::Stalemate => write!(f, "Stalemate"),
+            GameEndState::Repetition => write!(f, "Repetition"),
+        }
+    }
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
@@ -185,6 +196,49 @@ impl Main {
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn get_player_with_turn(&self) -> u8 {
         self.board.get_player_with_turn() as u8
+    }
+
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    pub fn new_board(&mut self) {
+        // TODO IMMEDIATE Review, I think re-using position_hashes is all
+        self.board = Board::new();
+        let initial_hash = self.board.get_hash();
+        self.position_hashes = vec![initial_hash];
+        self.half_moves_without_pawn_move = 0;
+        self.game_end_state = None;
+        self.refresh_player_moves();
+    }
+
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    pub fn make_random_move(&mut self) -> Option<BestMoveInfoJs> {
+        if self.game_end_state.is_some() {
+            console_log!("Game has ended, cannot make random move");
+            return None;
+        }
+
+        // TODO IMMEDIATE Share dupe code with make_ai_move
+        self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
+        let best_move_info = self.ai.make_random_move(&mut self.board);
+        let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn);
+        if let Some(is_pawn) = is_pawn_holder {
+            let mut temp_var = false;
+            let mut temp_var2 = false;
+            let mut temp_var3 = false;
+            self.handle_special_end_conditions(self.board.get_player_with_turn().other_player(), is_pawn, &mut temp_var, &mut temp_var2, &mut temp_var3);
+            best_move_info.map(BestMoveInfoJs::from)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(feature="wasm"))]
+    pub fn set_search_max_nodes(&mut self, max_nodes: Option<u64>) {
+        self.ai.set_search_max_nodes(max_nodes);
+    }
+
+    #[cfg(not(feature="wasm"))]
+    pub fn get_board(&self) -> &Board {
+        &self.board
     }
 
     #[cfg_attr(feature = "wasm", wasm_bindgen)]

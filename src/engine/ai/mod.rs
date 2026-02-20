@@ -3,9 +3,9 @@ pub mod move_buckets;
 
 pub use move_buckets::*;
 
+use std::cmp::min;
 use std::collections::HashMap;
 use super::game::entities::*;
-use super::game::move_test::*;
 use super::game::move_list::*;
 use super::game::board::*;
 use crate::platform::{random, now};
@@ -24,11 +24,12 @@ pub struct Ai {
     fast_found_hits: usize,
     node_counter: u64,
     start_ms: u128,
-    // TODO IMMEDIATE Configurable config
-    ms_till_terminate: u128, // Configuration
-    max_nodes: Option<u64>, // Configuration
+    // TODO IMMEDIATE Add setters for ms_till_terminate and min_depth
+    ms_till_terminate: u128, // Configuration (not state)
+    search_max_nodes: Option<u64>, // Configuration (not state)
+    check_every_x_nodes: u64,
     terminated: bool,
-    min_depth: i8, // Configuration
+    min_depth: i8, // Configuration (not state)
     iterative_deepening_depth: i8,
     real_board_positional_hashes: *const Vec<u64>,
     half_moves_without_pawn_move: *const usize,
@@ -49,9 +50,11 @@ enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWit
 #[derive(Clone)]
 struct MemoData(i32, i8, MemoType, usize);
 
-static MAX_EVAL: i32 = 999999;
-
-static RANDOMIZATION_DIFF: i32 = 20; // Too high (50) -> game never ends from weird stall moves...?
+const MAX_EVAL: i32 = 999999;
+const RANDOMIZATION_DIFF: i32 = 20; // Too high (50) -> game never ends from weird stall moves...?
+const TIMES_PER_SECOND_APPROX: u64 = 10;
+const NPS_EXPECTATION: u64 = 1_000_000;
+const BASE_EVERY: u64 = NPS_EXPECTATION / TIMES_PER_SECOND_APPROX;
 
 /// Comprehensive info about the best move in a position.
 pub struct BestMoveInfo {
@@ -86,7 +89,8 @@ impl Ai {
             node_counter: 0,
             start_ms: 0,
             ms_till_terminate: 2000,
-            max_nodes: None,
+            search_max_nodes: None,
+            check_every_x_nodes: BASE_EVERY,
             terminated: false,
             min_depth: 7,
             iterative_deepening_depth: 1,
@@ -209,7 +213,7 @@ impl Ai {
         self.run_search(real_board);
         let leading_move_ext = self.apply_leading_move(real_board);
         if let Some(ref x) = leading_move_ext {
-            console_log!("Making move: {} (depth = {})", self.test_board.stringify_move_for_js_logs(&x.m), x.remaining_depth);
+            console_log!("Making move: {} (depth = {}, score = {})", self.test_board.stringify_move_for_js_logs(&x.m), x.remaining_depth, x.score);
         } else {
             console_log!("No move");
         }
@@ -226,6 +230,7 @@ impl Ai {
     }
 
     pub fn make_random_move(&mut self, real_board: &mut Board) -> Option<BestMoveInfo> {
+        self.test_board.clone_from(real_board);
         self.moves_buf.write_index = 0; // Same as make_move and run_search starting at 0 as usual
         self.test_board.get_moves(&mut self.temp_moves, &mut self.moves_buf);
         if self.moves_buf.write_index <= 0 {
@@ -253,6 +258,16 @@ impl Ai {
             notation: slow_stringify_move_standard(&move_with_eval, &before_info, &after_info),
             m: move_with_eval
         })
+    }
+
+    pub fn set_search_max_nodes(&mut self, max_nodes: Option<u64>) {
+        if let Some(x) = max_nodes {
+            self.search_max_nodes = Some(x);
+            self.check_every_x_nodes = min(x, BASE_EVERY);
+        } else {
+            self.search_max_nodes = None;
+            self.check_every_x_nodes = BASE_EVERY;
+        }
     }
 
     fn assert_king_pos(&self, player: Player) {
@@ -285,15 +300,11 @@ impl Ai {
     /// Search should use a fake beta cutoff to escape recursively,
     /// then check if `self.terminated` to see if it's a real beta cutoff.
     fn increment_node_check_termination(&mut self) -> bool {
-        const TIMES_PER_SECOND_APPROX: u64 = 10;
-        const NPS_EXPECTATION: u64 = 1_000_000;
-        const EVERY: u64 = NPS_EXPECTATION / TIMES_PER_SECOND_APPROX;
         self.node_counter += 1;
         self.terminated = self.terminated || (
-            self.node_counter % EVERY == 0 &&
+            self.node_counter % self.check_every_x_nodes == 0 &&
             self.iterative_deepening_depth > self.min_depth &&
-            (now() - self.start_ms > self.ms_till_terminate ||
-             self.max_nodes.map_or(false, |max| self.node_counter >= max))
+            (self.search_max_nodes.map_or(false, |max| self.node_counter >= max) || now() - self.start_ms > self.ms_till_terminate)
         );
         self.terminated
     }

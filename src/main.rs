@@ -1,147 +1,180 @@
 #[cfg(feature = "wasm")]
 compile_error!("The CLI binary cannot be compiled with the wasm feature");
 
-use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufWriter, Read, Write};
+use std::path::PathBuf;
 use std::time::Instant;
+use clap::Parser;
 
-mod engine;
-mod platform;
-#[macro_use]
-mod macros;
+use ljenks_chess::{BestMoveInfoJs, Main};
+use ljenks_chess::init_globals;
+use ljenks_chess::Board;
 
-use engine::*;
-use engine::init_globals;
-use engine::ai::evaluation::evaluate;
+#[derive(Parser, Debug)]
+#[command(name = "chess-cli")]
+#[command(about = "Chess Engine CLI - NNUE Training Data Generator", long_about = None)]
+struct Cli {
+    /// Binary output file (appended, not overwritten)
+    output_file: PathBuf,
+    
+    /// Random half moves at start
+    #[arg(long, default_value = "10")]
+    random_half_moves: usize,
+    
+    /// Node limit for search
+    #[arg(long, default_value = "300000")]
+    max_nodes: u64,
+    
+    /// Number of games to play
+    #[arg(long, default_value = "2")]
+    num_games: usize,
+
+    #[arg(long, default_value = "100")]
+    max_half_moves_per_game: Option<usize>,
+    
+    /// View positions from file (e.g. "10", "5-15", "all")
+    #[arg(long)]
+    view: Option<String>,
+}
+
+fn view_positions(file_path: &PathBuf, range: &str) -> io::Result<()> {
+    let mut file = File::open(file_path)?;
+    let mut buffer = [0u8; 38];
+    
+    let (start, end) = if let Some((s, e)) = range.split_once('-') {
+        let start = s.parse::<usize>().unwrap_or(1).saturating_sub(1);
+        let end = e.parse::<usize>().unwrap_or(usize::MAX);
+        (start, end)
+    } else if range == "all" {
+        (0, usize::MAX)
+    } else {
+        let n = range.parse::<usize>().unwrap_or(10);
+        (0, n)
+    };
+
+    let mut i = 0;
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read < 38 { break; }
+        
+        if i >= start && i < end {
+            let board_copied: [u8; 34] = buffer[0..34].try_into().unwrap();
+            let score_bytes = &buffer[34..38];
+            let score = i32::from_le_bytes([score_bytes[0], score_bytes[1], score_bytes[2], score_bytes[3]]);
+            
+            let mut board = Board::with_kings_only();
+            board.import_compressed(&board_copied);
+            
+            println!("Position {} - Score: {}", i + 1, score);
+            println!("{}", board);
+            println!();
+        }
+        
+        i += 1;
+        if i >= end { break; }
+    }
+    
+    Ok(())
+}
 
 fn main() {
     init_globals();
     
-    let args: Vec<String> = env::args().collect();
+    let cli = Cli::parse();
     
-    if args.len() < 3 || args[1] == "--help" || args[1] == "-h" {
-        println!("Chess Engine CLI - Generate NNUE training data");
-        println!();
-        println!("Usage: {} <input_file> <output_file> [--depth N]", args[0]);
-        println!();
-        println!("Arguments:");
-        println!("  input_file   File containing FEN strings (1 per line)");
-        println!("  output_file  Binary output file for NNUE training data");
-        println!("  --depth N    Search depth for evaluation (default: 7)");
-        println!();
-        println!("Output format:");
-        println!("  Each position: [NNUE vector: 98324 bytes][score: 4 bytes]");
-        println!();
-        println!("Example:");
-        println!("  {} positions.bin training_data.bin --depth 10", args[0]);
-        std::process::exit(if args.len() < 3 { 1 } else { 0 });
-    }
-
-    let input_path = &args[1];
-    let output_path = &args[2];
-    let depth: i8 = args.iter()
-        .position(|x| x == "--depth")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(7);
-
-    println!("Reading FENs from: {}", input_path);
-    println!("Writing training data to: {}", output_path);
-    println!("Evaluation depth: {}", depth);
-    println!();
-
-    let input_file = match File::open(input_path) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Error opening input file: {}", e);
+    if let Some(range) = &cli.view {
+        if let Err(e) = view_positions(&cli.output_file, range) {
+            eprintln!("Error reading file: {}", e);
             std::process::exit(1);
         }
-    };
+        return;
+    }
 
-    let output_file = match File::create(output_path) {
+    let output_file: File = match File::create_new(&cli.output_file) {
         Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            match File::options().append(true).open(&cli.output_file) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Error opening existing output file: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        },
         Err(e) => {
             eprintln!("Error creating output file: {}", e);
             std::process::exit(1);
         }
     };
 
-    let reader: BufReader<File> = BufReader::new(input_file);
     let mut writer = BufWriter::new(output_file);
-
-    let mut total_positions = 0;
-    let mut error_count = 0;
+    let mut completed_games = 0;
     let start_time = Instant::now();
 
-    for (line_num, line) in reader.lines().enumerate() { // Rust note: `Lines` implements iterator, where Item = Result<String>
-        let line = match line {
-            Ok(l) => l,
-            Err(e) => {
-                eprintln!("Error reading line {}, skipping: {}", line_num + 1, e);
-                error_count += 1;
-                continue;
+    let mut main = Main::new();
+    main.set_search_max_nodes(Some(cli.max_nodes));
+    let mut board_bytes = [0u8; 34];
+
+    for _ in 0..cli.num_games {
+        main.new_board();
+        
+        let mut half_moves = 0;
+        loop {
+            if main.get_game_end_state().is_some() { break; }
+            let random_early_moves = half_moves < cli.random_half_moves;
+            if let Some(m) = cli.max_half_moves_per_game {
+                if half_moves >= m {
+                    println!("Exceeded {} max half moves, ending game", m);
+                    break;
+                }
             }
-        };
-
-        let fen = line.trim();
-        if fen.is_empty() {
-            continue;
-        }
-
-        let mut board = match Board::from_fen(fen) {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!("Invalid FEN at line {}, skipping: {} - {}", line_num + 1, fen, e);
-                error_count += 1;
-                continue;
+            main.get_board().export_compressed(&mut board_bytes);
+            let move_result: Option<BestMoveInfoJs> = if random_early_moves {
+                let score = main.evaluate().map(|info| info.score).expect("Unexpected game ended while evaluating");
+                let mut r = main.make_random_move();
+                if let Some(rr) = &mut r {
+                    (*rr).score = score;
+                }
+                r
+            } else {
+                main.make_ai_move()
+            };
+            if move_result.is_none() {
+                eprintln!("Unexpected no moves to make without formal game end {}", main.get_board());
+                std::process::exit(1); // Exit, fix it
             }
-        };
 
-        let mut nnue_vector = [0i8; Board::NNUE_TOTAL_SIZE];
-        board.encode_nnue(&mut nnue_vector);
+            if let Err(e) = writer.write_all(&board_bytes) {
+                eprintln!("Error writing board bytes: {}", e);
+                std::process::exit(1);
+            }
+            if let Err(e) = writer.write_all(&move_result.unwrap().score.to_le_bytes()) {
+                eprintln!("Error writing score: {}", e);
+                std::process::exit(1);
+            }
 
-        // TODO IMMEDIATE CHANGE THIS WHOLE APPROACH DELETE BYTEMUCK
-        // FIXME IMMEDIATE
-        let score = evaluate(&board);
-
-        // Now we have (vector, score) pair
-
-        // TODO IMMEDIATE Minor Do we need bytemuck just for this?
-        if let Err(e) = writer.write_all(bytemuck::cast_slice(&nnue_vector)) {
-            eprintln!("Error writing NNUE vector for line {}, skipping: {}", line_num + 1, e);
-            error_count += 1;
-            continue;
-            // TODO IMMEDIATE It will corrupt if errored?
+            half_moves += 1;
         }
 
-        if let Err(e) = writer.write_all(&score.to_le_bytes()) { // Little endian
-            eprintln!("Error writing score for line {}, skipping: {}", line_num + 1, e);
-            error_count += 1;
-            continue;
+        if let Some(end_state) = main.get_game_end_state() {
+            println!("End game state: {}", end_state);
         }
 
-        total_positions += 1;
-
-        if total_positions % 1000 == 0 {
-            let elapsed = start_time.elapsed().as_secs_f64();
-            let rate = total_positions as f64 / elapsed;
-            println!("Processed {} positions ({:.1} positions/sec)", total_positions, rate);
+        completed_games += 1;
+        if completed_games % 3 == 0 {
+            println!("Completed {} games", completed_games);
         }
-    }
-
-    if let Err(e) = writer.flush() {
-        eprintln!("Error flushing output: {}", e);
-        std::process::exit(1);
+        
+        if let Err(e) = writer.flush() {
+            eprintln!("Error flushing output: {}", e);
+            std::process::exit(1);
+        }
     }
 
     let elapsed = start_time.elapsed();
     println!();
     println!("Done!");
-    println!("Total positions processed: {}", total_positions);
-    println!("Errors: {}", error_count);
+    println!("Games completed: {}", completed_games);
     println!("Time elapsed: {:.2}s", elapsed.as_secs_f64());
-    if elapsed.as_secs() > 0 {
-        println!("Average rate: {:.1} positions/sec", total_positions as f64 / elapsed.as_secs_f64());
-    }
 }

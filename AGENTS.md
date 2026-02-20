@@ -7,6 +7,7 @@ Basic chess engine compiling to WASM, with browser frontend.
 ### Style
 - I prefix methods with an underscore if it has a potentially confusing contract, and there is a cleaner (but maybe slower) overload.
 - Prefer self-documenting code over pointless comments.
+- Prefer dense code with low empty lines.
 
 ### Architecture
 - When running build, test, or "cargo check", take a CAREFUL look at the commands in README.md and philosophy Cargo.toml. In the end, STOP adding random cfg options.
