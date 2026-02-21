@@ -132,6 +132,7 @@ impl Main {
         }
     }
 
+    /// Not eagerly called during class construction
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn refresh_player_moves(&mut self) {
         self.move_list.write_index = 0;
@@ -200,13 +201,16 @@ impl Main {
 
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn new_board(&mut self) {
-        // TODO IMMEDIATE Review, I think re-using position_hashes is all
         self.board = Board::new();
         let initial_hash = self.board.get_hash();
-        self.position_hashes = vec![initial_hash];
+        self.position_hashes.clear();
+        self.position_hashes.push(initial_hash);
+        // Sanity check: Inner Ai class doesn't need reset,
+        // many objects like move list, move buckets will completely rewrite themselves.
+        // Memo re-used. Late-injected stuff also fine. 
+        // Similarly, this class's temp, move_list, searchable are also reset on every move.
         self.half_moves_without_pawn_move = 0;
         self.game_end_state = None;
-        self.refresh_player_moves();
     }
 
     #[cfg_attr(feature = "wasm", wasm_bindgen)]

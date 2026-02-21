@@ -38,6 +38,7 @@ cargo build --release --bin chess-cli --no-default-features -F cli
 
 # Generate positions into output file, see options
 ./target/release/chess-cli <binary output filename>
+./target/release/chess-cli --view 5-10 <binary output filename>
 ```
 
 ### TODO

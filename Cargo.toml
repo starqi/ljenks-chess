@@ -8,7 +8,7 @@ edition = "2021"
 my_debug = [] # Project verbosity toggle
 default = ["dep:rand"] # For cargo check, tests, language server, but NEITHER WASM or CLI
 # Then remove default features and pick one of the two below for real targets
-wasm = ["wasm-bindgen", "console_error_panic_hook", "wee_alloc", "my_debug"]
+wasm = ["wasm-bindgen", "console_error_panic_hook", "my_debug"]
 cli = ["dep:rand"]
 
 [lib]
@@ -30,14 +30,6 @@ clap = { version = "4.5", features = ["derive"] }
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.7", optional = true }
-
-# TODO IMMEDIATE Deprecated?
-# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
-# compared to the default allocator's ~10K. It is slower than the default
-# allocator, however.
-#
-# Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
-wee_alloc = { version = "0.4.5", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.42" # TODO What is this?

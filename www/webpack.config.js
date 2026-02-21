@@ -21,6 +21,7 @@ module.exports = {
             patterns: [
                 {from: path.resolve(__dirname, 'index.html')},
                 {from: path.resolve(__dirname, 'worker.js')},
+                {from: path.resolve(__dirname, 'styles.css')},
             ],
         }),
         new WasmPackPlugin({

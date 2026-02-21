@@ -13,6 +13,7 @@ use crate::branchless_mask;
 use crate::{console_log};
 use super::game::board::slow_stringify_move_standard;
 
+// Given performance nature, much state lives as "class vars"
 pub struct Ai {
     moves_buf: MoveList,
     test_board: Board,
@@ -31,8 +32,8 @@ pub struct Ai {
     terminated: bool,
     min_depth: i8, // Configuration (not state)
     iterative_deepening_depth: i8,
-    real_board_positional_hashes: *const Vec<u64>,
-    half_moves_without_pawn_move: *const usize,
+    real_board_positional_hashes: *const Vec<u64>, // See late-inject
+    half_moves_without_pawn_move: *const usize, //  See late-inject
     move_buckets: MoveBuckets,
 }
 
@@ -78,6 +79,7 @@ impl Ai {
     pub fn new() -> Self {
         console_log!("AI init");
         Self {
+            // See struct definition
             moves_buf: MoveList::new(1000),
             test_board: Board::new(),
             temp_moves: MoveList::new(50),
