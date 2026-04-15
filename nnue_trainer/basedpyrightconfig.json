@@ -1,0 +1,20 @@
+{
+  "include": ["src"],
+  "exclude": ["__pycache__", "**/__pycache__"],
+  "venvPath": ".",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "reportAny": false,
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownArgumentType": false,
+  "reportMissingParameterType": false,
+  "reportReturnType": false,
+  "reportArgumentType": false,
+  "reportCallIssue": false,
+  "reportAssignment": false,
+  "reportOperatorIssue": false,
+  "reportAttributeAccessIssue": false,
+  "reportIndexIssue": false
+}
