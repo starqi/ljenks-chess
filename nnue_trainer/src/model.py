@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from .dataset import NNUE_TOTAL_SIZE
 
+
 class NNUE(nn.Module):
 
     def __init__(self, l1_size: int = 256, l2_size: int = 32):
@@ -15,10 +16,15 @@ class NNUE(nn.Module):
         self.fc1: nn.Linear = nn.Linear(l1_size, l2_size)
         self.output: nn.Linear = nn.Linear(l2_size, 1)
     
+        self._reset_weights()
+    
+    def _reset_weights(self):
+        self.input.weight.data *= 512.0
+
     def forward(self, indices: torch.Tensor, offsets: torch.Tensor) -> torch.Tensor:
-        x = self.input(indices, offsets)
-        x = torch.clamp(x, 0.0, 1.0) # Clipped ReLU as per NNUE # TODO Review
+        x: torch.Tensor = self.input(indices, offsets)
+        x = torch.nn.functional.leaky_relu(x, negative_slope=0.01)
         x = self.fc1(x)
-        x = torch.clamp(x, 0.0, 1.0)
+        x = torch.nn.functional.leaky_relu(x, negative_slope=0.01)
         x = self.output(x)
         return x.squeeze(-1)

@@ -3,6 +3,7 @@ from torch.optim import Adam
 from .model import NNUE
 from .dataset import create_dataloader
 
+# TODO Integer quantized READ
 
 def get_device():
     if torch.cuda.is_available():
@@ -12,13 +13,17 @@ def get_device():
     return torch.device("cpu")
 
 
-def train(bin_path: str, epochs: int = 10, batch_size: int = 1024, lr: float = 1e-3):
+def train(bin_path: str, epochs: int = 50, batch_size: int = 1024, lr: float = 1e-3, save_path: str | None = None, seed: int | None = None):
+    if seed is not None:
+        torch.manual_seed(seed)
+        torch.mps.manual_seed(seed) # TODO (Minor) mps special case
+    
     device = get_device()
     print(f"Using device: {device}")
     
     dataloader = create_dataloader(bin_path, batch_size=batch_size, num_workers=0)
     model = NNUE().to(device)
-    optimizer = Adam(model.parameters(), lr=lr) # TODO IMMEDIATE Read again
+    optimizer = Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     
     for epoch in range(epochs):
         total_loss = 0
@@ -42,3 +47,7 @@ def train(bin_path: str, epochs: int = 10, batch_size: int = 1024, lr: float = 1
         
         avg_loss = total_loss / count if count > 0 else 0
         print(f"Epoch {epoch + 1} complete, Avg Loss: {avg_loss:.4f}")
+    
+    if save_path:
+        torch.save(model.state_dict(), save_path)
+        print(f"Model saved to {save_path}")

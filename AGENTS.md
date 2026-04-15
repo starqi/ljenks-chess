@@ -1,6 +1,7 @@
 Basic chess engine compiling to WASM, with browser frontend.
 
 ### Basics
+- STOP deleting my comments
 - See README.md for common commands.
 - "Eyeball" tests don't have assertions, you can un-ignore them, run and check the output, but it won't fail.
 

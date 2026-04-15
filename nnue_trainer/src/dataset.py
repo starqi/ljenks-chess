@@ -152,6 +152,7 @@ class ChessDataset(Dataset[tuple[torch.Tensor, float]]):
         board_data = bytes(self._mmap[offset:offset + COMPRESSED_SIZE])
         score_bytes = self._mmap[offset + COMPRESSED_SIZE:offset + RECORD_SIZE]
         score = np.frombuffer(score_bytes, dtype='<i4')[0].item()
+        score = max(-32000, min(32000, score))
         
         indices = compute_nnue_indices(board_data)
         indices_tensor = torch.tensor(indices, dtype=torch.long)
@@ -189,11 +190,11 @@ def collate_fn(batch: list[tuple[torch.Tensor, float]]) -> tuple[torch.Tensor, t
 # TODO ...ljenks-chess/nnue_trainer/.venv/lib/python3.10/site-packages/torch/utils/data/dataloader.py:775:
 # UserWarning: 'pin_memory' argument is set
 # as true but not supported on MPS now, device pinned memory won't be used.
-def create_dataloader(bin_path: str, batch_size: int = 1024, max_positions: int | None = None, num_workers: int = 0) -> DataLoader[tuple[torch.Tensor, float]]:
+def create_dataloader(bin_path: str, batch_size: int = 1024, max_positions: int | None = None, num_workers: int = 0, shuffle: bool = True) -> DataLoader[tuple[torch.Tensor, float]]:
     dataset = ChessDataset(bin_path, max_positions)
     # "Pinned memory in PyTorch acts like disabling virtual memory
     #  for that specific tensor by creating "page-locked" CPU memory that the OS cannot swap to disk.
     #  This ensures faster GPU transfers (Direct Memory Access) but doesn't disable virtual memory system-wide,
     #  instead locking specific data in physical RAM."
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn, num_workers=num_workers, pin_memory=True)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn, num_workers=num_workers, pin_memory=True)
 
