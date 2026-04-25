@@ -9,8 +9,6 @@ mod macros;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-// TODO IMMEDIATE Add as dep to CLI tool as well, no need to be WASM only
-#[cfg(feature = "wasm")]
 use safetensors::SafeTensors;
 
 pub use engine::*;
@@ -67,7 +65,6 @@ impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
     }
 }
 
-#[cfg(feature = "wasm")]
 pub struct NnueWeights {
     pub input_weight: Vec<f32>,
     pub fc1_weight: Vec<f32>,
@@ -81,7 +78,6 @@ pub struct Main {
     board: Board,
     ai: Ai,
 
-    #[cfg(feature = "wasm")]
     weights: Option<NnueWeights>,
 
     temp: MoveList,
@@ -112,7 +108,6 @@ impl Main {
             board,
             ai: Ai::new(),
 
-            #[cfg(feature = "wasm")]
             weights: None,
 
             temp: MoveList::new(50),
@@ -136,19 +131,9 @@ impl Main {
             return None;
         }
 
-        self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
+        self.ai .late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         let best_move_info = self.ai.make_move(&mut self.board);
-        let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn);
-        if let Some(is_pawn) = is_pawn_holder {
-            let mut temp_var = false;
-            let mut temp_var2 = false;
-            let mut temp_var3 = false;
-            self.handle_special_end_conditions(self.board.get_player_with_turn().other_player(), is_pawn, &mut temp_var, &mut temp_var2, &mut temp_var3);
-            best_move_info.map(BestMoveInfoJs::from)
-        } else {
-            console_error!("No moves, but game has not ended?!");
-            None
-        }
+        self.process_best_move_info_to_js(best_move_info)
     }
 
     /// Not eagerly called during class construction
@@ -239,27 +224,17 @@ impl Main {
             return None;
         }
 
-        // TODO IMMEDIATE Share dupe code with make_ai_move
-        self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
+        self.ai .late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         let best_move_info = self.ai.make_random_move(&mut self.board);
-        let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn);
-        if let Some(is_pawn) = is_pawn_holder {
-            let mut temp_var = false;
-            let mut temp_var2 = false;
-            let mut temp_var3 = false;
-            self.handle_special_end_conditions(self.board.get_player_with_turn().other_player(), is_pawn, &mut temp_var, &mut temp_var2, &mut temp_var3);
-            best_move_info.map(BestMoveInfoJs::from)
-        } else {
-            None
-        }
+        self.process_best_move_info_to_js(best_move_info)
     }
 
-    #[cfg(not(feature="wasm"))]
+    #[cfg(not(feature = "wasm"))]
     pub fn set_search_max_nodes(&mut self, max_nodes: Option<u64>) {
         self.ai.set_search_max_nodes(max_nodes);
     }
 
-    #[cfg(not(feature="wasm"))]
+    #[cfg(not(feature = "wasm"))]
     pub fn get_board(&self) -> &Board {
         &self.board
     }
@@ -279,7 +254,6 @@ impl Main {
         }
     }
 
-    #[cfg(feature = "wasm")]
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn load_weights(&mut self, bytes: &[u8]) -> bool {
         match SafeTensors::deserialize(bytes) {
@@ -317,6 +291,20 @@ impl Main {
                 console_error!("safetensors error: {:?}", e);
                 false
             }
+        }
+    }
+
+    fn process_best_move_info_to_js(&mut self, best_move_info: Option<engine::ai::BestMoveInfo>) -> Option<BestMoveInfoJs> {
+        let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn);
+        if let Some(is_pawn) = is_pawn_holder {
+            self.handle_special_end_conditions(
+                self.board.get_player_with_turn().other_player(),
+                is_pawn, &mut false, &mut false, &mut false,
+            );
+            best_move_info.map(BestMoveInfoJs::from)
+        } else {
+            console_error!("No moves, but game has not ended?!");
+            None
         }
     }
 

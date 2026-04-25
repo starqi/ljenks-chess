@@ -10,10 +10,10 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("wee_alloc
 
 [features]
 my_debug = [] # Project verbosity toggle
-default = ["dep:rand"] # For cargo check, tests, language server, but NEITHER WASM or CLI
+default = ["dep:rand", "dep:safetensors"] # For cargo check, tests, language server, but NEITHER WASM or CLI
 # Then remove default features and pick one of the two below for real targets
 wasm = ["wasm-bindgen", "console_error_panic_hook", "my_debug", "dep:safetensors"]
-cli = ["dep:rand"]
+cli = ["dep:rand", "dep:safetensors"]
 
 [lib]
 crate-type = ["cdylib", "rlib"] # Can target both WASM and native, even though currently it's just WASM

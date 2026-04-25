@@ -1,3 +1,5 @@
+// (CORRECTNESS IS AI REVIEWED) //
+
 use super::*;
 
 #[derive(Debug, PartialEq)]
@@ -7,8 +9,7 @@ pub enum FenError {
     InvalidActiveColor,
     InvalidCastlingRights,
     InvalidEnPassantSquare,
-
-    // TODO (Minor)
+    // TODO (Minor) Not supported
     //InvalidHalfmoveClock,
     //InvalidFullmoveNumber,
 }
@@ -21,37 +22,35 @@ impl Display for FenError {
             FenError::InvalidActiveColor => write!(f, "Invalid active color"),
             FenError::InvalidCastlingRights => write!(f, "Invalid castling rights"),
             FenError::InvalidEnPassantSquare => write!(f, "Invalid en passant square"),
+            // TODO (Minor) Not supported
             //FenError::InvalidHalfmoveClock => write!(f, "Invalid halfmove clock"),
             //FenError::InvalidFullmoveNumber => write!(f, "Invalid fullmove number"),
         }
     }
 }
 
-// FEN
 impl Board {
-    // TODO IMMEDIATE Review. Check if AI saying OO and OOO were flipped is true or not. 
-
     pub fn from_fen(fen: &str) -> Result<Self, FenError> {
         let mut board = Self {
             d: [Square::Blank; 64],
             hash: 0,
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()],
-            en_passant_extra_target: TargetSquare::new()
+            en_passant_extra_target: TargetSquare::new(),
         };
 
         board.load_fen(fen)?;
         Ok(board)
     }
 
-    /// No half-move and full move counter implemented at the moment. 
+    /// No half-move and full move counter implemented at the moment.
     pub fn load_fen(&mut self, fen: &str) -> Result<(), FenError> {
         let parts: Vec<&str> = fen.trim().split_whitespace().collect();
         if parts.len() != 6 {
             return Err(FenError::InvalidFormat);
         }
 
-        self.parse_piece_placement(parts[0])?;
+        self.parse_set_piece_placement(parts[0])?;
 
         // Parse active color
         self.player_with_turn = match parts[1] {
@@ -60,8 +59,8 @@ impl Board {
             _ => return Err(FenError::InvalidActiveColor),
         };
 
-        self.parse_castling_rights(parts[2])?;
-        self.parse_en_passant(parts[3])?;
+        self.parse_set_castling_rights(parts[2])?;
+        self.parse_set_en_passant(parts[3])?;
 
         self.update_derived_state();
         self.hash = self.calculate_hash();
@@ -69,7 +68,7 @@ impl Board {
         Ok(())
     }
 
-    fn parse_piece_placement(&mut self, placement: &str) -> Result<(), FenError> {
+    fn parse_set_piece_placement(&mut self, placement: &str) -> Result<(), FenError> {
         let ranks: Vec<&str> = placement.split('/').collect();
         if ranks.len() != 8 {
             return Err(FenError::InvalidPiecePlacement);
@@ -84,21 +83,19 @@ impl Board {
                 }
 
                 if ch.is_digit(10) {
-                    // Empty squares
                     let empty_count = ch.to_digit(10).unwrap() as usize;
                     if file_idx + empty_count > 8 {
                         return Err(FenError::InvalidPiecePlacement);
                     }
-                        for _ in 0..empty_count {
-                            if file_idx < 8 {
-                                let coord = FastCoord::from_xy(file_idx as u8, rank_idx as u8);
-                                self.d[coord.value() as usize] = Square::Blank;
-                                file_idx += 1;
-                            }
+                    for _ in 0..empty_count {
+                        if file_idx < 8 {
+                            let coord = FastCoord::from_xy(file_idx as u8, rank_idx as u8);
+                            self.d[coord.value() as usize] = Square::Blank;
+                            file_idx += 1;
                         }
+                    }
                 } else {
-                    // Piece
-                    let (piece, player) = self.parse_fen_piece(ch)?;
+                    let (piece, player) = Self::parse_fen_piece(ch)?;
                     let coord = FastCoord::from_xy(file_idx as u8, rank_idx as u8);
                     self.d[coord.value() as usize] = Square::Occupied(piece, player);
                     file_idx += 1;
@@ -113,7 +110,7 @@ impl Board {
         Ok(())
     }
 
-    fn parse_fen_piece(&self, ch: char) -> Result<(Piece, Player), FenError> {
+    fn parse_fen_piece(ch: char) -> Result<(Piece, Player), FenError> {
         match ch {
             'P' => Ok((Piece::Pawn, Player::White)),
             'N' => Ok((Piece::Knight, Player::White)),
@@ -131,8 +128,7 @@ impl Board {
         }
     }
 
-    fn parse_castling_rights(&mut self, castling: &str) -> Result<(), FenError> {
-        // Reset castling rights
+    fn parse_set_castling_rights(&mut self, castling: &str) -> Result<(), FenError> {
         for player in [Player::White, Player::Black] {
             self.get_player_state_mut(player).moved_castle_piece = [true, true];
         }
@@ -143,10 +139,10 @@ impl Board {
 
         for ch in castling.chars() {
             match ch {
-                'K' => self.get_player_state_mut(Player::White).moved_castle_piece[1] = false, // King side
-                'Q' => self.get_player_state_mut(Player::White).moved_castle_piece[0] = false, // Queen side
-                'k' => self.get_player_state_mut(Player::Black).moved_castle_piece[1] = false, // King side
-                'q' => self.get_player_state_mut(Player::Black).moved_castle_piece[0] = false, // Queen side
+                'K' => self.get_player_state_mut(Player::White).moved_castle_piece[0] = false,
+                'Q' => self.get_player_state_mut(Player::White).moved_castle_piece[1] = false,
+                'k' => self.get_player_state_mut(Player::Black).moved_castle_piece[0] = false,
+                'q' => self.get_player_state_mut(Player::Black).moved_castle_piece[1] = false,
                 _ => return Err(FenError::InvalidCastlingRights),
             }
         }
@@ -154,7 +150,7 @@ impl Board {
         Ok(())
     }
 
-    fn parse_en_passant(&mut self, en_passant: &str) -> Result<(), FenError> {
+    fn parse_set_en_passant(&mut self, en_passant: &str) -> Result<(), FenError> {
         if en_passant == "-" {
             self.en_passant_extra_target.reset();
             return Ok(());
@@ -167,7 +163,7 @@ impl Board {
         let file = en_passant.chars().next().unwrap();
         let rank = en_passant.chars().nth(1).unwrap();
 
-        if !('a' <= file && file <= 'z') || !('1' <= rank && rank <= '8') {
+        if !('a' <= file && file <= 'h') || !('1' <= rank && rank <= '8') {
             return Err(FenError::InvalidEnPassantSquare);
         }
 
@@ -184,7 +180,6 @@ impl Board {
     }
 
     fn update_derived_state(&mut self) {
-        // Collect piece locations first
         let mut white_piece_locs = Bitboard(0);
         let mut black_piece_locs = Bitboard(0);
         let mut white_king_loc = Bitboard(0);
@@ -200,7 +195,7 @@ impl Board {
                         if *piece == Piece::King {
                             white_king_loc = bitboard;
                         }
-                    },
+                    }
                     Player::Black => {
                         black_piece_locs = black_piece_locs | bitboard;
                         if *piece == Piece::King {
@@ -211,7 +206,6 @@ impl Board {
             }
         }
 
-        // Apply the collected updates
         self.get_player_state_mut(Player::White).piece_locs = white_piece_locs;
         self.get_player_state_mut(Player::White).king_location = white_king_loc;
         self.get_player_state_mut(Player::Black).piece_locs = black_piece_locs;
@@ -286,17 +280,38 @@ mod test {
 
     #[test]
     fn test_fen_castling_rights() {
-        // White can only castle kingside, black only queenside
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Kk - 0 1";
         let board = Board::from_fen(fen).unwrap();
-        assert_eq!(board.get_player_state(Player::White).moved_castle_piece, [true, false]); // queenside moved, kingside not
-        assert_eq!(board.get_player_state(Player::Black).moved_castle_piece, [true, false]); // queenside moved, kingside not
+        assert_eq!(
+            board.get_player_state(Player::White).moved_castle_piece,
+            [false, true]
+        );
+        assert_eq!(
+            board.get_player_state(Player::Black).moved_castle_piece,
+            [false, true]
+        );
 
-        // No castling rights
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Qk - 0 1";
+        let board = Board::from_fen(fen).unwrap();
+        assert_eq!(
+            board.get_player_state(Player::White).moved_castle_piece,
+            [true, false]
+        );
+        assert_eq!(
+            board.get_player_state(Player::Black).moved_castle_piece,
+            [false, true]
+        );
+
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1";
         let board = Board::from_fen(fen).unwrap();
-        assert_eq!(board.get_player_state(Player::White).moved_castle_piece, [true, true]);
-        assert_eq!(board.get_player_state(Player::Black).moved_castle_piece, [true, true]);
+        assert_eq!(
+            board.get_player_state(Player::White).moved_castle_piece,
+            [true, true]
+        );
+        assert_eq!(
+            board.get_player_state(Player::Black).moved_castle_piece,
+            [true, true]
+        );
     }
 
     #[test]
@@ -373,7 +388,6 @@ mod test {
 
         assert!(board.load_fen(fen).is_ok());
 
-        // Verify the board was updated correctly
         assert_eq!(*board.get_by_file_rank_safe('e', 5).unwrap(), Square::Occupied(Piece::King, Player::Black));
         assert_eq!(*board.get_by_file_rank_safe('d', 3).unwrap(), Square::Occupied(Piece::King, Player::White));
         assert_eq!(board.get_player_with_turn(), Player::White);

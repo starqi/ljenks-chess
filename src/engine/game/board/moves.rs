@@ -1,7 +1,7 @@
 use super::*;
 
 pub enum RevertableMove {
-    // TODO IMMEDIATE Better style? Params are accessible outside module...
+    // TODO IMMEDIATE Better style? Enum contents are public.
 
     /// (old squares, old hash to revert to, moved_castle_piece - first index is `Player` enum number, old king location)
     NormalMove([BeforeSquare; 2], u64, [[bool; 2]; 2], Bitboard, TargetSquare),

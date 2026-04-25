@@ -9,12 +9,17 @@ module.exports = {
         path: path.resolve(__dirname, 'dist'),
         filename: 'index.js',
     },
+    performance: { 
+        hints: false // Don't complain about safetensors large file, not wrong
+    },
+
     // Enabling ANY of these slowed down NPS by 4x, why? TODO (Minor)
     //optimization: { // https://webpack.js.org/configuration/optimization/#optimizationminimize
     //    minimize: true
     //},
     //devtool: 'source-map',
     //mode: 'development',
+
     mode: 'production',
     plugins: [
         new CopyWebpackPlugin({
@@ -22,7 +27,6 @@ module.exports = {
                 {from: path.resolve(__dirname, 'index.html')},
                 {from: path.resolve(__dirname, 'worker.js')},
                 {from: path.resolve(__dirname, 'styles.css')},
-                // TODO IMMEDIATE So Webpack warning is for this line?
                 {from: path.resolve(__dirname, 'nnue_model.safetensors')},
             ],
         }),
