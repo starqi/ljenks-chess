@@ -5,6 +5,7 @@ from .dataset import NNUE_TOTAL_SIZE
 
 class NNUE(nn.Module):
 
+    # TODO (Read) Some intuition around possible vector sizes 
     def __init__(self, l1_size: int = 256, l2_size: int = 32):
         super().__init__()
         # More efficient way of doing l1_size by NNUE_TOTAL_SIZE sparse matrix instead of multiplying by 0 a gazillion times
@@ -23,6 +24,7 @@ class NNUE(nn.Module):
 
     def forward(self, indices: torch.Tensor, offsets: torch.Tensor) -> torch.Tensor:
         x: torch.Tensor = self.input(indices, offsets)
+        # Ran into dead ReLU immediately and fixed with leaky ReLU 
         x = torch.nn.functional.leaky_relu(x, negative_slope=0.01)
         x = self.fc1(x)
         x = torch.nn.functional.leaky_relu(x, negative_slope=0.01)

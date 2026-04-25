@@ -3,7 +3,8 @@ from torch.optim import Adam
 from .model import NNUE
 from .dataset import create_dataloader
 
-# TODO Integer quantized READ
+# TODO (Minor) Integer quantized READ
+# TODO Fix basedpyright
 
 def get_device():
     if torch.cuda.is_available():
@@ -23,7 +24,7 @@ def train(bin_path: str, epochs: int = 50, batch_size: int = 1024, lr: float = 1
     
     dataloader = create_dataloader(bin_path, batch_size=batch_size, num_workers=0)
     model = NNUE().to(device)
-    optimizer = Adam(model.parameters(), lr=lr, weight_decay=1e-5)
+    optimizer = Adam(model.parameters(), lr=lr, weight_decay=1e-5) # TODO (Read)
     
     for epoch in range(epochs):
         total_loss = 0

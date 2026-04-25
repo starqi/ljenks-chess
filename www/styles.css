@@ -187,3 +187,25 @@ body {
     margin-bottom: 10px;
     font-size: 28px;
 }
+
+#loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.3s;
+}
+
+#loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#loading-text {
+    color: var(--text-muted);
+    font-family: sans-serif;
+    font-size: 1.5em;
+}

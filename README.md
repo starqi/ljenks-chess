@@ -59,6 +59,7 @@ cargo build --release --bin chess-cli --no-default-features -F cli
     12. Bg6+ Kg8
     13. Qh7#
 
+- Move commands, etc to AGENTS.md
 - Review FEN AI code
 - // TODO temp_moves unnecessary? Try it
 - / Review new main.rs AI code
@@ -85,6 +86,7 @@ cargo build --release --bin chess-cli --no-default-features -F cli
     - Long range bishop with all target squares pawn controlled -> not valued
 - Evaluation
     - Moving pieces out of the way, similar to synergy -> not a problem anymore? Emergent fixed...
+
     - Fixed already? Need to look up by piece, then weigh knight differently b/c less maximum squares attacked
         - Should be able to make queen balanced like this, instead of 0
     - Castle bonus should be replaced with king safety?
@@ -108,6 +110,7 @@ Minor
 - King safety
 - Clean up linter warnings
     - Dead code
+- Unused vars Rust warnings
 
 Read again
 - Debruijin indices

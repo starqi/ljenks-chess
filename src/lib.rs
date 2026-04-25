@@ -9,6 +9,10 @@ mod macros;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
+// TODO IMMEDIATE Add as dep to CLI tool as well, no need to be WASM only
+#[cfg(feature = "wasm")]
+use safetensors::SafeTensors;
+
 pub use engine::*;
 pub use engine::game::board::slow_stringify_move_standard;
 
@@ -63,10 +67,22 @@ impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
     }
 }
 
+#[cfg(feature = "wasm")]
+pub struct NnueWeights {
+    pub input_weight: Vec<f32>,
+    pub fc1_weight: Vec<f32>,
+    pub fc1_bias: Vec<f32>,
+    pub output_weight: Vec<f32>,
+    pub output_bias: Vec<f32>,
+}
+
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Main {
     board: Board,
     ai: Ai,
+
+    #[cfg(feature = "wasm")]
+    weights: Option<NnueWeights>,
 
     temp: MoveList,
     move_list: MoveList,
@@ -95,6 +111,9 @@ impl Main {
         Main {
             board,
             ai: Ai::new(),
+
+            #[cfg(feature = "wasm")]
+            weights: None,
 
             temp: MoveList::new(50),
             move_list: MoveList::new(50),
@@ -257,6 +276,47 @@ impl Main {
                 true
             },
             Err(_) => false,
+        }
+    }
+
+    #[cfg(feature = "wasm")]
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    pub fn load_weights(&mut self, bytes: &[u8]) -> bool {
+        match SafeTensors::deserialize(bytes) {
+            Ok(st) => {
+                console_log!("Loaded safetensors with {} tensors", st.len());
+                let mut w = NnueWeights {
+                    input_weight: Vec::new(),
+                    fc1_weight: Vec::new(),
+                    fc1_bias: Vec::new(),
+                    output_weight: Vec::new(),
+                    output_bias: Vec::new(),
+                };
+                for name in st.names() {
+                    if let Ok(tensor) = st.tensor(name) {
+                        let shape = tensor.shape();
+                        let data = tensor.data();
+                        let f32s: Vec<f32> = data.chunks_exact(4)
+                            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                            .collect();
+                        console_log!("  {} {:?} {} values", name, shape, f32s.len());
+                        match name {
+                            "input.weight" => w.input_weight = f32s,
+                            "fc1.weight" => w.fc1_weight = f32s,
+                            "fc1.bias" => w.fc1_bias = f32s,
+                            "output.weight" => w.output_weight = f32s,
+                            "output.bias" => w.output_bias = f32s,
+                            _ => console_log!("  (unknown tensor {})", name),
+                        }
+                    }
+                }
+                self.weights = Some(w);
+                true
+            }
+            Err(e) => {
+                console_error!("safetensors error: {:?}", e);
+                false
+            }
         }
     }
 

@@ -1,5 +1,3 @@
-# TODO IMMEDIATE This training doesn't actually work btw, error doesn't go down
-
 import yaml
 import os
 import sys

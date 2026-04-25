@@ -22,6 +22,8 @@ module.exports = {
                 {from: path.resolve(__dirname, 'index.html')},
                 {from: path.resolve(__dirname, 'worker.js')},
                 {from: path.resolve(__dirname, 'styles.css')},
+                // TODO IMMEDIATE So Webpack warning is for this line?
+                {from: path.resolve(__dirname, 'nnue_model.safetensors')},
             ],
         }),
         new WasmPackPlugin({
