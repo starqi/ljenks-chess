@@ -4,16 +4,12 @@ version = "0.0.1"
 authors = ["starqi <helloimzirui@gmail.com>"]
 edition = "2021"
 
-# TODO IMMEDIATE READ
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("wee_alloc"))'] }
-
 [features]
 my_debug = [] # Project verbosity toggle
-default = ["dep:rand", "dep:safetensors"] # For cargo check, tests, language server, but NEITHER WASM or CLI
+default = ["dep:rand"] # For cargo check, tests, language server, but NEITHER WASM or CLI
 # Then remove default features and pick one of the two below for real targets
-wasm = ["wasm-bindgen", "console_error_panic_hook", "my_debug", "dep:safetensors"]
-cli = ["dep:rand", "dep:safetensors"]
+wasm = ["wasm-bindgen", "console_error_panic_hook", "my_debug"]
+cli = ["dep:rand"]
 
 [lib]
 crate-type = ["cdylib", "rlib"] # Can target both WASM and native, even though currently it's just WASM
@@ -28,8 +24,9 @@ wasm-bindgen = { version = "0.2.92", optional = true }
 lazy_static = "1.5.0"
 rand = { version = "0.8.5", optional = true }
 clap = { version = "4.5", features = ["derive"] }
-# TODO IMMEDIATE Read
-safetensors = { version = "0.7", default-features = false, features = ["alloc"], optional = true }
+# https://docs.rs/crate/safetensors/latest/source/Cargo.toml
+# For WASM, choose "alloc" strategy, avoid Rust standard lib and mmap support
+safetensors = { version = "0.7", default-features = false, features = ["alloc"] } 
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

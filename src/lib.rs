@@ -11,14 +11,8 @@ use wasm_bindgen::prelude::*;
 
 use safetensors::SafeTensors;
 
-pub use engine::*;
 pub use engine::game::board::slow_stringify_move_standard;
-
-// WASM bindgen recommendation.
-// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
-#[cfg(feature = "wee_alloc")]
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+pub use engine::*;
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone, Debug)]
@@ -66,7 +60,6 @@ impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
 }
 
 pub struct NnueWeights {
-    pub input_weight: Vec<f32>,
     pub fc1_weight: Vec<f32>,
     pub fc1_bias: Vec<f32>,
     pub output_weight: Vec<f32>,
@@ -260,7 +253,6 @@ impl Main {
             Ok(st) => {
                 console_log!("Loaded safetensors with {} tensors", st.len());
                 let mut w = NnueWeights {
-                    input_weight: Vec::new(),
                     fc1_weight: Vec::new(),
                     fc1_bias: Vec::new(),
                     output_weight: Vec::new(),
@@ -270,12 +262,22 @@ impl Main {
                     if let Ok(tensor) = st.tensor(name) {
                         let shape = tensor.shape();
                         let data = tensor.data();
-                        let f32s: Vec<f32> = data.chunks_exact(4)
+                        let f32s: Vec<f32> = data
+                            .chunks_exact(4)
                             .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
                             .collect();
                         console_log!("  {} {:?} {} values", name, shape, f32s.len());
+                        // TODO IMMEDIATE REVIEW ALL HERE
                         match name {
-                            "input.weight" => w.input_weight = f32s,
+                            "input.weight" => {
+                                let boxed: Box<[f32]> = f32s.into_boxed_slice();
+                                match crate::engine::set_nnue_input_weights(boxed) {
+                                    Ok(()) => {}
+                                    Err(_) => {
+                                        console_log!("  (input.weight already set, ignoring)")
+                                    }
+                                }
+                            }
                             "fc1.weight" => w.fc1_weight = f32s,
                             "fc1.bias" => w.fc1_bias = f32s,
                             "output.weight" => w.output_weight = f32s,

@@ -78,8 +78,6 @@ fn view_positions(file_path: &PathBuf, range: &str) -> io::Result<()> {
     Ok(())
 }
 
-// TODO IMMEDIATE Accept single number as range 
-
 fn main() {
     init_globals();
     

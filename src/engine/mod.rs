@@ -1,22 +1,26 @@
-pub mod game;
 pub mod ai;
+pub mod game;
 
 // Re-export commonly used types
 pub use ai::*;
 pub use game::bitboard_presets::*;
-pub use game::memo::*;
-pub use game::coords::*;
-pub use game::entities::*;
 pub use game::board::*;
 pub use game::castle_utils::*;
-pub use game::searchable_moves::*;
+pub use game::coords::*;
+pub use game::entities::*;
+pub use game::memo::*;
 pub use game::move_list::*;
+pub use game::searchable_moves::*;
 
 use std::sync::LazyLock;
+use std::sync::OnceLock;
 
 pub static CASTLE_UTILS: LazyLock<CastleUtils> = LazyLock::new(|| CastleUtils::new());
-pub static RANDOM_NUMBER_KEYS: LazyLock<RandomNumberKeys> = LazyLock::new(|| RandomNumberKeys::new());
+pub static RANDOM_NUMBER_KEYS: LazyLock<RandomNumberKeys> =
+    LazyLock::new(|| RandomNumberKeys::new());
 pub static BITBOARD_PRESETS: LazyLock<BitboardPresets> = LazyLock::new(|| BitboardPresets::new());
+// TODO (Read) OnceLock
+pub static NNUE_INPUT_WEIGHTS: OnceLock<Box<[f32]>> = OnceLock::new();
 
 pub fn init_globals() {
     LazyLock::force(&CASTLE_UTILS);
@@ -34,6 +38,15 @@ pub fn random_number_keys() -> &'static RandomNumberKeys {
 
 pub fn bitboard_presets() -> &'static BitboardPresets {
     &BITBOARD_PRESETS
+}
+
+// TODO (Read) Box, reference to Box?  
+pub fn nnue_input_weights() -> Option<&'static Box<[f32]>> {
+    NNUE_INPUT_WEIGHTS.get()
+}
+
+pub fn set_nnue_input_weights(weights: Box<[f32]>) -> Result<(), Box<[f32]>> {
+    NNUE_INPUT_WEIGHTS.set(weights)
 }
 
 pub const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;

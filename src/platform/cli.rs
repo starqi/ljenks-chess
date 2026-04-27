@@ -1,6 +1,6 @@
 // Native CLI platform implementations
-use std::time::{SystemTime, UNIX_EPOCH};
 use rand::{thread_rng, Rng};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn log(s: &str) {
     println!("{}", s);

@@ -1,25 +1,25 @@
-use std::fmt::{Display, Formatter, self};
+use std::fmt::{self, Display, Formatter};
 
 use crate::*;
 
-use super::memo::*;
+use super::bitboard::*;
 use super::coords::*;
 use super::entities::*;
+use super::memo::*;
 use super::move_test::*;
-use super::bitboard::*;
 
 // Child modules
 mod compressed;
 mod fen;
-mod nnue;
 mod moves;
+mod nnue;
 mod stringify;
 
 // Public re-exports
 pub use compressed::*;
 pub use fen::*;
-pub use nnue::*;
 pub use moves::*;
+pub use nnue::*;
 pub use stringify::*;
 
 #[derive(Clone)]
@@ -68,13 +68,16 @@ impl TargetSquare {
     }
 }
 
+pub const NNUE_L1_SIZE: usize = 256;
+
 #[derive(Clone)]
 pub struct Board {
     player_with_turn: Player,
     d: [Square; 64],
     hash: u64,
     player_state: [PlayerState; 2],
-    en_passant_extra_target: TargetSquare
+    en_passant_extra_target: TargetSquare,
+    nnue_acc: [[f32; NNUE_L1_SIZE]; 2],
 }
 
 impl Display for Board {
@@ -103,12 +106,17 @@ impl Board {
             hash: 0,
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()],
-            en_passant_extra_target: TargetSquare::new()
+            en_passant_extra_target: TargetSquare::new(),
+            nnue_acc: [[0.0; NNUE_L1_SIZE]; 2],
         };
         board.set_standard_rows();
-        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(castle_utils().pre_castle_king_sq[Player::White as usize].0);
-        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(castle_utils().pre_castle_king_sq[Player::Black as usize].0);
+        board.get_player_state_mut(Player::White).king_location =
+            Bitboard::from_index(castle_utils().pre_castle_king_sq[Player::White as usize].0);
+        board.get_player_state_mut(Player::Black).king_location =
+            Bitboard::from_index(castle_utils().pre_castle_king_sq[Player::Black as usize].0);
         board.hash = board.calculate_hash();
+        board.nnue_refresh(Player::White);
+        board.nnue_refresh(Player::Black);
         board
     }
 
@@ -119,16 +127,21 @@ impl Board {
             hash: 0,
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()],
-            en_passant_extra_target: TargetSquare::new()
+            en_passant_extra_target: TargetSquare::new(),
+            nnue_acc: [[0.0; NNUE_L1_SIZE]; 2],
         };
-        
+
         board.set_by_file_rank('e', 1, Square::Occupied(Piece::King, Player::White));
         board.set_by_file_rank('e', 8, Square::Occupied(Piece::King, Player::Black));
-        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(4, 7).0);
-        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(4, 0).0);
+        board.get_player_state_mut(Player::White).king_location =
+            Bitboard::from_index(FastCoord::from_xy(4, 7).0);
+        board.get_player_state_mut(Player::Black).king_location =
+            Bitboard::from_index(FastCoord::from_xy(4, 0).0);
         board.get_player_state_mut(Player::White).moved_castle_piece = [false, false];
         board.get_player_state_mut(Player::Black).moved_castle_piece = [false, false];
         board.hash = board.calculate_hash();
+        board.nnue_refresh(Player::White);
+        board.nnue_refresh(Player::Black);
         board
     }
 
@@ -410,12 +423,14 @@ mod test {
     #[test]
     fn cc_eyeball_test2() {
         let mut board = Board::with_kings_only();
-        // FIXME ???
+        // FIXME IMMEDIATE ???
         board.set_by_file_rank_test('d', 2, Square::Occupied(Piece::Pawn, Player::White));
         board.set_by_file_rank_test('e', 5, Square::Occupied(Piece::King, Player::Black));
         board.set_by_file_rank_test('a', 1, Square::Occupied(Piece::King, Player::White));
-        board.get_player_state_mut(Player::White).king_location = Bitboard::from_index(FastCoord::from_xy(0, 7).0);
-        board.get_player_state_mut(Player::Black).king_location = Bitboard::from_index(FastCoord::from_xy(4, 3).0);
+        board.get_player_state_mut(Player::White).king_location =
+            Bitboard::from_index(FastCoord::from_xy(0, 7).0);
+        board.get_player_state_mut(Player::Black).king_location =
+            Bitboard::from_index(FastCoord::from_xy(4, 3).0);
 
         let mut temp = MoveList::new(10);
         let mut result = MoveList::new(10);

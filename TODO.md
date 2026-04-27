@@ -17,6 +17,7 @@
     12. Bg6+ Kg8
     13. Qh7#
 
+- AI anecdote on ability to understand NNUE 
 - TODO IMMEDIATE
     - NNUE related ones
 - // TODO temp_moves unnecessary? Try it
@@ -50,6 +51,7 @@
 - Finish promotions and UI
 - Branchless tricks with repr u8 on data enum
 - Draw when kings only still not done
+- Metadata for Discord
 
 Shower thoughts
 - Choose an opening which forces tactical lines?!
@@ -57,6 +59,8 @@ Shower thoughts
     - Long range bishop with all target squares pawn controlled -> not valued
 - Gauge potential for Playwright automation
 - Shit talking based on score drop 
+- // TODO (Feature Req) Outside ability to set the board to mostly anything without breaking hash,
+// right now tests have responsibilty to maintain proper state
 
 Minor
 - AI is thinking graphic
@@ -67,6 +71,7 @@ Minor
     - Dead code
 - Unused vars Rust warnings
 - Memo unit tests
+- Upgrade Rust edition to 2024, actually fails
 
 Read again
 - Debruijin indices

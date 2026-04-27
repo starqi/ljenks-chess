@@ -3,15 +3,15 @@ pub mod move_buckets;
 
 pub use move_buckets::*;
 
-use std::cmp::min;
-use std::collections::HashMap;
+use super::game::board::slow_stringify_move_standard;
+use super::game::board::*;
 use super::game::entities::*;
 use super::game::move_list::*;
-use super::game::board::*;
-use crate::platform::{random, now};
 use crate::branchless_mask;
-use crate::{console_log};
-use super::game::board::slow_stringify_move_standard;
+use crate::console_log;
+use crate::platform::{now, random};
+use std::cmp::min;
+use std::collections::HashMap;
 
 // Given performance nature, much state lives as "class vars"
 pub struct Ai {
@@ -633,17 +633,28 @@ impl Ai {
         let mut fast_found = false;
 
         if do_null_window {
-            // PVS intuition: minmize alpha-beta window for speed, hoping first move is best always
+            // PVS intuition: minmize alpha-beta window for speed, hoping first move is best always,
+            // compare with below, instead of beta, it's alpha + just 1.
+            // If first move is best, then the 2nd move will always produce score <= alpha because alpha means best move score.
+            // And each time score <= alpha happens, it is due to a beta-cutoff which is efficient.
             fast_found_score = -self.negamax(remaining_depth - 1, -alpha - 1, -alpha, moves_start);
             if fast_found_score <= alpha {
                 fast_found = true;
                 self.fast_found_hits += 1;
             }
-        } 
+        }
 
         let score = if fast_found {
             fast_found_score
         } else {
+            // Negamax sign flipping intuition:
+            // Score, which comes eventually from evals,
+            // is always dependent on whose side is playing. White up a queen -> -9 for black -> black maximizes and prefers -8.
+            // e.g. 1 to 10 alpha/beta constraints white side maximizing, followed by -10 to -1 alpha/beta constraints black side maximizing.
+            // At any call, alpha is the best move for the playing side, beta is something to be "obeyed" from the parent call,
+            // If an opponent move <= alpha, then throw it away because goal is to maximize the current playing side, alpha already better.
+            // Since I don't care about <= alpha, use beta-cutoffs to improve performance: the -alpha below.
+            // If an opponent move > beta, obey the parent and return.
             -self.negamax(remaining_depth - 1, -beta, -alpha, moves_start)
         };
 

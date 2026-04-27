@@ -37,6 +37,7 @@ impl Board {
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()],
             en_passant_extra_target: TargetSquare::new(),
+            nnue_acc: [[0.0; NNUE_L1_SIZE]; 2],
         };
 
         board.load_fen(fen)?;
@@ -65,6 +66,7 @@ impl Board {
         self.update_derived_state();
         self.hash = self.calculate_hash();
 
+        self.nnue_refresh_both(); // TODO IMMEDIATE Remove comment when FEN load is tested for NNUE
         Ok(())
     }
 
