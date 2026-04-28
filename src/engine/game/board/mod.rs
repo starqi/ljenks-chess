@@ -68,7 +68,7 @@ impl TargetSquare {
     }
 }
 
-pub const NNUE_L1_SIZE: usize = 256;
+pub const NNUE_L1_OUTPUT_SIZE: usize = 256;
 
 #[derive(Clone)]
 pub struct Board {
@@ -77,7 +77,7 @@ pub struct Board {
     hash: u64,
     player_state: [PlayerState; 2],
     en_passant_extra_target: TargetSquare,
-    nnue_acc: [[f32; NNUE_L1_SIZE]; 2],
+    nnue_acc: [[f32; NNUE_L1_OUTPUT_SIZE]; 2], // Indexed by `Player` enum
 }
 
 impl Display for Board {
@@ -107,7 +107,7 @@ impl Board {
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()],
             en_passant_extra_target: TargetSquare::new(),
-            nnue_acc: [[0.0; NNUE_L1_SIZE]; 2],
+            nnue_acc: [[0.0; NNUE_L1_OUTPUT_SIZE]; 2],
         };
         board.set_standard_rows();
         board.get_player_state_mut(Player::White).king_location =
@@ -128,7 +128,7 @@ impl Board {
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()],
             en_passant_extra_target: TargetSquare::new(),
-            nnue_acc: [[0.0; NNUE_L1_SIZE]; 2],
+            nnue_acc: [[0.0; NNUE_L1_OUTPUT_SIZE]; 2],
         };
 
         board.set_by_file_rank('e', 1, Square::Occupied(Piece::King, Player::White));

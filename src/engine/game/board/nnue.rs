@@ -13,20 +13,24 @@ impl Board {
     //   encoding not aware of black vs white, but side-to-move on top half of vector and opponent on bottom ->
     //   black/white can re-use each other's encodings if structurally the same, e.g. starting pos.
     //   - Same as showing black side phone image to mirror
-    // - Metadata (castle, en passant) encoded into each side so it splits evenly between top half and bottom half of input vector.
+    // - Metadata (castle, en passant) encoded into each half; each half tracks its sides castle rights 
+    //   - En passant target only on top half, by definition
+    //   - TODO Not tracking both sides is a flaw?
+    // - If black were to go first, white-first starting position encoding is reuseable to get the eval 
     // - (Describe efficient inference aspects elsewhere.)
     pub const NNUE_PIECE_FEATURES: usize = 64 * 64 * 12;
     pub const NNUE_CASTLE_FEATURES: usize = 2;
     pub const NNUE_EP_FEATURES: usize = 8;
     pub const NNUE_HALF_SIZE: usize = Self::NNUE_PIECE_FEATURES + Self::NNUE_CASTLE_FEATURES + Self::NNUE_EP_FEATURES;
     pub const NNUE_TOTAL_SIZE: usize = 2 * Self::NNUE_HALF_SIZE;
+    pub const NNUE_MAX_FEATURES_PER_HALF: usize = 34; // 32 pieces + 2 castle + 1 EP, 34 for alignment
 
     /// Computes active feature indices for one perspective's half of the NNUE input vector.
-    /// This is the shared core logic used by both encode_nnue (reference/testing) and nnue_refresh (inference).
     /// `perspective`: which player's king determines the king bucket — NOT side-to-move.
     /// `en_passant_file`: Some(file) if this perspective is the side-to-move and EP is available.
-    fn nnue_half_indices(&self, perspective: Player, en_passant_file: Option<u8>) -> Vec<usize> {
-        let mut indices = Vec::with_capacity(32);
+    /// Returns count of indices written into `out[0..count]`.
+    fn nnue_half_indices(&self, perspective: Player, en_passant_file: Option<u8>, out: &mut [usize; Self::NNUE_MAX_FEATURES_PER_HALF]) -> usize {
+        let mut count = 0;
         let king_sq = self.get_player_state(perspective).king_location._lsb_to_index() as usize;
         let (king_sq_idx, flip_mask) = if perspective == Player::White {
             (king_sq, 0)
@@ -41,8 +45,8 @@ impl Board {
                     let piece_idx = Self::piece_to_nnue_index(piece, player, perspective);
                     // 56 = 111000. XOR inverts the 1 part, and keeps the 0 part.
                     let sq_idx = (idx as usize) ^ flip_mask;
-                    let bucket = king_sq_idx * 64 * 12 + sq_idx * 12 + piece_idx;
-                    indices.push(bucket);
+                    out[count] = king_sq_idx * 64 * 12 + sq_idx * 12 + piece_idx;
+                    count += 1;
                 }
             });
         }
@@ -50,18 +54,20 @@ impl Board {
         let castle_offset = Self::NNUE_PIECE_FEATURES;
         let perspective_state = self.get_player_state(perspective);
         if perspective_state.moved_castle_piece[CastleType::Oo as usize] {
-            indices.push(castle_offset + 0);
+            out[count] = castle_offset + 0;
+            count += 1;
         }
         if perspective_state.moved_castle_piece[CastleType::Ooo as usize] {
-            indices.push(castle_offset + 1);
+            out[count] = castle_offset + 1;
+            count += 1;
         }
 
         if let Some(f) = en_passant_file {
-            let ep_offset = Self::NNUE_PIECE_FEATURES + Self::NNUE_CASTLE_FEATURES;
-            indices.push(ep_offset + f as usize);
+            out[count] = Self::NNUE_PIECE_FEATURES + Self::NNUE_CASTLE_FEATURES + f as usize;
+            count += 1;
         }
 
-        indices
+        count
     }
 
     fn piece_to_nnue_index(piece: Piece, player: Player, perspective: Player) -> usize {
@@ -76,10 +82,6 @@ impl Board {
         (base + branchless_mask!(player != perspective, 6)) as usize
     }
 
-    // TODO IMMEDIATE REVIEW ALL BELOW
-
-    /// Refreshes one perspective's accumulator by computing all active feature indices
-    /// and summing their corresponding weight rows.
     pub fn nnue_refresh(&mut self, perspective: Player) {
         let weights = match crate::engine::nnue_input_weights() {
             Some(w) => w,
@@ -95,14 +97,15 @@ impl Board {
             None
         };
 
-        let indices = self.nnue_half_indices(perspective, ep_file);
+        let mut indices = [0usize; Self::NNUE_MAX_FEATURES_PER_HALF];
+        let count = self.nnue_half_indices(perspective, ep_file, &mut indices);
 
         let acc = &mut self.nnue_acc[perspective as usize];
         acc.fill(0.0);
 
-        for &idx in &indices {
-            let row_offset = idx * NNUE_L1_SIZE;
-            for j in 0..NNUE_L1_SIZE {
+        for i in 0..count {
+            let row_offset = indices[i] * NNUE_L1_OUTPUT_SIZE;
+            for j in 0..NNUE_L1_OUTPUT_SIZE {
                 acc[j] += weights[row_offset + j];
             }
         }
@@ -120,29 +123,6 @@ impl Board {
     pub fn nnue_on_revert(&mut self) {
         self.nnue_refresh_both();
     }
-
-    /// Reference implementation: produces the full sparse input vector for training compatibility.
-    /// Top half = side-to-move perspective, bottom half = opponent perspective.
-    pub fn encode_nnue(&self, out: &mut [i8; Self::NNUE_TOTAL_SIZE]) {
-        out.fill(0);
-
-        let player_with_turn = self.get_player_with_turn();
-        let ep_file = if self.en_passant_extra_target.has_target() {
-            Some(self.en_passant_extra_target.index % 8)
-        } else {
-            None
-        };
-
-        let stm_indices = self.nnue_half_indices(player_with_turn, ep_file);
-        for idx in stm_indices {
-            out[idx] = 1;
-        }
-
-        let opp_indices = self.nnue_half_indices(player_with_turn.other_player(), None);
-        for idx in opp_indices {
-            out[Self::NNUE_HALF_SIZE + idx] = 1;
-        }
-    }
 }
 
 #[cfg(test)]
@@ -155,35 +135,34 @@ mod test {
         let mut board = Board::with_kings_only();
         board.set_by_file_rank_test('e', 2, Square::Occupied(Piece::Pawn, Player::White));
 
-        let mut out = [0i8; Board::NNUE_TOTAL_SIZE];
-        board.encode_nnue(&mut out);
+        // 3 features, 2 kings, 1 pawn, no castle (since castle = whether we moved a castle piece), no EP
 
-        let mut ones = 0;
-        for &val in out.iter() {
-            if val == 1 { ones += 1; }
-            else { assert_eq!(val, 0); }
-        }
+        let mut white_indices = [0usize; Board::NNUE_MAX_FEATURES_PER_HALF];
+        let white_count = board.nnue_half_indices(Player::White, None, &mut white_indices);
+        assert_eq!(white_count, 3);
 
-        // Total ones should be 6:
-        // 3 pieces (2 kings, 1 pawn) * 2 perspectives = 6
-        assert_eq!(ones, 6);
+        let mut black_indices = [0usize; Board::NNUE_MAX_FEATURES_PER_HALF];
+        let black_count = board.nnue_half_indices(Player::Black, None, &mut black_indices);
+        assert_eq!(black_count, 3);
 
-        // Check the white pawn encoding
-
-        // From white perspective
+        // Verify white pawn from white perspective
         let king_sq = FastCoord::from_coord(&file_rank_to_xy('e', 1)).0 as usize;
         let pawn_sq = FastCoord::from_coord(&file_rank_to_xy('e', 2)).0 as usize;
-        let piece_idx = 0; // White pawn encoding from white perspective
-        let bucket = king_sq * 64 * 12 + pawn_sq * 12 + piece_idx;
-        assert_eq!(out[bucket], 1);
+        let piece_idx = 0; // White pawn from white perspective
+        let expected_bucket = king_sq * 64 * 12 + pawn_sq * 12 + piece_idx;
+        assert!(white_indices[..white_count].contains(&expected_bucket), "White pawn not found in white indices");
 
-        // From black perspective
-        let king_sq_black = king_sq; // In this black perspective, black e8 == white e1 encoding
+        // Verify white pawn from black perspective
+        // Use fake coords, visualize in the "^56" view
+
+        // e2 white pawn in ^56 view
         let pawn_sq_black = FastCoord::from_coord(&file_rank_to_xy('e', 7)).0 as usize;
-        assert_eq!(pawn_sq_black, pawn_sq ^ 56);
-        let piece_idx_black = 6; // White pawn encoding from black perspective
-        let bucket_black = king_sq_black * 64 * 12 + pawn_sq_black * 12 + piece_idx_black;
-        assert_eq!(out[Board::NNUE_HALF_SIZE + bucket_black], 1);
+        // White pawn from black perspective, sees it as an enemy piece
+        let piece_idx_black = 6; 
+        // e8 black king in ^56 view
+        let black_king_sq_black = FastCoord::from_coord(&file_rank_to_xy('e', 1)).0 as usize;
+        let expected_bucket_black = black_king_sq_black * 64 * 12 + pawn_sq_black * 12 + piece_idx_black;
+        assert!(black_indices[..black_count].contains(&expected_bucket_black), "White pawn not found in black indices");
     }
 
     #[test]
@@ -195,58 +174,38 @@ mod test {
         board_white.set_by_file_rank_test('d', 2, Square::Occupied(Piece::Pawn, Player::White));
         // White to move
 
-        let mut out_white = [0i8; Board::NNUE_TOTAL_SIZE];
-        board_white.encode_nnue(&mut out_white);
-
         let mut board_black = Board::with_kings_only();
         board_black.set_by_file_rank_test('d', 7, Square::Occupied(Piece::Pawn, Player::Black));
         // Black to move
         board_black.handle_move_no_revert(&MoveWithEval(MoveDescription::SkipMove, 0));
         assert_eq!(board_black.get_player_with_turn(), Player::Black);
 
-        let mut out_black = [0i8; Board::NNUE_TOTAL_SIZE];
-        board_black.encode_nnue(&mut out_black);
+        let mut stm_white = [0usize; Board::NNUE_MAX_FEATURES_PER_HALF];
+        let stm_white_count = board_white.nnue_half_indices(Player::White, None, &mut stm_white);
 
-        for i in 0..Board::NNUE_HALF_SIZE {
-            assert_eq!(out_white[i], out_black[i], "Mismatch at index {} in side-to-move half", i);
-        }
-        for i in 0..Board::NNUE_HALF_SIZE {
-            assert_eq!(out_white[Board::NNUE_HALF_SIZE + i], out_black[Board::NNUE_HALF_SIZE + i], "Mismatch at index {} in opponent half", i);
-        }
-    }
+        let mut stm_black = [0usize; Board::NNUE_MAX_FEATURES_PER_HALF];
+        let stm_black_count = board_black.nnue_half_indices(Player::Black, None, &mut stm_black);
 
-    #[test]
-    fn test_nnue_half_indices_matches_encode_nnue() {
-        let mut board = Board::with_kings_only();
-        board.set_by_file_rank_test('e', 2, Square::Occupied(Piece::Pawn, Player::White));
-        board.set_by_file_rank_test('d', 7, Square::Occupied(Piece::Pawn, Player::Black));
+        assert_eq!(stm_white_count, stm_black_count);
+        let mut w: Vec<usize> = stm_white[..stm_white_count].to_vec();
+        let mut b: Vec<usize> = stm_black[..stm_black_count].to_vec();
+        w.sort();
+        b.sort();
+        assert_eq!(w, b, "STM half indices mismatch");
 
-        // encode_nnue gives the reference sparse vector
-        let mut out = [0i8; Board::NNUE_TOTAL_SIZE];
-        board.encode_nnue(&mut out);
+        // Same thing but for the not side-to-move "bottom" accumulator
 
-        // nnue_half_indices should produce the same active indices
-        let stm = board.get_player_with_turn();
-        let ep_file = if board.en_passant_extra_target.has_target() {
-            Some(board.en_passant_extra_target.index % 8)
-        } else {
-            None
-        };
+        let mut opp_white = [0usize; Board::NNUE_MAX_FEATURES_PER_HALF];
+        let opp_white_count = board_white.nnue_half_indices(Player::Black, None, &mut opp_white);
 
-        let stm_indices = board.nnue_half_indices(stm, ep_file);
-        for &idx in &stm_indices {
-            assert_eq!(out[idx], 1, "STM index {} should be 1 in encode_nnue output", idx);
-        }
+        let mut opp_black = [0usize; Board::NNUE_MAX_FEATURES_PER_HALF];
+        let opp_black_count = board_black.nnue_half_indices(Player::White, None, &mut opp_black);
 
-        let opp_indices = board.nnue_half_indices(stm.other_player(), None);
-        for &idx in &opp_indices {
-            assert_eq!(out[Board::NNUE_HALF_SIZE + idx], 1, "OPP index {} (offset {}) should be 1 in encode_nnue output", idx, Board::NNUE_HALF_SIZE + idx);
-        }
-
-        // Verify counts match
-        let stm_ones: usize = out[0..Board::NNUE_HALF_SIZE].iter().filter(|&&v| v == 1).count();
-        let opp_ones: usize = out[Board::NNUE_HALF_SIZE..].iter().filter(|&&v| v == 1).count();
-        assert_eq!(stm_indices.len(), stm_ones, "STM indices count mismatch");
-        assert_eq!(opp_indices.len(), opp_ones, "OPP indices count mismatch");
+        assert_eq!(opp_white_count, opp_black_count);
+        let mut ow: Vec<usize> = opp_white[..opp_white_count].to_vec();
+        let mut ob: Vec<usize> = opp_black[..opp_black_count].to_vec();
+        ow.sort();
+        ob.sort();
+        assert_eq!(ow, ob, "OPP half indices mismatch");
     }
 }

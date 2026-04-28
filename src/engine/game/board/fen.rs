@@ -37,7 +37,7 @@ impl Board {
             player_with_turn: Player::White,
             player_state: [PlayerState::new(), PlayerState::new()],
             en_passant_extra_target: TargetSquare::new(),
-            nnue_acc: [[0.0; NNUE_L1_SIZE]; 2],
+            nnue_acc: [[0.0; NNUE_L1_OUTPUT_SIZE]; 2],
         };
 
         board.load_fen(fen)?;
