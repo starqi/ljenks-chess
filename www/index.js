@@ -43,9 +43,8 @@ class Application {
             window.innerHeight - document.getElementById('title').getBoundingClientRect().height
         ) / 8) >>> 0;
 
-        // Pawn = 0, Rook, Knight, Bishop, Queen, King
         this.numToLetter = [
-            'p', 'r', 'n', 'b', 'q', 'k'
+            'p', 'n', 'b', 'r', 'q', 'k'
         ];
 
         this.board = document.getElementById('board');

@@ -1,18 +1,21 @@
 use std::fmt::{Error as FmtError, Display, Formatter};
 
+// Unenforced DEPENDENCIES assuming the number -> enum translation: 
+// - index.js numToLetter
+// - evaluation.rs
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Piece {
-    Pawn = 0, Rook, Knight, Bishop, Queen, King
+    Pawn = 0, Knight, Bishop, Rook, Queen, King
 }
 
 impl Piece {
     pub fn custom_fmt(&self, f: &mut Formatter<'_>, is_lower: bool) -> Result<(), FmtError> {
         let s = match self {
             Piece::Pawn => "P",
-            Piece::Rook => "R",
             Piece::Knight => "N",
             Piece::Bishop => "B",
+            Piece::Rook => "R",
             Piece::Queen => "Q",
             Piece::King => "K"
         };

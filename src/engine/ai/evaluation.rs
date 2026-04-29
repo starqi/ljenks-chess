@@ -8,9 +8,9 @@ use super::super::game::move_list::*;
 use crate::branchless_mask;
 use crate::bitboard_presets;
 
-/// Matches `Piece` enum number
+/// Matches `Piece` enum number.
 static PIECE_VALUES: [i32; 6] = [
-    100, 500, 300, 300, 900, 0 // Pretty sure king can be zero for this engine
+    100, 300, 300, 500, 900, 0 // Pretty sure king can be zero for this engine
 ];
 
 //////////////////////////////////////////////////
@@ -23,7 +23,7 @@ static PAWN_Y_CONSTANTS: [(i32, i32); 2] = [(6, -1), (-1, 1)];
 /// Index is `Piece` enum number.
 /// The higher the output, the worse the defender, e.g. 10 = king, 9 = queen.
 static PIECE_TO_CONTROL_BADNESS: [i32; 6] = [
-    1, 5, 3, 3, 9, 10
+    1, 3, 3, 5, 9, 10
 ];
 /// Maps `PIECE_TO_CONTROL_BADNESS` number as index to higher-the-better control score. 
 static CONTROL_BADNESS_TO_CONTROL_MULTIPLIER: [i32; 11] = [
@@ -62,9 +62,9 @@ fn get_positional_sq_worth_white(x: i32, y: i32) -> i32 {
     POSITIONAL_SQUARE_WORTH_WHITE[(y * 8 + x) as usize]
 }
 
-// Pawn = 0, Rook, Knight, Bishop, Queen, King
+// `Piece` enum order
 static PIECE_TO_MOB_MULTIPLIER: [i32; 6] = [
-    50, 20, 30, 30, 10, 0
+    50, 30, 30, 20, 10, 0
 ];
 
 

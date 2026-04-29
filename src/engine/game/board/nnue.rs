@@ -42,7 +42,7 @@ impl Board {
             let mut piece_locs = self.get_player_state(player).piece_locs;
             piece_locs.consume_loop_indices(|idx| {
                 if let Square::Occupied(piece, _) = self.d[idx as usize] {
-                    let piece_idx = Self::piece_to_nnue_index(piece, player, perspective);
+                    let piece_idx = (piece as usize) + (branchless_mask!(player != perspective, 6) as usize);
                     // 56 = 111000. XOR inverts the 1 part, and keeps the 0 part.
                     let sq_idx = (idx as usize) ^ flip_mask;
                     out[count] = king_sq_idx * 64 * 12 + sq_idx * 12 + piece_idx;
@@ -68,18 +68,6 @@ impl Board {
         }
 
         count
-    }
-
-    fn piece_to_nnue_index(piece: Piece, player: Player, perspective: Player) -> usize {
-        let base = match piece {
-            Piece::Pawn => 0,
-            Piece::Knight => 1,
-            Piece::Bishop => 2,
-            Piece::Rook => 3,
-            Piece::Queen => 4,
-            Piece::King => 5,
-        };
-        (base + branchless_mask!(player != perspective, 6)) as usize
     }
 
     pub fn nnue_refresh(&mut self, perspective: Player) {

@@ -10,10 +10,10 @@ impl Board {
     ///   Nibble encoding: 0 = blank, 1..12 = 1 + piece_enum + player_enum * 6.
     /// - Byte 32 flags:
     ///   - Bit 7: side to move (0 = White, 1 = Black)
-    ///   - Bit 6: White DID castle O-O
-    ///   - Bit 5: White did castle O-O-O
-    ///   - Bit 4: Black did castle O-O
-    ///   - Bit 3: Black did castle O-O-O
+    ///   - Bit 6: White moved castle piece O-O
+    ///   - Bit 5: White moved castle piece O-O-O
+    ///   - Bit 4: Black moved castle piece O-O
+    ///   - Bit 3: Black moved castle piece O-O-O
     ///   - Bits 2..0: unused
     /// - Byte 33: en passant file + 1 (0 = no ep, 1..8 = file a..h)
     pub fn export_compressed(&self, data: &mut [u8; COMPRESSED_SIZE]) {
@@ -24,7 +24,7 @@ impl Board {
                 Square::Blank => 0u8,
                 Square::Occupied(piece, player) => 1 + piece as u8 + player as u8 * 6,
             };
-            data[i / 2] |= nibble << ((i & 1) * 4); // First OR with 0 shift, then OR with 4 shift; even, odd, even, odd; big endian
+            data[i / 2] |= nibble << ((i & 1) * 4); // First OR with 0 shift, then OR with 4 shift; even, odd, even, odd; big endian like
         }
 
         let mut flags = 0u8;
@@ -60,10 +60,11 @@ impl Board {
             if nibble > 0 {
                 let code = nibble - 1;
                 let piece = match code % 6 {
+                    // TODO IMMEDIATE EXTRACT
                     0 => Piece::Pawn,
-                    1 => Piece::Rook,
-                    2 => Piece::Knight,
-                    3 => Piece::Bishop,
+                    1 => Piece::Knight,
+                    2 => Piece::Bishop,
+                    3 => Piece::Rook,
                     4 => Piece::Queen,
                     5 => Piece::King,
                     _ => unreachable!(),
