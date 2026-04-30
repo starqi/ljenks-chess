@@ -217,7 +217,7 @@ impl Main {
             return None;
         }
 
-        self.ai .late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
+        self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         let best_move_info = self.ai.make_random_move(&mut self.board);
         self.process_best_move_info_to_js(best_move_info)
     }

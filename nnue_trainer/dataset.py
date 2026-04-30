@@ -25,7 +25,7 @@ class DecodedBoard(NamedTuple):
     w_ooo_moved: int
     b_oo_moved: int
     b_ooo_moved: int
-    ep_file: int  # -1 if none # TODO IMMEDIATE Check again
+    ep_file: int  # -1 if none
 
 
 def decode_compressed(data: bytes) -> DecodedBoard:
@@ -66,7 +66,7 @@ def decode_compressed(data: bytes) -> DecodedBoard:
 
 
 def compute_half_indices(perspective: int, board: DecodedBoard) -> list[int]:
-    KING_PIECE = 5 
+    KING_PIECE = 5
     white_king_sq = next((sq for sq, p in board.white_pieces if p == KING_PIECE), None)
     black_king_sq = next((sq for sq, p in board.black_pieces if p == KING_PIECE), None)
     if white_king_sq is None or black_king_sq is None:

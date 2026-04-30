@@ -1,4 +1,3 @@
-
 import os
 import sys
 
@@ -8,16 +7,16 @@ if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
 import torch
-import pathlib
-from src.model import NNUE
-from src.dataset import create_dataloader
+from config import load_config
+from model import NNUE
+from dataset import create_dataloader
 
-script_dir_path = pathlib.Path(script_dir)
+config = load_config()
 
 model = NNUE()
-model.load_state_dict(torch.load(script_dir_path / 'nnue_model.pt', weights_only=True))
+model.load_state_dict(torch.load(config['save_path'], weights_only=True))
 model.eval()
-loader = create_dataloader(str(script_dir_path / 'abc.bin'), batch_size=5, shuffle=False)
+loader = create_dataloader(config['bin_path'], batch_size=5, shuffle=False)
 
 count = 0
 for indices_stm, offsets_stm, indices_opp, offsets_opp, scores in loader:

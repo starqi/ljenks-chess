@@ -5,4 +5,7 @@ pkg/
 .DS_Store
 __pycache__
 .venv
+# TODO Will need to commit under GIT LFS eventually?
 *.safetensors
+*.bin
+*.pt

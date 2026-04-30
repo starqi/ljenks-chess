@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .dataset import NNUE_HALF_SIZE
+from dataset import NNUE_HALF_SIZE
 
 
 class NNUE(nn.Module):
@@ -26,7 +26,7 @@ class NNUE(nn.Module):
     def _reset_weights(self):
         self.input.weight.data *= 512.0
 
-    def forward(self, 
+    def forward(self,
                 indices_stm: torch.Tensor, offsets_stm: torch.Tensor,
                 indices_opp: torch.Tensor, offsets_opp: torch.Tensor) -> torch.Tensor:
 

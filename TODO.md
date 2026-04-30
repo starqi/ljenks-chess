@@ -17,7 +17,9 @@
     12. Bg6+ Kg8
     13. Qh7#
 
-- AI anecdote on ability to understand NNUE 
+- Does NNUE game gen END? Why or why not?
+- Basic overfitting test
+- ??? AI anecdote on ability to understand NNUE 
 - TODO IMMEDIATE
     - NNUE related ones
 - // TODO temp_moves unnecessary? Try it
@@ -85,6 +87,7 @@ Read again
 - derive Parser, clap
 - dyn
 - Iterable Iter and string Split wrappers
+- Autograd
 
 --------------------------------------------------
 

@@ -40,3 +40,20 @@ cargo build --release --bin chess-cli --no-default-features -F cli
 ./target/release/chess-cli <binary output filename>
 ./target/release/chess-cli --view 5-10 <binary output filename>
 ```
+
+#### Python trainer 
+
+All paths configured in `nnue_trainer/configs/default.yaml`.
+```bash 
+cd nnue_trainer
+pip install -r requirements.txt
+# TODO .venv
+
+# Generate training data (see CLI section)
+# Copy the .bin file path into configs/default.yaml bin_path
+
+# Paths are in configs/
+python train.py
+python check_model.py
+python export_safetensors.py
+```

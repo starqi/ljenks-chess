@@ -1,5 +1,5 @@
 bin_path: abc.bin
 batch_size: 1024
-epochs: 1000
+epochs: 300
 lr: 0.001
 save_path: nnue_model.pt
