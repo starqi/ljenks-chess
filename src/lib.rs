@@ -86,12 +86,34 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
                 // From safetensors
                 // {"fc1.bias":{"dtype":"F32","shape":[32],"data_offsets":[0,128]},
                 //  "fc1.weight":{"dtype":"F32","shape":[32,512],"data_offsets":[65664,128]},
+                // TODO (Minor) Why do both start with 65664?
                 //  "input.weight":{"dtype":"F32","shape":[49162,256],"data_offsets":[65664,50407552]},
                 //  "output.bias":{"dtype":"F32","shape":[1],"data_offsets":[50407552,50407556]},
                 //  "output.weight":{"dtype":"F32","shape":[1,32],"data_offsets":[50407556,50407684]}}
                 match st.tensor(name) {
                     Ok(tensor) => {
                         let shape = tensor.shape();
+                        if tensor.dtype() != safetensors::Dtype::F32 {
+                            console_log!("Tensor {} has dtype {:?}, expected F32, skipping this tensor", name, tensor.dtype());
+                            continue;
+                        }
+                        // Rust: This is static promotion
+                        let expected: &[usize] = match name {
+                            "input.weight" => &[Board::NNUE_HALF_SIZE, NNUE_L1_OUTPUT_SIZE],
+                            // TODO (Minor) So EmbeddingBag seems to have width/height swapped?
+                            "fc1.weight" => &[NNUE_FC1_OUTPUT_SIZE, 2 * NNUE_L1_OUTPUT_SIZE],
+                            "fc1.bias" => &[NNUE_FC1_OUTPUT_SIZE],
+                            "output.weight" => &[1, NNUE_FC1_OUTPUT_SIZE],
+                            "output.bias" => &[1],
+                            _ => {
+                                console_log!("(Unknown tensor?! {})", name);
+                                continue;
+                            }
+                        };
+                        if shape != expected {
+                            console_error!("Required tensor {} has shape {:?}, expected {:?}", name, shape, expected);
+                            return false;
+                        }
                         let data = tensor.data();
                         let f32s: Vec<f32> = data
                             .chunks_exact(4) // This is an iterator but every item is 4 bytes

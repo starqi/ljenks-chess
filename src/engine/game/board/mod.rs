@@ -6,7 +6,7 @@ use super::bitboard::*;
 use super::coords::*;
 use super::entities::*;
 use super::memo::*;
-use super::move_test::*;
+use super::move_gen::*;
 
 // Child modules
 mod compressed;
@@ -69,6 +69,7 @@ impl TargetSquare {
 }
 
 pub const NNUE_L1_OUTPUT_SIZE: usize = 256;
+pub const NNUE_FC1_OUTPUT_SIZE: usize = 32;
 
 #[derive(Clone)]
 pub struct Board {

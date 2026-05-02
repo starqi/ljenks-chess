@@ -17,6 +17,7 @@
     12. Bg6+ Kg8
     13. Qh7#
 
+- Disable-able NNUE by excluding safetensors
 - Where to put safetensors for webpack
 - Does NNUE game gen END? Why or why not?
 - Basic overfitting test
@@ -55,6 +56,7 @@
 - Branchless tricks with repr u8 on data enum
 - Draw when kings only still not done
 - Metadata for Discord
+- // TODO Remove comment when returning None -> NNUE disabled
 
 Shower thoughts
 - Matrix green text background

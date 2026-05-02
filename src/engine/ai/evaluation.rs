@@ -3,7 +3,7 @@ use super::super::game::entities::*;
 use super::super::game::coords::*;
 use super::super::game::bitboard::*;
 use super::super::game::board::*;
-use super::super::game::move_test::*;
+use super::super::game::move_gen::*;
 use super::super::game::move_list::*;
 use crate::branchless_mask;
 use crate::bitboard_presets;
