@@ -59,19 +59,10 @@ impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
     }
 }
 
-pub struct NnueWeights {
-    pub fc1_weight: Vec<f32>,
-    pub fc1_bias: Vec<f32>,
-    pub output_weight: Vec<f32>,
-    pub output_bias: Vec<f32>,
-}
-
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Main {
     board: Board,
     ai: Ai,
-
-    weights: Option<NnueWeights>,
 
     temp: MoveList,
     move_list: MoveList,
@@ -79,6 +70,79 @@ pub struct Main {
     game_end_state: Option<GameEndState>,
     position_hashes: Vec<u64>,
     half_moves_without_pawn_move: usize,
+}
+
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
+    match SafeTensors::deserialize(bytes) {
+        Ok(st) => {
+            console_log!("Loaded safetensors with {} tensors", st.len());
+            let mut input_weight: Option<Box<[f32]>> = None;
+            let mut fc1_weight: Option<Box<[f32]>> = None;
+            let mut fc1_bias: Option<Box<[f32]>> = None;
+            let mut output_weight: Option<Box<[f32]>> = None;
+            let mut output_bias: Option<Box<[f32]>> = None;
+            for name in st.names() {
+                // From safetensors
+                // {"fc1.bias":{"dtype":"F32","shape":[32],"data_offsets":[0,128]},
+                //  "fc1.weight":{"dtype":"F32","shape":[32,512],"data_offsets":[65664,128]},
+                //  "input.weight":{"dtype":"F32","shape":[49162,256],"data_offsets":[65664,50407552]},
+                //  "output.bias":{"dtype":"F32","shape":[1],"data_offsets":[50407552,50407556]},
+                //  "output.weight":{"dtype":"F32","shape":[1,32],"data_offsets":[50407556,50407684]}}
+                match st.tensor(name) {
+                    Ok(tensor) => {
+                        let shape = tensor.shape();
+                        let data = tensor.data();
+                        let f32s: Vec<f32> = data
+                            .chunks_exact(4) // This is an iterator but every item is 4 bytes
+                            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                            // This illustrates Rust's type craziness:
+                            // as long as compiler knows it's a Vec<f32> by explicit typing,
+                            // collect() is all about dynamic dispatching to the Vec implementation of Iterator. 
+                            .collect();
+                        console_log!("  {} {:?} {} values", name, shape, f32s.len());
+                        match name {
+                            "input.weight" => input_weight = Some(f32s.into_boxed_slice()),
+                            "fc1.weight" => fc1_weight = Some(f32s.into_boxed_slice()),
+                            "fc1.bias" => fc1_bias = Some(f32s.into_boxed_slice()),
+                            "output.weight" => output_weight = Some(f32s.into_boxed_slice()),
+                            "output.bias" => output_bias = Some(f32s.into_boxed_slice()),
+                            _ => console_log!("(Unknown tensor?! {})", name),
+                        }
+                    },
+                    Err(e) => {
+                        console_log!("Failed to load a tensor listed {} {:?}", name, e);
+                    }
+                }
+            }
+            match (input_weight, fc1_weight, fc1_bias, output_weight, output_bias) {
+                (Some(iw), Some(fw), Some(fb), Some(ow), Some(ob)) => {
+                    let w = NnueWeights {
+                        input_weight: iw,
+                        fc1_weight: fw,
+                        fc1_bias: fb,
+                        output_weight: ow,
+                        output_bias: ob,
+                    };
+                    match crate::engine::set_nnue_weights(w) {
+                        Ok(()) => true,
+                        Err(_) => {
+                            console_log!("NNUE weights already set, ignoring");
+                            true
+                        }
+                    }
+                }
+                _ => {
+                    console_error!("Missing tensors in safetensors");
+                    false
+                }
+            }
+        }
+        Err(e) => {
+            console_error!("Safetensors deserialize error: {:?}", e);
+            false
+        }
+    }
 }
 
 // This struct does not need to be fast like main engine.
@@ -101,8 +165,6 @@ impl Main {
             board,
             ai: Ai::new(),
 
-            weights: None,
-
             temp: MoveList::new(50),
             move_list: MoveList::new(50),
             searchable: SearchableMoves::new(),
@@ -124,7 +186,7 @@ impl Main {
             return None;
         }
 
-        self.ai .late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
+        self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
         let best_move_info = self.ai.make_move(&mut self.board);
         self.process_best_move_info_to_js(best_move_info)
     }
@@ -244,55 +306,6 @@ impl Main {
                 true
             },
             Err(_) => false,
-        }
-    }
-
-    #[cfg_attr(feature = "wasm", wasm_bindgen)]
-    pub fn load_weights(&mut self, bytes: &[u8]) -> bool {
-        match SafeTensors::deserialize(bytes) {
-            Ok(st) => {
-                console_log!("Loaded safetensors with {} tensors", st.len());
-                let mut w = NnueWeights {
-                    fc1_weight: Vec::new(),
-                    fc1_bias: Vec::new(),
-                    output_weight: Vec::new(),
-                    output_bias: Vec::new(),
-                };
-                for name in st.names() {
-                    if let Ok(tensor) = st.tensor(name) {
-                        let shape = tensor.shape();
-                        let data = tensor.data();
-                        let f32s: Vec<f32> = data
-                            .chunks_exact(4)
-                            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-                            .collect();
-                        console_log!("  {} {:?} {} values", name, shape, f32s.len());
-                        // TODO IMMEDIATE REVIEW ALL HERE
-                        match name {
-                            "input.weight" => {
-                                let boxed: Box<[f32]> = f32s.into_boxed_slice();
-                                match crate::engine::set_nnue_input_weights(boxed) {
-                                    Ok(()) => {}
-                                    Err(_) => {
-                                        console_log!("  (input.weight already set, ignoring)")
-                                    }
-                                }
-                            }
-                            "fc1.weight" => w.fc1_weight = f32s,
-                            "fc1.bias" => w.fc1_bias = f32s,
-                            "output.weight" => w.output_weight = f32s,
-                            "output.bias" => w.output_bias = f32s,
-                            _ => console_log!("  (unknown tensor {})", name),
-                        }
-                    }
-                }
-                self.weights = Some(w);
-                true
-            }
-            Err(e) => {
-                console_error!("safetensors error: {:?}", e);
-                false
-            }
         }
     }
 

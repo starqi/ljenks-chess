@@ -1,8 +1,6 @@
 // TODO How does this work as part of build process? i.e. Bindgen questions
 import * as wasm from './node_modules/ljenks-chess';
 
-let main = new wasm.Main();
-
 function getBoardState() {
     const board = [];
     for (let y = 0; y < 8; y++) {
@@ -18,20 +16,23 @@ async function loadWeights() {
         const resp = await fetch('nnue_model.safetensors');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`); // TODO IMMEDIATE Error handling in this func?
         const buffer = await resp.arrayBuffer();
-        const ok = main.load_weights(new Uint8Array(buffer));
+        // Load into GLOBAL
+        const ok = wasm.load_weights_safetensors(new Uint8Array(buffer));
         if (!ok) console.error('Failed to parse NNUE weights');
+        // TODO IMMEDIATE Review error handling
     } catch (e) {
         console.error('Failed to load NNUE weights:', e);
     }
 }
 
+let main;
 async function init() {
     await loadWeights();
+    main = new wasm.Main();
     main.refresh_player_moves();
     postMessage({type: 'ready', board: getBoardState()});
 }
-
-init();
+init(); // Runs when worker created by main script
 
 self.onmessage = (e) => {
     console.log('Worker received', e.data);

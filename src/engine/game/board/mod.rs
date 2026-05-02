@@ -117,6 +117,10 @@ impl Board {
         board.hash = board.calculate_hash();
         board.nnue_refresh(Player::White);
         board.nnue_refresh(Player::Black);
+
+        // TODO IMMEDIATE
+        console_log!("NNUE acc {:?}", board.nnue_acc);
+
         board
     }
 

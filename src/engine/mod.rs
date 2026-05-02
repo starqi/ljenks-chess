@@ -16,11 +16,18 @@ use std::sync::LazyLock;
 use std::sync::OnceLock;
 
 pub static CASTLE_UTILS: LazyLock<CastleUtils> = LazyLock::new(|| CastleUtils::new());
-pub static RANDOM_NUMBER_KEYS: LazyLock<RandomNumberKeys> =
-    LazyLock::new(|| RandomNumberKeys::new());
+pub static RANDOM_NUMBER_KEYS: LazyLock<RandomNumberKeys> = LazyLock::new(|| RandomNumberKeys::new());
 pub static BITBOARD_PRESETS: LazyLock<BitboardPresets> = LazyLock::new(|| BitboardPresets::new());
-// TODO (Read) OnceLock
-pub static NNUE_INPUT_WEIGHTS: OnceLock<Box<[f32]>> = OnceLock::new();
+
+pub struct NnueWeights {
+    pub input_weight: Box<[f32]>,
+    pub fc1_weight: Box<[f32]>,
+    pub fc1_bias: Box<[f32]>,
+    pub output_weight: Box<[f32]>,
+    pub output_bias: Box<[f32]>,
+}
+
+pub static NNUE_WEIGHTS: OnceLock<NnueWeights> = OnceLock::new();
 
 pub fn init_globals() {
     LazyLock::force(&CASTLE_UTILS);
@@ -40,13 +47,12 @@ pub fn bitboard_presets() -> &'static BitboardPresets {
     &BITBOARD_PRESETS
 }
 
-// TODO (Read) Box, reference to Box?  
 pub fn nnue_input_weights() -> Option<&'static Box<[f32]>> {
-    NNUE_INPUT_WEIGHTS.get()
+    NNUE_WEIGHTS.get().map(|w| &w.input_weight)
 }
 
-pub fn set_nnue_input_weights(weights: Box<[f32]>) -> Result<(), Box<[f32]>> {
-    NNUE_INPUT_WEIGHTS.set(weights)
+pub fn set_nnue_weights(weights: NnueWeights) -> Result<(), NnueWeights> {
+    NNUE_WEIGHTS.set(weights)
 }
 
 pub const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;

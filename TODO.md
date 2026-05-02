@@ -17,6 +17,7 @@
     12. Bg6+ Kg8
     13. Qh7#
 
+- Where to put safetensors for webpack
 - Does NNUE game gen END? Why or why not?
 - Basic overfitting test
 - ??? AI anecdote on ability to understand NNUE 
@@ -56,6 +57,7 @@
 - Metadata for Discord
 
 Shower thoughts
+- Matrix green text background
 - Choose an opening which forces tactical lines?!
 - Write comment? Pure square control counterexamples: 
     - Long range bishop with all target squares pawn controlled -> not valued
@@ -77,6 +79,7 @@ Minor
 
 Read again
 - Debruijin indices
+- Rust Cells
 - Wasm Bindgen
 - lazy_static macros
 - Rust lifetimes, '_
