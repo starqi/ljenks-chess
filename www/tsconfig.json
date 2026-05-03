@@ -14,7 +14,9 @@
   },
   "include": [
     "index.js",
-    "worker.js",
+    "worker_shared.js",
+    "worker_nnue.js",
+    "worker_no_nnue.js",
     "loader.js",
     "types.d.ts"
   ],

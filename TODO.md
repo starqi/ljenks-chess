@@ -80,6 +80,7 @@ Minor
 - Unused vars Rust warnings
 - Memo unit tests
 - Upgrade Rust edition to 2024, actually fails
+- Switch out of Webpack
 
 Read again
 - Debruijin indices

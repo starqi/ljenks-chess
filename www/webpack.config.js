@@ -25,9 +25,8 @@ module.exports = {
         new CopyWebpackPlugin({
             patterns: [
                 {from: path.resolve(__dirname, 'index.html')},
-                {from: path.resolve(__dirname, 'worker.js')},
                 {from: path.resolve(__dirname, 'styles.css')},
-                {from: path.resolve(__dirname, 'nnue_model.safetensors')},
+                //{from: path.resolve(__dirname, 'nnue_model.safetensors')}
             ],
         }),
         new WasmPackPlugin({

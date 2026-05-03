@@ -54,7 +54,9 @@ src/
     wasm.rs                      
     cli.rs                       
 www/                             - Web browser frontend
-  worker.js                      - Web worker: the JS/Rust bridge, search runs without blocking frontend UI
+  worker_shared.js
+  worker_nnue.js
+  worker_no_nnue.js
   index.js                       - Main UI
   index.html / styles.css
 nnue_trainer/                    - Python NNUE trainer (in progress)

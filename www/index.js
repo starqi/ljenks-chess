@@ -17,6 +17,7 @@ const imageUrls = {
 
 class Application {
 
+    static IS_NNUE_ENABLED = false;
     static TEMP_DEPTH = 7;
 
     constructor() {
@@ -190,11 +191,16 @@ class Application {
         // hypothesis: internals not liking terminate() immediately followed by making a new worker due to some sort of compiled code clean up.   
         // Using shared thread array for quick termination -> hoops to jump through regarding security and providing "require-corp" headers.
         console.log('Creating new worker before terminate');
-        const replacementWorker = new Worker(new URL('worker.js', import.meta.url));
+
+        // ** WEBPACK MAGIC ALERT ** Need new "Worker(new URL(" syntax
+        const replacementWorker = Application.IS_NNUE_ENABLED
+            ? new Worker(new URL('worker_nnue.js', import.meta.url))
+            : new Worker(new URL('worker_no_nnue.js', import.meta.url));
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
         }
+
         this.boardPieceDragLock = true;
         this.closeGameOverPopup();
 
