@@ -10,6 +10,18 @@ pub enum Piece {
 }
 
 impl Piece {
+    pub fn from_number(n: u8) -> Self {
+        match n % 6 {
+            0 => Piece::Pawn,
+            1 => Piece::Knight,
+            2 => Piece::Bishop,
+            3 => Piece::Rook,
+            4 => Piece::Queen,
+            5 => Piece::King,
+            _ => unreachable!(),
+        }
+    }
+
     pub fn custom_fmt(&self, f: &mut Formatter<'_>, is_lower: bool) -> Result<(), FmtError> {
         let s = match self {
             Piece::Pawn => "P",

@@ -47,9 +47,24 @@ pub fn bitboard_presets() -> &'static BitboardPresets {
     &BITBOARD_PRESETS
 }
 
-// TODO Remove comment when returning None -> NNUE disabled
 pub fn nnue_input_weights() -> Option<&'static [f32]> {
     NNUE_WEIGHTS.get().map(|w| &(*w.input_weight))
+}
+
+pub fn nnue_fc1_weights() -> Option<&'static [f32]> {
+    NNUE_WEIGHTS.get().map(|w| &(*w.fc1_weight))
+}
+
+pub fn nnue_fc1_biases() -> Option<&'static [f32]> {
+    NNUE_WEIGHTS.get().map(|w| &(*w.fc1_bias))
+}
+
+pub fn nnue_output_weights() -> Option<&'static [f32]> {
+    NNUE_WEIGHTS.get().map(|w| &(*w.output_weight))
+}
+
+pub fn nnue_output_biases() -> Option<&'static [f32]> {
+    NNUE_WEIGHTS.get().map(|w| &(*w.output_bias))
 }
 
 pub fn set_nnue_weights(weights: NnueWeights) -> Result<(), NnueWeights> {

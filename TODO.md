@@ -18,7 +18,9 @@
     13. Qh7#
 
 - Disable-able NNUE by excluding safetensors
+  then merge to main with NNUE fully disabled
 - Where to put safetensors for webpack
+- Fix as many basedpyright warnings as possible
 - Does NNUE game gen END? Why or why not?
 - Basic overfitting test
 - ??? AI anecdote on ability to understand NNUE 
@@ -82,6 +84,7 @@ Minor
 Read again
 - Debruijin indices
 - Rust Cells
+- Closures
 - Wasm Bindgen
 - lazy_static macros
 - Rust lifetimes, '_

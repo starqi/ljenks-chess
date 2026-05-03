@@ -108,6 +108,7 @@ impl Ai {
     /// (If this is called many times, eventually it will be too late to get the best move from memo 
     /// since it is outdated and removed.)
     fn run_search(&mut self, source_board: &Board) {
+        // TODO IMMEDIATE NNUE clone strategy here?
         self.test_board.clone_from(source_board);
 
         self.start_ms = now();
@@ -216,6 +217,9 @@ impl Ai {
         let leading_move_ext = self.apply_leading_move(real_board);
         if let Some(ref x) = leading_move_ext {
             console_log!("Making move: {} (depth = {}, score = {})", self.test_board.stringify_move_for_js_logs(&x.m), x.remaining_depth, x.score);
+            real_board.nnue_refresh_both();
+
+            console_log!("NNUE TEMP {:?}", real_board.nnue_forward());
         } else {
             console_log!("No move");
         }

@@ -36,9 +36,18 @@ npm run serve # Enough to compile everything: btoh Rust and JS. Doesn't work if 
 ```bash
 cargo build --release --bin chess-cli --no-default-features -F cli
 
-# Generate positions into output file, see options
-./target/release/chess-cli <binary output filename>
-./target/release/chess-cli --view 5-10 <binary output filename>
+# Generate positions into output file (see --help for options)
+./target/release/chess-cli generate output.bin
+
+# View positions/score (training data) from a .bin file
+./target/release/chess-cli view xyz.bin 5
+./target/release/chess-cli view xyz.bin 1-10
+./target/release/chess-cli view xyz.bin all
+
+# Evaluate positions with NNUE and print scores
+./target/release/chess-cli nnue nnue_trainer/nnue_model.safetensors xyz.bin 5
+./target/release/chess-cli nnue nnue_trainer/nnue_model.safetensors xyz.bin 1-10
+./target/release/chess-cli nnue nnue_trainer/nnue_model.safetensors xyz.bin all
 ```
 
 #### Python trainer 
@@ -55,5 +64,6 @@ pip install -r requirements.txt
 # Paths are in configs/
 python train.py
 python check_model.py
+python check_model.py --range "1-10,50-60"
 python export_safetensors.py
 ```

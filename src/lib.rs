@@ -72,6 +72,8 @@ pub struct Main {
     half_moves_without_pawn_move: usize,
 }
 
+/// Loads NNUE safetensors model as a GLOBAL, as if it were baked in to the binary as static data.
+/// Note this interfaces with JS, so returns bool for JS with console error logging, not returning `Result`.
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
     match SafeTensors::deserialize(bytes) {

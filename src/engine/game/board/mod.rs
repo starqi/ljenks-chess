@@ -116,12 +116,7 @@ impl Board {
         board.get_player_state_mut(Player::Black).king_location =
             Bitboard::from_index(castle_utils().pre_castle_king_sq[Player::Black as usize].0);
         board.hash = board.calculate_hash();
-        board.nnue_refresh(Player::White);
-        board.nnue_refresh(Player::Black);
-
-        // TODO IMMEDIATE
-        console_log!("NNUE acc {:?}", board.nnue_acc);
-
+        board.nnue_refresh_both();
         board
     }
 
@@ -145,8 +140,7 @@ impl Board {
         board.get_player_state_mut(Player::White).moved_castle_piece = [false, false];
         board.get_player_state_mut(Player::Black).moved_castle_piece = [false, false];
         board.hash = board.calculate_hash();
-        board.nnue_refresh(Player::White);
-        board.nnue_refresh(Player::Black);
+        board.nnue_refresh_both();
         board
     }
 

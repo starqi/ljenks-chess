@@ -70,6 +70,7 @@ impl Board {
         count
     }
 
+    // TODO (Minor) At some point we need to track excessive full refresh
     pub fn nnue_refresh(&mut self, perspective: Player) {
         let weights = match crate::engine::nnue_input_weights() {
             Some(w) => w,
@@ -102,6 +103,49 @@ impl Board {
     pub fn nnue_refresh_both(&mut self) {
         self.nnue_refresh(Player::White);
         self.nnue_refresh(Player::Black);
+    }
+
+    fn leaky_relu(x: f32) -> f32 {
+        if x > 0.0 { x } else { x * 0.01 }
+    }
+
+    /// Full forward pass: accumulator already computed, run remaining layers.
+    pub fn nnue_forward(&self) -> Option<i32> {
+        // NNUE basics: Reportedly weight count small, matmul neither needs parallelism nor sub N(O^3) algorithms  
+
+        // TODO IMMEDIATE Pointless branches? Add unsafe code?
+        let fc1_weight = crate::engine::nnue_fc1_weights()?;
+        let fc1_bias = crate::engine::nnue_fc1_biases()?;
+        let output_weight = crate::engine::nnue_output_weights()?;
+        let output_bias = crate::engine::nnue_output_biases()?;
+
+        let stm_idx = self.player_with_turn as usize;
+        let opp_idx = 1 - stm_idx;
+        let stm_acc = &self.nnue_acc[stm_idx];
+        let opp_acc = &self.nnue_acc[opp_idx];
+
+        // TODO IMMEDIATE Fix terminology, L1, FC1, ???. There's only 512, 256, 32, 1. Then fix model.py.
+
+        // e.g. 32 x 512 matrix, where 512 input is either black concat white, or vice versa, side to move first
+        let mut fc1_out = [0.0f32; NNUE_FC1_OUTPUT_SIZE];
+        for i in 0..NNUE_FC1_OUTPUT_SIZE {
+            let mut sum = fc1_bias[i];
+            let row_offset = i * 2 * NNUE_L1_OUTPUT_SIZE;
+            for j in 0..NNUE_L1_OUTPUT_SIZE {
+                sum += fc1_weight[row_offset + j] * Self::leaky_relu(stm_acc[j]);
+            }
+            for j in 0..NNUE_L1_OUTPUT_SIZE {
+                sum += fc1_weight[row_offset + NNUE_L1_OUTPUT_SIZE + j] * Self::leaky_relu(opp_acc[j]);
+            }
+            fc1_out[i] = Self::leaky_relu(sum);
+        }
+
+        // e.g. 32 -> 1
+        let mut score = output_bias[0];
+        for j in 0..NNUE_FC1_OUTPUT_SIZE {
+            score += output_weight[j] * fc1_out[j];
+        }
+        Some(score as i32)
     }
 
     pub fn nnue_on_move(&mut self) {

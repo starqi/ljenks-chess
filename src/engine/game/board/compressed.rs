@@ -59,16 +59,7 @@ impl Board {
             let nibble = (data[i / 2] >> ((i & 1) * 4)) & 0x0F;
             if nibble > 0 {
                 let code = nibble - 1;
-                let piece = match code % 6 {
-                    // TODO IMMEDIATE EXTRACT
-                    0 => Piece::Pawn,
-                    1 => Piece::Knight,
-                    2 => Piece::Bishop,
-                    3 => Piece::Rook,
-                    4 => Piece::Queen,
-                    5 => Piece::King,
-                    _ => unreachable!(),
-                };
+                let piece = Piece::from_number(code);
                 let player = if code / 6 == 0 { Player::White } else { Player::Black }; // Apparently too annoying to do branchless_mask! for enums here
                 self.d[i] = Square::Occupied(piece, player);
                 let psm = self.get_player_state_mut(player);
