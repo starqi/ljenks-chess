@@ -1,54 +1,55 @@
 <html>
     <head>
-        <style>
-            .no-select {
-                user-select: none;
-            }
-            button:active {
-                background: #333;
-                transform: scale(0.98);
-            }
-        </style>
+        <link rel="stylesheet" href="styles.css">
+        <meta property="og:title" content="Ljenks Chess">
+        <meta property="og:description" content="Can you beat Ljenks age 11?">
+        <meta property="og:type" content="website">
+        <meta name="twitter:card" content="summary">
+        <meta name="twitter:title" content="Ljenks Chess">
+        <meta name="twitter:description" content="Can you beat Ljenks age 11?">
     </head>
-    <body style="background: #111111; padding-top: 15px;">
-        <div style="display: flex; justify-content: center; gap: 20px;">
+    <body>
+        <div id="loading-overlay">
+            <div id="loading-text">Loading engine...</div>
+        </div>
+        <div id="main-container">
             <div>
-                <h1 id="title" style="font-family: sans-serif; text-align: center; color: #aaaaaa;">Ljenks Age 11 (1901)</h1>
-                <div style="display: flex; gap: 10px;">
-                    <div id="board" class="no-select" style="position: relative; margin: auto; color:#aaaaaa">
-                        <img id="dragged" style="position: absolute; visibility: hidden;">
+                <h1 id="title" class="title">Ljenks Age 11 (1905)</h1>
+                <div id="board-container">
+                    <div id="board" class="no-select">
+                        <img id="dragged">
                     </div>
-                    <div id="eval-bar-container" style="display: flex; flex-direction: column; align-items: center; width: 40px; height: 480px; background: #222; border-radius: 5px; position: relative;">
-                        <div id="eval-bar" style="width: 20px; height: 400px; background: linear-gradient(to top, #fff 0%, #fff 50%, #000 50%, #000 100%); border-radius: 10px; position: relative; overflow: hidden;"></div>
-                        <div id="eval-text" style="font-family: monospace; color: #aaa; font-size: 14px; margin-top: 5px;">0.0</div>
+                    <div id="eval-bar-container">
+                        <div id="eval-bar"></div>
+                        <div id="eval-text">0.0</div>
                     </div>
                 </div>
             </div>
-            <div id="move-list" style="font-family: monospace; color: #aaaaaa; font-size: 14px; padding: 10px; background: #222; border-radius: 5px; overflow-y: auto;">
-                <div style="font-weight: bold; margin-bottom: 10px;font-size: 28;">Moves</div>
-                <textarea style="background:#222; color:#aaa; width:200px; height:500px; font-size:22; resize: none;" id="move-list-content"></textarea>
-                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px; font-size: 24;">
-                    <button id="self-play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Self-Play</button>
-                    <button id="play-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Play</button>
-                    <button id="load-btn" style="background: #222; color: #aaa; border: 1px solid #aaa; padding: 5px 10px; font-size: 24">Load</button>
+            <div id="move-list">
+                <div id="moves-header">Moves</div>
+                <textarea id="move-list-content"></textarea>
+                <div class="vertical-btn-group">
+                    <button id="self-play-btn" class="btn">Self-Play</button>
+                    <button id="play-btn" class="btn">Play</button>
+                    <button id="load-btn" class="btn">Load</button>
                 </div>
             </div>
         </div>
-        <div id="fen-popup" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; border: 1px solid #aaa; padding: 20px; z-index: 1000; font-size:12px;">
-            <input type="text" id="fen-input" style="width: 300px; padding: 5px; background: #333; color: #aaa; border: 1px solid #aaa; margin-bottom: 10px; font-size: 20" placeholder="Enter FEN notation...">
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button id="fen-ok" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px; font-size: 20">OK</button>
-                <button id="fen-cancel" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px; font-size: 20">Cancel</button>
+        <div id="fen-popup" class="popup" style="display:none;">
+            <input type="text" id="fen-input" placeholder="Enter FEN notation...">
+            <div id="fen-buttons">
+                <button id="fen-ok" class="btn">OK</button>
+                <button id="fen-cancel" class="btn">Cancel</button>
             </div>
         </div>
-        <div id="fen-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999;"></div>
+        <div id="fen-overlay" class="overlay" style="display:none;"></div>
 
-        <div id="game-over-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;"></div>
-        <div id="game-over-popup" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; border: 1px solid #aaa; padding: 20px; z-index: 1001; text-align: center; min-width: 250px; color: #aaa; font-family: sans-serif;">
-            <h2 id="game-over-title" style="margin-top: 0; font-size: 24px;">Game Over</h2>
-            <p id="game-over-body" style="font-size: 18px; margin: 20px 0;"></p>
-            <button id="game-over-close" style="background: #333; color: #aaa; border: 1px solid #aaa; padding: 5px 15px; font-size: 20px; cursor: pointer;">Close</button>
+        <div id="game-over-popup" class="popup" style="display:none;">
+            <h2 id="game-over-title">Game Over</h2>
+            <p id="game-over-body"></p>
+            <button id="game-over-close" class="btn">Close</button>
         </div>
+        <div id="game-over-overlay" class="overlay" style="display:none;"></div>
 
         <script src="index.js"></script>
     </body>
