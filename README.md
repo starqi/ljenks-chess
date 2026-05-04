@@ -2,10 +2,11 @@
 
 https://starqi.github.io/ljenks-chess/
 
-Rust, WASM, messing around.
+Rust, WASM, messing around. 
+NNUE INCOMPLETE.
 
 Rough goal:
-- Simple obvious hand evaluations -> emergent ability through search and NNUE.
+- Simple obvious hand evaluations -> emergent ability through search and self-bootstrapped NNUE.
 - Add some entertainment features. 
 - Don't care about formal UCI compliance for now.
 
