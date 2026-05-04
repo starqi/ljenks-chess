@@ -16,7 +16,7 @@ export function initWorker(main) {
             const {depth, isAutoPlay} = e.data;
             const moveInfo = main.make_ai_move();
             if (!moveInfo) {
-                postMessage({type: 'no_more_ai_moves'});
+                postMessage({type: 'no_more_ai_moves'}); // Note this is an error state, see index.js
                 return;
             }
             const board = getBoardState(main);

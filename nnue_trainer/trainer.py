@@ -1,3 +1,4 @@
+import os
 import torch
 from torch.optim import Adam
 from model import NNUE
@@ -11,7 +12,14 @@ def get_device():
     return torch.device("cpu")
 
 
-def train(bin_path: str, epochs: int = 50, batch_size: int = 1024, lr: float = 1e-3, save_path: str | None = None, seed: int | None = None):
+def train(
+    bin_path: str,
+    epochs: int = 50,
+    batch_size: int = 1024,
+    lr: float = 1e-3,
+    save_path: str | None = None,
+    seed: int | None = None):
+
     if seed is not None:
         torch.manual_seed(seed)
 
@@ -21,6 +29,10 @@ def train(bin_path: str, epochs: int = 50, batch_size: int = 1024, lr: float = 1
     # TODO IMMEDIATE num_workers=0?
     dataloader = create_dataloader(bin_path, batch_size=batch_size, num_workers=0)
     model = NNUE().to(device)
+    if save_path and os.path.exists(save_path):
+        # TODO (Read)
+        model.load_state_dict(torch.load(save_path, map_location=device, weights_only=True))
+        print(f"Loaded checkpoint from {save_path}")
     optimizer = Adam(model.parameters(), lr=lr, weight_decay=1e-5) # TODO (Read)
 
     for epoch in range(epochs):

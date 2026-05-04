@@ -33,7 +33,7 @@ class NNUE(nn.Module):
         # stm = Side to move, opp = opponent
         x_stm: torch.Tensor = self.input(indices_stm, offsets_stm)
         x_opp: torch.Tensor = self.input(indices_opp, offsets_opp)
-        print('TODO', x_stm.shape)
+        # print('TODO', x_stm.shape) # -> TODO torch.Size([1, 256])
         x = torch.cat([x_stm, x_opp], dim=1)
         # Ran into dead ReLU immediately and fixed with leaky ReLU
         x = torch.nn.functional.leaky_relu(x, negative_slope=0.01)

@@ -36,8 +36,8 @@ npm run serve # Enough to compile everything: btoh Rust and JS. Doesn't work if 
 ```bash
 cargo build --release --bin chess-cli --no-default-features -F cli
 
-# Generate positions into output file (see --help for options)
-./target/release/chess-cli generate output.bin
+# Generate and APPEND positions into output file (see --help for options)
+./target/release/chess-cli generate nnue_trainer/xyz.bin
 
 # View positions/score (training data) from a .bin file
 ./target/release/chess-cli view xyz.bin 5
@@ -59,9 +59,9 @@ pip install -r requirements.txt
 # TODO .venv
 
 # Generate training data (see CLI section)
-# Copy the .bin file path into configs/default.yaml bin_path
+# Should be able to train.py immediately (.bin file is in correct location)
 
-# Paths are in configs/
+# (Paths are in configs/)
 python train.py
 python check_model.py
 python check_model.py --range "1-10,50-60"

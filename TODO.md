@@ -93,7 +93,7 @@ Read again
 - Rust parse() magic
 - Rust from/into
 - Thread local macro
-- derive Parser, clap
+- derive, Parser, clap
 - dyn
 - Iterable Iter and string Split wrappers
 - Autograd

@@ -318,6 +318,11 @@ impl Main {
         &self.board
     }
 
+    #[cfg(not(feature = "wasm"))]
+    pub fn set_logging(&self, enabled: bool) {
+        platform::set_logging(enabled);
+    }
+
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn load_fen(&mut self, fen: &str) -> bool {
         match Board::from_fen(fen) {
@@ -334,7 +339,7 @@ impl Main {
     }
 
     fn process_best_move_info_to_js(&mut self, best_move_info: Option<engine::ai::BestMoveInfo>) -> Option<BestMoveInfoJs> {
-        let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn);
+        let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn); // Just need is_pawn here
         if let Some(is_pawn) = is_pawn_holder {
             self.handle_special_end_conditions(
                 self.board.get_player_with_turn().other_player(),

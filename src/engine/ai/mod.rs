@@ -94,7 +94,7 @@ impl Ai {
             search_max_nodes: None,
             check_every_x_nodes: BASE_EVERY,
             terminated: false,
-            min_depth: 7,
+            min_depth: 5, // TODO Look this up, why start from 1?
             iterative_deepening_depth: 1,
             real_board_positional_hashes: 0 as *const Vec<u64>,
             half_moves_without_pawn_move: 0 as *const usize,
@@ -217,9 +217,9 @@ impl Ai {
         let leading_move_ext = self.apply_leading_move(real_board);
         if let Some(ref x) = leading_move_ext {
             console_log!("Making move: {} (depth = {}, score = {})", self.test_board.stringify_move_for_js_logs(&x.m), x.remaining_depth, x.score);
-            real_board.nnue_refresh_both();
-
-            console_log!("NNUE TEMP {:?}", real_board.nnue_forward());
+            //TODO IMMEDIATE
+            //real_board.nnue_refresh_both();
+            //console_log!("NNUE TEMP {:?}", real_board.nnue_forward());
         } else {
             console_log!("No move");
         }

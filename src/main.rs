@@ -29,15 +29,15 @@ enum Commands {
         /// Binary output file (appended, not overwritten)
         output_file: PathBuf,
         /// Random half moves at start
-        #[arg(long, default_value = "10")]
+        #[arg(long, default_value = "20")]
         random_half_moves: usize,
         /// Node limit for search
-        #[arg(long, default_value = "300000")]
+        #[arg(long, default_value = "100000")]
         max_nodes: u64,
         /// Number of games to play
         #[arg(long, default_value = "1")]
         num_games: usize,
-        #[arg(long, default_value = "100")]
+        #[arg(long, default_value = "300")]
         max_half_moves_per_game: Option<usize>,
     },
     /// View positions from a .bin file
@@ -56,6 +56,11 @@ enum Commands {
         /// Position range (e.g. "5", "1-10", "50-60", "all")
         range: String,
     },
+    /// Count positions in a .bin file
+    Count {
+        /// Binary data file with positions (.bin)
+        file: PathBuf,
+    },
 }
 
 fn parse_range(range: &str) -> (usize, usize) {
@@ -70,6 +75,8 @@ fn parse_range(range: &str) -> (usize, usize) {
         (n, n + 1)
     }
 }
+
+// [34, 38 magic numbers are from compressed.rs format]
 
 struct PositionEntry {
     index: usize,
@@ -149,6 +156,7 @@ fn cmd_generate(
 
     let mut writer = BufWriter::new(file);
     let mut completed_games = 0;
+    let mut total_positions = 0u64;
     let start_time = Instant::now();
 
     let mut main = Main::new();
@@ -157,9 +165,14 @@ fn cmd_generate(
 
     for _ in 0..num_games {
         main.new_board();
+
         let mut half_moves = 0;
         loop {
-            if main.get_game_end_state().is_some() { break; }
+            if let Some(num) = main.get_game_end_state() { 
+                println!("Game end state: {:?}", num);
+                break; 
+            }
+
             let random_early_moves = half_moves < random_half_moves;
             if let Some(m) = max_half_moves_per_game {
                 if half_moves >= m {
@@ -168,6 +181,8 @@ fn cmd_generate(
                 }
             }
             main.get_board().export_compressed(&mut board_bytes);
+
+            main.set_logging(false);
             let move_result: Option<BestMoveInfoJs> = if random_early_moves {
                 let score = main.evaluate().map(|info| info.score).expect("Unexpected game ended while evaluating");
                 let mut r = main.make_random_move();
@@ -178,31 +193,30 @@ fn cmd_generate(
             } else {
                 main.make_ai_move()
             };
+            main.set_logging(true);
+
             if move_result.is_none() {
                 eprintln!("Unexpected no moves to make without formal game end {}", main.get_board());
                 std::process::exit(1); // Exit, fix it
             }
+            let move_result_unwrapped = move_result.unwrap();
 
             if let Err(e) = writer.write_all(&board_bytes) {
                 eprintln!("Error writing board bytes: {}", e);
                 std::process::exit(1);
             }
-            if let Err(e) = writer.write_all(&move_result.unwrap().score.to_le_bytes()) {
+            if let Err(e) = writer.write_all(&move_result_unwrapped.score.to_le_bytes()) {
                 eprintln!("Error writing score: {}", e);
                 std::process::exit(1);
             }
 
+            println!("\n{} {}", main.get_board(), move_result_unwrapped.score);
             half_moves += 1;
         }
 
-        if let Some(end_state) = main.get_game_end_state() {
-            println!("End game state: {}", end_state);
-        }
-
         completed_games += 1;
-        if completed_games % 3 == 0 {
-            println!("Completed {} games", completed_games);
-        }
+        total_positions += half_moves as u64;
+        println!("Half moves: {}, now completed {} games", half_moves, completed_games);
         
         if let Err(e) = writer.flush() {
             eprintln!("Error flushing output: {}", e);
@@ -214,7 +228,12 @@ fn cmd_generate(
     println!();
     println!("Done!");
     println!("Games completed: {}", completed_games);
-    println!("Time elapsed: {:.2}s", elapsed.as_secs_f64());
+    println!("Positions: {}", total_positions);
+    let secs = elapsed.as_secs_f64();
+    println!("Time elapsed: {:.2}s", secs);
+    if secs > 0.0 {
+        println!("Positions/sec: {:.0}", total_positions as f64 / secs);
+    }
 }
 
 fn main() {
@@ -236,6 +255,13 @@ fn main() {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
+        }
+        Commands::Count { file } => {
+            let metadata = std::fs::metadata(&file).expect("Failed to read file metadata");
+            if metadata.len() % 38 != 0 {
+                eprintln!("Warning: file size {} is not a multiple of 38 bytes", metadata.len());
+            }
+            println!("{}", metadata.len() / 38);
         }
     }
 }

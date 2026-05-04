@@ -170,7 +170,7 @@ def collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor, float]]) -> tuple[t
         opp_offset += len(idx_opp)
         sample_scores.append(score)
 
-    print('collate_fn SHAPE DEBUG', idx_stm_tensors[0].shape)
+    #print('collate_fn SHAPE DEBUG', idx_stm_tensors[0].shape)
     return ( # TODO IMMEDIATE Named tuple for this?
         torch.cat(idx_stm_tensors),
         torch.tensor(stm_offsets, dtype=torch.long),
