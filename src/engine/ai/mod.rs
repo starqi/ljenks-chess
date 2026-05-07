@@ -48,6 +48,7 @@ enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
 
 /// (Score which can be exact or lower or upper bound depending on type, remaining depth, type, age)
+/// Reminder: "remaining depth" = just the search depth; at this position, that depth was used and e.g. it produced new alpha.
 #[derive(Clone)]
 struct MemoData(i32, i8, MemoType, usize);
 

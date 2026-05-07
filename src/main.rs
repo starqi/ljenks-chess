@@ -39,6 +39,9 @@ enum Commands {
         num_games: usize,
         #[arg(long, default_value = "300")]
         max_half_moves_per_game: Option<usize>,
+        /// Suppress board output (only print game summaries)
+        #[arg(long)]
+        quiet: bool,
     },
     /// View positions from a .bin file
     View {
@@ -135,7 +138,8 @@ fn cmd_generate(
     random_half_moves: usize,
     max_nodes: u64,
     num_games: usize,
-    max_half_moves_per_game: Option<usize>
+    max_half_moves_per_game: Option<usize>,
+    quiet: bool,
 ) {
     let file: File = match File::create_new(&output_file) {
         Ok(f) => f,
@@ -157,6 +161,8 @@ fn cmd_generate(
     let mut writer = BufWriter::new(file);
     let mut completed_games = 0;
     let mut total_positions = 0u64;
+    let mut min_depth_seen: i8 = i8::MAX;
+    let mut max_depth_seen: i8 = 0;
     let start_time = Instant::now();
 
     let mut main = Main::new();
@@ -169,14 +175,14 @@ fn cmd_generate(
         let mut half_moves = 0;
         loop {
             if let Some(num) = main.get_game_end_state() { 
-                println!("Game end state: {:?}", num);
+                if !quiet { println!("Game end state: {:?}", num); }
                 break; 
             }
 
             let random_early_moves = half_moves < random_half_moves;
             if let Some(m) = max_half_moves_per_game {
                 if half_moves >= m {
-                    println!("Exceeded {} max half moves, ending game", m);
+                    if !quiet { println!("Exceeded {} max half moves, ending game", m); }
                     break;
                 }
             }
@@ -200,6 +206,16 @@ fn cmd_generate(
                 std::process::exit(1); // Exit, fix it
             }
             let move_result_unwrapped = move_result.unwrap();
+            let d = move_result_unwrapped.remaining_depth;
+            // TODO IMMEDIATE This isn't accurate at all. 
+            // Pass "terminated" bool from ai.mod all the way into BestMoveInfoJs,
+            // then display for EVERY move here (assuming not quiet mode), the remaining_depth and whether it was terminated. 
+            // e.g. remaining depth = 7 and terminated means the memoized move is depth 7 accuracy but that doesn't mean we went 
+            // through all the candidate moves at depth 7, it could've been terminated at any time. 
+            // Then this case it is the earlier depth 5 which is the real full depth. 
+            // Then we need to adjust the max node count again to truly be depth 5.
+            min_depth_seen = min_depth_seen.min(d);
+            max_depth_seen = max_depth_seen.max(d);
 
             if let Err(e) = writer.write_all(&board_bytes) {
                 eprintln!("Error writing board bytes: {}", e);
@@ -210,13 +226,19 @@ fn cmd_generate(
                 std::process::exit(1);
             }
 
-            println!("\n{} {}", main.get_board(), move_result_unwrapped.score);
+            if !quiet {
+                println!("\n{} {}", main.get_board(), move_result_unwrapped.score);
+            }
             half_moves += 1;
         }
 
         completed_games += 1;
         total_positions += half_moves as u64;
-        println!("Half moves: {}, now completed {} games", half_moves, completed_games);
+        if quiet {
+            eprintln!("Game {} done, {} half moves", completed_games, half_moves);
+        } else {
+            println!("Half moves: {}, now completed {} games", half_moves, completed_games);
+        }
         
         if let Err(e) = writer.flush() {
             eprintln!("Error flushing output: {}", e);
@@ -229,6 +251,7 @@ fn cmd_generate(
     println!("Done!");
     println!("Games completed: {}", completed_games);
     println!("Positions: {}", total_positions);
+    println!("Max search depth reached: {} (min: {})", max_depth_seen, min_depth_seen);
     let secs = elapsed.as_secs_f64();
     println!("Time elapsed: {:.2}s", secs);
     if secs > 0.0 {
@@ -241,8 +264,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Generate { output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game } => {
-            cmd_generate(output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game);
+        Commands::Generate { output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet } => {
+            cmd_generate(output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet);
         }
         Commands::View { file, range } => {
             if let Err(e) = view_positions(&file, &range) {
