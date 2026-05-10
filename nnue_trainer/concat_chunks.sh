@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
+
 # Concatenate all *.bin chunks in IN_DIR into OUT_FILE, truncating any partial
 # trailing entry from each chunk (a chunk killed mid-write may have <38 dangling
-# bytes at the tail). Chunks are NOT deleted on success - rm them yourself once
+# bytes at the tail). Chunks are not deleted on success - rm them yourself once
 # you've verified OUT_FILE.
 #
 # Usage: concat_chunks.sh IN_DIR OUT_FILE
 
 # TODO IMMEDIATE Review 
+# And add code which deletes all empty files or 1 partially written position 
 
 set -eu
 

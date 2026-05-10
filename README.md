@@ -40,12 +40,11 @@ cargo build --release --bin chess-cli --no-default-features -F cli
 # Generate and APPEND positions into output file (see --help for options)
 ./target/release/chess-cli generate nnue_trainer/xyz.bin
 
-# Parallel: spawn N processes, each writes its own numbered .bin in OUT_DIR.
-# Resumable: re-run after Ctrl-C / crash and new files are added alongside survivors.
-nnue_trainer/generate_parallel.sh nnue_trainer/chunks 10 --num-games 1000 --max-nodes 100000 --quiet
+# Parallel: spawn N processes, each writes its own NEW numbered .bin into an output directory
+nnue_trainer/generate_parallel.sh nnue_trainer/chunks 10 --num-games 1 --max-nodes 30000
 
-# Concat all *.bin in OUT_DIR into one file (drops partial trailing entries).
-# Does NOT delete chunks; rm them yourself after verifying.
+# Concat all *.bin in output directory into one file and fixes partial trailing entries due to interrupt or error
+# Does not delete chunks; rm them yourself after verifying.
 nnue_trainer/concat_chunks.sh nnue_trainer/chunks nnue_trainer/positions.bin
 
 # View positions/score (training data) from a .bin file
