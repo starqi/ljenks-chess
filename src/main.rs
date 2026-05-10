@@ -22,6 +22,9 @@ struct Cli {
 
 // TODO (Minor) Multiple ranges: 1-10,20-30
 
+// TODO IMMEDIATE Ugly system exit calls
+// cmd_* fns return io::Result and bubbling up via ? to a single top-level exit in main().
+
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Generate training positions into a .bin file
@@ -203,7 +206,7 @@ fn cmd_generate(
 
             if move_result.is_none() {
                 eprintln!("Unexpected no moves to make without formal game end {}", main.get_board());
-                std::process::exit(1); // Exit, fix it
+                std::process::exit(1); // TODO IMMEDIATE Go to the next game
             }
             let move_result_unwrapped = move_result.unwrap();
             let d = move_result_unwrapped.remaining_depth;
@@ -234,7 +237,7 @@ fn cmd_generate(
 
         completed_games += 1;
         total_positions += half_moves as u64;
-        if quiet {
+        if quiet { // TODO IMMEDIATE eprintln???
             eprintln!("Game {} done, {} half moves", completed_games, half_moves);
         } else {
             println!("Half moves: {}, now completed {} games", half_moves, completed_games);
