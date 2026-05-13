@@ -32,6 +32,7 @@ pub struct Ai {
     terminated: bool,
     min_depth: i8, // Configuration (not state)
     iterative_deepening_depth: i8,
+    last_completed_depth: i8,
     real_board_positional_hashes: *const Vec<u64>, // See late-inject
     half_moves_without_pawn_move: *const usize, //  See late-inject
     move_buckets: MoveBuckets,
@@ -62,6 +63,7 @@ const BASE_EVERY: u64 = NPS_EXPECTATION / TIMES_PER_SECOND_APPROX;
 pub struct BestMoveInfo {
     /// Helps with 50 move rule
     pub is_pawn: bool,
+    /// Currently just set to -1 for special case of random moves
     pub remaining_depth: i8,
     pub score: i32,
     /// Standard chess notation
@@ -97,6 +99,7 @@ impl Ai {
             terminated: false,
             min_depth: 5, // TODO Look this up, why start from 1?
             iterative_deepening_depth: 1,
+            last_completed_depth: 0,
             real_board_positional_hashes: 0 as *const Vec<u64>,
             half_moves_without_pawn_move: 0 as *const usize,
             move_buckets: MoveBuckets::new(),
@@ -118,6 +121,7 @@ impl Ai {
         self.useful_memo_hits = 0;
         self.hash_move_memo_hits = 0;
         self.fast_found_hits = 0;
+        self.last_completed_depth = 0;
 
         for d in (self.min_depth..=99).step_by(2) {
             console_log!("\nBegin depth {}", d);
@@ -137,6 +141,7 @@ impl Ai {
                 console_log!("Terminated due to time");
                 break;
             }
+            self.last_completed_depth = d;
         }
 
         self.test_board.assert_hash();
@@ -185,12 +190,13 @@ impl Ai {
     /// This process produces standard chess notation so a full `BestMoveInfo` is returned.
     /// Ugly interface, private.
     fn apply_leading_move(&self, real_board: &mut Board) -> Option<BestMoveInfo> {
-        let leading_move_copy = if let Some((best_move, remaining_depth, score)) = self.get_leading_move(&real_board) {
-            Some((best_move.clone(), remaining_depth, score))
+        let remaining_depth = if self.last_completed_depth > 0 { // Exists if min depth completes
+            self.last_completed_depth
         } else {
-            None
+            self.min_depth
         };
-        if let Some((best_move, remaining_depth, score)) = leading_move_copy {
+        let leading_move = self.get_leading_move(&real_board).map(|(best_move, _, score)| (best_move, score));
+        if let Some((best_move, score)) = leading_move {
             let before_info = BeforeMoveInfoForStringify::slow_new(real_board, &best_move);
             let original_player = real_board.get_player_with_turn();
             let is_pawn = matches!(real_board.get_moved_piece(&best_move), Some(Piece::Pawn));
@@ -236,6 +242,10 @@ impl Ai {
         self.apply_leading_move(&mut board2)
     }
 
+    pub fn get_node_counter(&self) -> u64 {
+        self.node_counter
+    }
+
     pub fn make_random_move(&mut self, real_board: &mut Board) -> Option<BestMoveInfo> {
         self.test_board.clone_from(real_board);
         self.moves_buf.write_index = 0; // Same as make_move and run_search starting at 0 as usual
@@ -260,7 +270,7 @@ impl Ai {
 
         Some(BestMoveInfo {
             is_pawn,
-            remaining_depth: 0,
+            remaining_depth: -1,
             score: 0,
             notation: slow_stringify_move_standard(&move_with_eval, &before_info, &after_info),
             m: move_with_eval

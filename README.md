@@ -44,13 +44,14 @@ cargo build --release --bin chess-cli --no-default-features -F cli
 nnue_trainer/generate_parallel.sh nnue_trainer/chunks 10 --num-games 1 --max-nodes 30000
 
 # Concat all *.bin in output directory into one file and fixes partial trailing entries due to interrupt or error
-# Does not delete chunks; rm them yourself after verifying.
+# Does not delete chunks; rm them manually
 nnue_trainer/concat_chunks.sh nnue_trainer/chunks nnue_trainer/positions.bin
 
 # View positions/score (training data) from a .bin file
 ./target/release/chess-cli view xyz.bin 5
 ./target/release/chess-cli view xyz.bin 1-10
 ./target/release/chess-cli view xyz.bin all
+./target/release/chess-cli count xyz.bin
 
 # Evaluate positions with NNUE and print scores
 ./target/release/chess-cli nnue nnue_trainer/nnue_model.safetensors xyz.bin 5

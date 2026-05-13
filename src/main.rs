@@ -35,7 +35,7 @@ enum Commands {
         #[arg(long, default_value = "20")]
         random_half_moves: usize,
         /// Node limit for search
-        #[arg(long, default_value = "100000")]
+        #[arg(long, default_value = "50000")]
         max_nodes: u64,
         /// Number of games to play
         #[arg(long, default_value = "1")]
@@ -165,7 +165,7 @@ fn cmd_generate(
     let mut completed_games = 0;
     let mut total_positions = 0u64;
     let mut min_depth_seen: i8 = i8::MAX;
-    let mut max_depth_seen: i8 = 0;
+    let mut max_depth_seen: i8 = -1;
     let start_time = Instant::now();
 
     let mut main = Main::new();
@@ -210,15 +210,10 @@ fn cmd_generate(
             }
             let move_result_unwrapped = move_result.unwrap();
             let d = move_result_unwrapped.remaining_depth;
-            // TODO IMMEDIATE This isn't accurate at all. 
-            // Pass "terminated" bool from ai.mod all the way into BestMoveInfoJs,
-            // then display for EVERY move here (assuming not quiet mode), the remaining_depth and whether it was terminated. 
-            // e.g. remaining depth = 7 and terminated means the memoized move is depth 7 accuracy but that doesn't mean we went 
-            // through all the candidate moves at depth 7, it could've been terminated at any time. 
-            // Then this case it is the earlier depth 5 which is the real full depth. 
-            // Then we need to adjust the max node count again to truly be depth 5.
-            min_depth_seen = min_depth_seen.min(d);
-            max_depth_seen = max_depth_seen.max(d);
+            if d >= 0 { // < 0 -> Special scenario, currently random move, no search
+                min_depth_seen = min_depth_seen.min(d);
+                max_depth_seen = max_depth_seen.max(d);
+            }
 
             if let Err(e) = writer.write_all(&board_bytes) {
                 eprintln!("Error writing board bytes: {}", e);
@@ -230,7 +225,7 @@ fn cmd_generate(
             }
 
             if !quiet {
-                println!("\n{} {}", main.get_board(), move_result_unwrapped.score);
+                println!("\n{} {} Completed depth: {} Nodes: {}", main.get_board(), move_result_unwrapped.score, d, main.get_node_counter());
             }
             half_moves += 1;
         }
@@ -254,7 +249,8 @@ fn cmd_generate(
     println!("Done!");
     println!("Games completed: {}", completed_games);
     println!("Positions: {}", total_positions);
-    println!("Max search depth reached: {} (min: {})", max_depth_seen, min_depth_seen);
+    // TODO Need distribution... 
+    println!("Full search depth / Max: {} Min: {}", max_depth_seen, min_depth_seen);
     let secs = elapsed.as_secs_f64();
     println!("Time elapsed: {:.2}s", secs);
     if secs > 0.0 {

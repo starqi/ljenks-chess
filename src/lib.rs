@@ -169,6 +169,8 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
     }
 }
 
+// TODO IMMEDIATE "Main" naming so confusing, main interface???
+
 // This struct does not need to be fast like main engine.
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 impl Main {
@@ -319,6 +321,11 @@ impl Main {
     }
 
     #[cfg(not(feature = "wasm"))]
+    pub fn get_node_counter(&self) -> u64 {
+        self.ai.get_node_counter()
+    }
+
+    #[cfg(not(feature = "wasm"))]
     pub fn set_logging(&self, enabled: bool) {
         platform::set_logging(enabled);
     }
@@ -338,7 +345,7 @@ impl Main {
         }
     }
 
-    fn process_best_move_info_to_js(&mut self, best_move_info: Option<engine::ai::BestMoveInfo>) -> Option<BestMoveInfoJs> {
+    fn process_best_move_info_to_js(&mut self, best_move_info: Option<BestMoveInfo>) -> Option<BestMoveInfoJs> {
         let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn); // Just need is_pawn here
         if let Some(is_pawn) = is_pawn_holder {
             self.handle_special_end_conditions(
