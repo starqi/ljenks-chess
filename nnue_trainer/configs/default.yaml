@@ -1,5 +1,19 @@
-bin_path: xyz.bin
+# Common
 batch_size: 1024
-epochs: 100
 lr: 0.001
 save_path: nnue_model.pt
+
+# train.py
+bin_path: xyz.bin
+epochs: 100
+
+# stream_train.py
+cycles: 10
+epochs_per_cycle: 1
+games_per_worker: 500
+workers: 4
+max_nodes: 5000
+random_half_moves: 10
+max_half_moves: 200
+val_every: 1
+validation_path: validation.bin

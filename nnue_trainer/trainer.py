@@ -18,21 +18,25 @@ def train(
     batch_size: int = 1024,
     lr: float = 1e-3,
     save_path: str | None = None,
-    seed: int | None = None):
+    seed: int | None = None,
+    model: NNUE | None = None,
+    # TODO IMMEDIATE ALL DEVICE OBJS JUST COME FROM THE SAME FUCKING GET_DEVICE ABOVE. For chess engine, should we just hard code "cpu" in all cases?
+    device: torch.device | None = None) -> NNUE:
 
     if seed is not None:
         torch.manual_seed(seed)
 
-    device = get_device()
+    device = device or get_device()
     print(f"Using device: {device}")
 
     # TODO IMMEDIATE num_workers=0?
     dataloader = create_dataloader(bin_path, batch_size=batch_size, num_workers=0)
-    model = NNUE().to(device)
-    if save_path and os.path.exists(save_path):
-        # TODO (Read)
-        model.load_state_dict(torch.load(save_path, map_location=device, weights_only=True))
-        print(f"Loaded checkpoint from {save_path}")
+    if model is None:
+        model = NNUE().to(device)
+        if save_path and os.path.exists(save_path):
+            # TODO (Read) And extract, @stream_train.py
+            model.load_state_dict(torch.load(save_path, map_location=device, weights_only=True))
+            print(f"Loaded checkpoint from {save_path}")
     optimizer = Adam(model.parameters(), lr=lr, weight_decay=1e-5) # TODO (Read)
 
     for epoch in range(epochs):
@@ -63,3 +67,5 @@ def train(
     if save_path:
         torch.save(model.state_dict(), save_path)
         print(f"Model saved to {save_path}")
+
+    return model
