@@ -1,16 +1,8 @@
-import sys
-import os
-
-# Call as script from anywhere
-# TODO IMMEDIATE Isn't this a common pattern? And extract?
-script_dir = os.path.dirname(os.path.abspath(__file__))
-if script_dir not in sys.path:
-    sys.path.insert(0, script_dir)
-
 from pathlib import Path
 import torch
 from safetensors.torch import save_file
 from config import load_config
+import sys
 
 
 def main():

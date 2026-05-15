@@ -1,11 +1,4 @@
-import os
-import sys
 import argparse
-
-# Call as script from anywhere
-script_dir = os.path.dirname(os.path.abspath(__file__))
-if script_dir not in sys.path:
-    sys.path.insert(0, script_dir)
 
 import torch
 from config import load_config

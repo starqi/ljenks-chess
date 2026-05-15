@@ -1,23 +1,17 @@
 import os
 import shutil
 import subprocess
-import sys
 import time
 import traceback
 from pathlib import Path
-
-# Call as script from anywhere
-# TODO IMMEDIATE What do you call this pattern? Where I just want to run script as python x.py anywhere? Extract this somewhere?
-# Is the other N places which do this the proper pattern? It's written differently.
-# This is also used below.
-_SCRIPT_DIR = Path(__file__).parent.resolve()
-sys.path.insert(0, str(_SCRIPT_DIR))
 
 import torch
 from config import load_config, Config
 from dataset import create_dataloader
 from model import NNUE
 from trainer import get_device, train
+
+_SCRIPT_DIR = Path(__file__).parent.resolve()
 
 def validate(model: NNUE, val_path: str, device: torch.device, batch_size: int = 2048) -> float:
     model.eval()
