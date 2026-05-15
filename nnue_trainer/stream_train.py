@@ -1,8 +1,8 @@
 import os
 import shutil
+import signal
 import subprocess
 import time
-import traceback
 from pathlib import Path
 
 import torch
@@ -33,9 +33,29 @@ def validate(model: NNUE, val_path: str, device: torch.device, batch_size: int =
     model.train()
     return avg
 
-def generate_positions_bin(bin_output_path: Path, config: Config, chunk_dir: Path | None = None) -> Path:
-    if chunk_dir is None:
-        chunk_dir = bin_output_path.with_suffix(".chunks")
+def _save_and_rotate(model: NNUE, model_path: Path, backup_count: int) -> None:
+    old_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        oldest = Path(f"{model_path}.bak.{backup_count}")
+        if oldest.exists():
+            oldest.unlink()
+        for i in range(backup_count - 1, 0, -1):
+            src = Path(f"{model_path}.bak.{i}")
+            if src.exists():
+                os.replace(str(src), f"{model_path}.bak.{i + 1}")
+        if model_path.exists():
+            os.replace(str(model_path), f"{model_path}.bak.1")
+        torch.save(model.state_dict(), str(model_path))
+    finally:
+        signal.signal(signal.SIGINT, old_handler)
+
+def generate_positions_bin(bin_output_path: Path, config: Config) -> Path:
+    chunk_dir = bin_output_path.with_suffix(".chunks")
+    # Clean up last iterations positions on start of new iteration
+    if chunk_dir.exists():
+        shutil.rmtree(chunk_dir)
+    if bin_output_path.exists():
+        bin_output_path.unlink()
     gen_script = _SCRIPT_DIR / "generate_parallel.sh"
     concat_script = _SCRIPT_DIR / "concat_chunks.sh"
     gen_args = [
@@ -47,8 +67,6 @@ def generate_positions_bin(bin_output_path: Path, config: Config, chunk_dir: Pat
     ]
     subprocess.run(gen_args, check=True)
     subprocess.run([str(concat_script), str(chunk_dir), str(bin_output_path)], check=True)
-    shutil.rmtree(chunk_dir, ignore_errors=True) # TODO IMMEDIATE Read, and what happens if chunk dir not removed? Don't want old files in there! Need to throw.
-    # TODO IMMEDIATE Just check that everything in this method throws if something is wrong 
     return bin_output_path
 
 def stream_train(config: Config):
@@ -64,6 +82,7 @@ def stream_train(config: Config):
     device = get_device()
     model = NNUE().to(device)
     if os.path.exists(model_path):
+        # weights_only = Non-executable data only, legacy pickler BS  
         model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
         print(f"Loaded checkpoint from {model_path}")
 
@@ -77,55 +96,35 @@ def stream_train(config: Config):
         print(f"CYCLE {cycle}/{cycles}")
         print(f"{'='*60}")
 
-        try:
-            bin_path = _SCRIPT_DIR / f"_train_cycle_{cycle}.bin"
-            print(f"\n[Generate] Producing data...")
-            gen_start = time.time()
-            generate_positions_bin(bin_path, config)
-            gen_elapsed = time.time() - gen_start
-            print(f"[Generate] Done in {gen_elapsed:.1f}s")
+        bin_path = _SCRIPT_DIR / f"_train_cycle_{cycle}.bin"
+        print(f"\n[Generate] Producing data...")
+        gen_start = time.time()
+        generate_positions_bin(bin_path, config)
+        gen_elapsed = time.time() - gen_start
+        print(f"[Generate] Done in {gen_elapsed:.1f}s")
 
-            print(f"\n[Train] Training for {epochs_per_cycle} epoch(s)...")
-            train_start = time.time()
-            model = train(
-                bin_path=str(bin_path),
-                epochs=epochs_per_cycle,
-                batch_size=batch_size,
-                lr=lr,
-                save_path=model_path,
-                model=model,
-                device=device,
-            )
-            train_elapsed = time.time() - train_start
-            print(f"[Train] Done in {train_elapsed:.1f}s")
+        print(f"\n[Train] Training for {epochs_per_cycle} epoch(s)...")
+        train_start = time.time()
+        model = train(
+            str(bin_path),
+            epochs_per_cycle,
+            model,
+            batch_size,
+            lr,
+        )
+        train_elapsed = time.time() - train_start
+        print(f"[Train] Done in {train_elapsed:.1f}s")
 
-            if cycle % val_every == 0:
-                print(f"\n[Validate] Evaluating on {val_path}...")
-                val_loss = validate(model, val_path, device)
-                print(f"[Validate] Validation loss: {val_loss:.4f}")
+        if cycle % val_every == 0:
+            print(f"\n[Validate] Evaluating on {val_path}...")
+            val_loss = validate(model, val_path, device)
+            print(f"[Validate] Validation loss: {val_loss:.4f}")
 
-            # TODO IMMEDIATE If this fails, does it raise and catch below?
-            os.unlink(bin_path)
+        _save_and_rotate(model, Path(model_path), config["backup_count"])
 
-            total_elapsed = gen_elapsed + train_elapsed
-            print(f"\n[Summary] Cycle {cycle}: generate={gen_elapsed:.1f}s, train={train_elapsed:.1f}s, total={total_elapsed:.1f}s")
-        except Exception:
-            # TODO IMMEDIATE What should we do when exception is caught? I'm thinking 
-            # model needs to be saved every cycle (below comment) and this this should just end the training.
-            # And human can resume from the saved model.
-            print(f"\n[ERROR] Cycle {cycle} failed:")
-            traceback.print_exc() # Print latest exception info
-            # TODO IMMEDIATE Reuse above path
-            cleanup = _SCRIPT_DIR / f"_train_cycle_{cycle}.bin"
-            if cleanup.exists():
-                cleanup.unlink(missing_ok=True)
-            chunk_dir = cleanup.with_suffix(".chunks")
-            if chunk_dir.exists():
-                shutil.rmtree(chunk_dir, ignore_errors=True)
-            print("[INFO] Continuing to next cycle...")
+        total_elapsed = gen_elapsed + train_elapsed
+        print(f"\n[Summary] Cycle {cycle}: generate={gen_elapsed:.1f}s, train={train_elapsed:.1f}s, total={total_elapsed:.1f}s")
 
-    # TODO SAVE EVERY CYCLE
-    torch.save(model.state_dict(), model_path)
     print("Done")
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ class Config(TypedDict):
     max_half_moves: int
     val_every: int
     validation_path: str
+    backup_count: int
 
 def load_config() -> Config:
     with open(os.path.join(_SCRIPT_DIR, 'configs', 'default.yaml')) as f:

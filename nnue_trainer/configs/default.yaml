@@ -17,3 +17,4 @@ random_half_moves: 10
 max_half_moves: 200
 val_every: 1
 validation_path: validation.bin
+backup_count: 2
