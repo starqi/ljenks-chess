@@ -75,4 +75,6 @@ python train.py
 python check_model.py
 python check_model.py --range "1-10,50-60"
 python export_safetensors.py
+
+# TODO IMMEDIATE New instructions
 ```

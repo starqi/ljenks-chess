@@ -15,7 +15,7 @@ epochs: 100
 cycles: 10
 epochs_per_cycle: 1
 #games_per_worker: 500
-games_per_worker: 100
+games_per_worker: 50
 games_per_worker_validation: 1
 workers: 5 # TODO (Minor) "half" or "full" meaning half of CPU count or all
 max_nodes: 30000

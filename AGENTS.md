@@ -60,4 +60,18 @@ www/                             - Web browser frontend
   index.js                       - Main UI
   index.html / styles.css
 nnue_trainer/                    - Python NNUE trainer (in progress)
+  repeat_train.py                 - Main training loop (generate, train, validate, save)
+  trainer.py                      - Training util
+  train.py                        - Simple single step training
+  config.py                       - Config loader
+  model.py
+  dataset.py                      - DataLoader for .bin training data
+  plot_training.py                - Plot RMSE from .track.json
+  export_safetensors.py
+  check_model.py
+  generate_parallel.sh            - Calls Rust CLI in parallel
+  concat_chunks.sh                - Concatenate .chunks positions dir into .bin positions file
+  configs/default.yaml            - Training config
+  *.bin -> *.chunks               - Temporary generated positions
+  *.bin -> *.track.json           - RMSE history per validation point
 ```

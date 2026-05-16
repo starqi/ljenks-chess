@@ -1,6 +1,16 @@
 
 ### TODO
 
+- NNUE 
+    - TODO IMMEDIATE
+    - Write down intuition: impossible to have tiny training file size per cycle,
+      must have multiple epochs to reinforce, but given e.g. just 10 games, the rook doesn't even cover the whole board, 
+      and any epochs would overfit on pointless data like rook only on 1 file.
+      - Need to fix error handling on generation
+    - Even then, Adam should be preserved across cycles instead of arbitrarily resetting at cycle boundaries, losing momentum 
+        - TODO Read 
+    - Read the dam Stockfish notes and consider sigmoiding the extreme scores before MSE
+
 - What the fuck?
 
     1. d4 e6
@@ -17,15 +27,10 @@
     12. Bg6+ Kg8
     13. Qh7#
 
-- Disable-able NNUE by excluding safetensors
-  then merge to main with NNUE fully disabled
 - Where to put safetensors for webpack
-- Fix as many basedpyright warnings as possible
-- Does NNUE game gen END? Why or why not?
-- Basic overfitting test
-- ??? AI anecdote on ability to understand NNUE 
-- TODO IMMEDIATE
     - NNUE related ones
+- Fix as many basedpyright warnings as possible
+
 - // TODO temp_moves unnecessary? Try it
 - / Review new main.rs AI code
 - Get rid of ? evaluation and figure out why it loves e6

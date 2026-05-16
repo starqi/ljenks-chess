@@ -1,3 +1,4 @@
+import json
 from math import sqrt
 import os
 import shutil
@@ -12,6 +13,10 @@ from model import NNUE
 from trainer import get_device, train
 
 # Logging strategy: log before each operation, like file creation/deletion/epoch
+
+# Error/SIGINT handling: will crash script; generated positions in chunk folder won't automatically be recovered 
+# unless done manually which you can because chunks still there, chunk folder auto-erased next run; 
+# if in saving stage then SIGINT is protected against, other signals or unexpected error is undefined behaviour.
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 GENERATE_PARALLEL_PATH = SCRIPT_DIR / "generate_parallel.sh"
@@ -40,7 +45,7 @@ def validate(model: NNUE, val_path: str, device: torch.device, batch_size: int =
     print(f"Validation loss: {avg:.4f}, square root: {sqrt(avg):.4f}")
     return avg
 
-def _save_and_rotate(model: NNUE, model_path: Path, backup_count: int) -> None:
+def _save_and_rotate(model: NNUE, model_path: Path, backup_count: int, rmse_to_record: tuple[float, Path] | None) -> None:
     old_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         oldest = Path(f"{model_path}.bak.{backup_count}")
@@ -62,6 +67,11 @@ def _save_and_rotate(model: NNUE, model_path: Path, backup_count: int) -> None:
         model_path_str = str(model_path)
         print(f"Saving to {model_path_str}")
         torch.save(model.state_dict(), model_path_str)
+        if rmse_to_record is not None:
+            track_path = rmse_to_record[1]
+            history = json.loads(track_path.read_text()) if track_path.exists() else []
+            history.append(str(rmse_to_record[0]))
+            track_path.write_text(json.dumps(history))
     finally:
         signal.signal(signal.SIGINT, old_handler)
 
@@ -112,6 +122,8 @@ def repeat_train(config: Config):
         print("Removing validation chunks folder")
         shutil.rmtree(bin_output_path_to_chunk_folder(val_path))
 
+    track_path = Path(val_path_str).with_suffix('.track.json')
+
     for cycle in range(1, cycles + 1):
         print(f"Begin parallel generating positions {cycle}/{cycles}")
         generate_positions_bin(TRAINING_BIN_PATH, config, False)
@@ -122,9 +134,10 @@ def repeat_train(config: Config):
             batch_size,
             lr
         )
+        rmse = None
         if cycle % val_every == 0:
-            validate(model, val_path_str, device)
-        _save_and_rotate(model, Path(model_path_str), config["backup_count"])
+            rmse = (sqrt(validate(model, val_path_str, device)), track_path)
+        _save_and_rotate(model, Path(model_path_str), config["backup_count"], rmse_to_record=rmse)
         print(f"Cycle {cycle} done")
     print("Done")
 
