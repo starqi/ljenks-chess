@@ -16,6 +16,7 @@ class Config(TypedDict):
     cycles: int
     epochs_per_cycle: int
     games_per_worker: int
+    games_per_worker_validation: int
     workers: int
     max_nodes: int
     random_half_moves: int

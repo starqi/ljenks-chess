@@ -9,3 +9,4 @@ __pycache__
 *.safetensors
 *.bin
 *.pt
+*.pt.bak.*

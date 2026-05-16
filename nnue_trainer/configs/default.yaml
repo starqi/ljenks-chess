@@ -1,20 +1,26 @@
+
+
 # Common
 batch_size: 1024
 lr: 0.001
 save_path: nnue_model.pt
 
+
 # train.py
 bin_path: xyz.bin
 epochs: 100
 
+
 # stream_train.py
 cycles: 10
 epochs_per_cycle: 1
-games_per_worker: 500
-workers: 4
-max_nodes: 5000
-random_half_moves: 10
-max_half_moves: 200
+#games_per_worker: 500
+games_per_worker: 100
+games_per_worker_validation: 1
+workers: 5 # TODO (Minor) "half" or "full" meaning half of CPU count or all
+max_nodes: 30000
+random_half_moves: 20
+max_half_moves: 300
 val_every: 1
 validation_path: validation.bin
 backup_count: 2

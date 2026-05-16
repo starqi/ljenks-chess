@@ -24,7 +24,7 @@ def train(
     #    torch.manual_seed(seed)
 
     device = get_device()
-    print(f"Using device: {device}")
+    print(f"Training, using device: {device}")
 
     # TODO (Minor) Do we actually need workers to load?
     dataloader = create_dataloader(bin_path, batch_size=batch_size, num_workers=0) # num_workers = Parallel data load
