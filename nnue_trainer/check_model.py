@@ -28,10 +28,10 @@ parser.add_argument('--range', type=str, default=None,
 args = parser.parse_args()
 
 model = NNUE()
-model.load_state_dict(torch.load(config['save_path'], weights_only=True))
+model.load_state_dict(torch.load(config['checkpoint_path'], weights_only=True))
 model.eval()
 
-dataset = ChessDataset(config['bin_path'])
+dataset = ChessDataset(config['positions_path'])
 ranges = parse_ranges(args.range) if args.range else [(0, len(dataset))]
 
 for start, end in ranges:

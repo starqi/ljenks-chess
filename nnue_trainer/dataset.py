@@ -109,11 +109,11 @@ def compute_nnue_indices(data: bytes) -> tuple[list[int], list[int]]:
 
 
 class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
-    def __init__(self, bin_path: str, max_positions: int | None = None):
-        self.bin_path: Path = Path(bin_path)
-        if not self.bin_path.exists():
-            raise FileNotFoundError(f"Binary file not found: {bin_path}")
-        self.file_size: int = self.bin_path.stat().st_size
+    def __init__(self, positions_path: str, max_positions: int | None = None):
+        self.positions_path: Path = Path(positions_path)
+        if not self.positions_path.exists():
+            raise FileNotFoundError(f"Binary file not found: {positions_path}")
+        self.file_size: int = self.positions_path.stat().st_size
         self.num_positions: int = self.file_size // RECORD_SIZE
         if max_positions:
             self.num_positions = min(self.num_positions, max_positions)
@@ -123,7 +123,7 @@ class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
 
     def _init_mmap(self):
         if self._mmap is None:
-            self._file = open(self.bin_path, 'rb')
+            self._file = open(self.positions_path, 'rb')
             self._mmap = np.memmap(self._file, dtype=np.uint8, mode='r')
 
     def __len__(self):
@@ -183,8 +183,8 @@ def collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor, float]]) -> tuple[t
 # TODO ...ljenks-chess/nnue_trainer/.venv/lib/python3.10/site-packages/torch/utils/data/dataloader.py:775:
 # UserWarning: 'pin_memory' argument is set
 # as true but not supported on MPS now, device pinned memory won't be used.
-def create_dataloader(bin_path: str, batch_size: int = 1024, max_positions: int | None = None, num_workers: int = 0, shuffle: bool = True) -> DataLoader[tuple[torch.Tensor, torch.Tensor, float]]:
-    dataset = ChessDataset(bin_path, max_positions)
+def create_dataloader(positions_path: str, batch_size: int = 1024, max_positions: int | None = None, num_workers: int = 0, shuffle: bool = True) -> DataLoader[tuple[torch.Tensor, torch.Tensor, float]]:
+    dataset = ChessDataset(positions_path, max_positions)
     # "Pinned memory in PyTorch acts like disabling virtual memory
     #  for that specific tensor by creating "page-locked" CPU memory that the OS cannot swap to disk.
     #  This ensures faster GPU transfers (Direct Memory Access) but doesn't disable virtual memory system-wide,

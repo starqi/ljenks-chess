@@ -12,7 +12,7 @@ def get_device():
 
 
 def train(
-    bin_path: str,
+    positions_path: str,
     epochs: int,
     model: NNUE,
     batch_size: int = 1024,
@@ -27,7 +27,7 @@ def train(
     print(f"Training, using device: {device}")
 
     # TODO (Minor) Do we actually need workers to load?
-    dataloader = create_dataloader(bin_path, batch_size=batch_size, num_workers=0) # num_workers = Parallel data load
+    dataloader = create_dataloader(positions_path, batch_size=batch_size, num_workers=0) # num_workers = Parallel data load
     optimizer = Adam(model.parameters(), lr=lr, weight_decay=1e-5) # TODO (Read)
 
     for epoch in range(epochs):

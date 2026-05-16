@@ -7,7 +7,7 @@ import sys
 
 def main():
     config = load_config()
-    pt_path = Path(config['save_path'])
+    pt_path = Path(config['checkpoint_path'])
     if not pt_path.exists():
         print(f"Error: {pt_path} not found")
         sys.exit(1)

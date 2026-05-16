@@ -62,7 +62,7 @@ www/                             - Web browser frontend
 nnue_trainer/                    - Python NNUE trainer (in progress)
   repeat_train.py                 - Main training loop (generate, train, validate, save)
   trainer.py                      - Training util
-  train.py                        - Simple single step training
+  train_once.py                   - Simple single step training
   config.py                       - Config loader
   model.py
   dataset.py                      - DataLoader for .bin training data

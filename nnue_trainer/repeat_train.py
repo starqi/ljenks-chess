@@ -45,14 +45,14 @@ def validate(model: NNUE, val_path: str, device: torch.device, batch_size: int =
     print(f"Validation loss: {avg:.4f}, square root: {sqrt(avg):.4f}")
     return avg
 
-def _save_and_rotate(model: NNUE, model_path: Path, backup_count: int, rmse_to_record: tuple[float, Path] | None) -> None:
+def _save_and_rotate(model: NNUE, model_path: Path, checkpoint_backup_count: int, rmse_to_record: tuple[float, Path] | None) -> None:
     old_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
-        oldest = Path(f"{model_path}.bak.{backup_count}")
+        oldest = Path(f"{model_path}.bak.{checkpoint_backup_count}")
         if oldest.exists():
             print(f"Deleting {oldest}")
             oldest.unlink()
-        for i in range(backup_count - 1, 0, -1):
+        for i in range(checkpoint_backup_count - 1, 0, -1):
             src = Path(f"{model_path}.bak.{i}")
             if src.exists():
                 src_str = str(src)
@@ -70,7 +70,7 @@ def _save_and_rotate(model: NNUE, model_path: Path, backup_count: int, rmse_to_r
         if rmse_to_record is not None:
             track_path = rmse_to_record[1]
             history = json.loads(track_path.read_text()) if track_path.exists() else []
-            history.append(str(rmse_to_record[0]))
+            history.append(rmse_to_record[0])
             track_path.write_text(json.dumps(history))
     finally:
         signal.signal(signal.SIGINT, old_handler)
@@ -78,7 +78,7 @@ def _save_and_rotate(model: NNUE, model_path: Path, backup_count: int, rmse_to_r
 def bin_output_path_to_chunk_folder(bin_output_path: Path) -> Path:
     return bin_output_path.with_suffix(".chunks")
 
-def generate_positions_bin(bin_output_path: Path, config: Config, use_games_per_worker_validation: bool):
+def generate_positions_bin(bin_output_path: Path, config: Config, use_games_per_worker_validation_set: bool):
     chunk_dir = bin_output_path_to_chunk_folder(bin_output_path)
     # Clean up last iterations positions on start of new iteration
     if chunk_dir.exists():
@@ -89,7 +89,7 @@ def generate_positions_bin(bin_output_path: Path, config: Config, use_games_per_
         bin_output_path.unlink()
     gen_args = [
         str(GENERATE_PARALLEL_PATH), str(chunk_dir), str(config["workers"]),
-        "--num-games", str(config["games_per_worker_validation"] if use_games_per_worker_validation else config["games_per_worker"]),
+        "--num-games", str(config["games_per_worker_validation_set"] if use_games_per_worker_validation_set else config["games_per_worker"]),
         "--max-nodes", str(config["max_nodes"]),
         "--random-half-moves", str(config["random_half_moves"]),
         "--max-half-moves-per-game", str(config["max_half_moves"]),
@@ -101,7 +101,7 @@ def generate_positions_bin(bin_output_path: Path, config: Config, use_games_per_
 def repeat_train(config: Config):
     batch_size = config["batch_size"]
     lr = config["lr"]
-    model_path_str = config["save_path"]
+    model_path_str = config["checkpoint_path"]
 
     cycles = config["cycles"]
     epochs_per_cycle = config["epochs_per_cycle"]
@@ -137,7 +137,7 @@ def repeat_train(config: Config):
         rmse = None
         if cycle % val_every == 0:
             rmse = (sqrt(validate(model, val_path_str, device)), track_path)
-        _save_and_rotate(model, Path(model_path_str), config["backup_count"], rmse_to_record=rmse)
+        _save_and_rotate(model, Path(model_path_str), config["checkpoint_backup_count"], rmse_to_record=rmse)
         print(f"Cycle {cycle} done")
     print("Done")
 

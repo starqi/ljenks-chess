@@ -68,13 +68,17 @@ pip install -r requirements.txt
 # TODO .venv
 
 # Generate training data (see CLI section)
-# Should be able to train.py immediately (.bin file is in correct location)
+# Should be able to train immediately (.bin file is in correct location)
 
 # (Paths are in configs/)
-python train.py
+
+# Default: self-play training loop that generates positions, trains, validates, and saves checkpoints
+python repeat_train.py
+
+# Simpler single-step training on an existing .bin file
+python train_once.py
+
 python check_model.py
 python check_model.py --range "1-10,50-60"
 python export_safetensors.py
-
-# TODO IMMEDIATE New instructions
 ```
