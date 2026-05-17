@@ -22,10 +22,10 @@ GENERATE_PARALLEL_PATH = SCRIPT_DIR / "generate_parallel.sh"
 CONCAT_CHUNKS_PATH = SCRIPT_DIR / "concat_chunks.sh"
 TRAINING_BIN_PATH = SCRIPT_DIR / "training.bin"
 
-def validate(model: NNUE, val_path: str, batch_size: int = 1024) -> float:
+def validate(model: NNUE, val_path: str, sigmoid_scale: float, batch_size: int = 1024) -> float:
     print("Validating")
     model.eval()
-    dataloader = create_dataloader(val_path, batch_size=batch_size, shuffle=False, num_workers=0)
+    dataloader = create_dataloader(val_path, sigmoid_scale, batch_size=batch_size, shuffle=False, num_workers=0)
     total_loss = 0.0
     count = 0
     with torch.no_grad():
@@ -36,7 +36,8 @@ def validate(model: NNUE, val_path: str, batch_size: int = 1024) -> float:
             offsets_opp = offsets_opp.to(DEVICE)
             scores = scores.to(DEVICE)
             pred = model(indices_stm, offsets_stm, indices_opp, offsets_opp)
-            loss = torch.nn.functional.mse_loss(pred, scores)
+            pred_sig = torch.sigmoid(pred / sigmoid_scale)
+            loss = torch.nn.functional.mse_loss(pred_sig, scores)
             total_loss += loss.item()
             count += 1
     avg = total_loss / count if count > 0 else float("inf")
@@ -72,6 +73,7 @@ def repeat_train(config: Config):
     epochs_per_cycle: int = config["epochs_per_cycle"]
     val_every: int = config["val_every"]
     val_path_str: str = config["validation_path"]
+    sigmoid_scale: float = config["sigmoid_scale"]
 
     checkpoint = load_checkpoint(config)
     if checkpoint.cycle > 0:
@@ -95,12 +97,13 @@ def repeat_train(config: Config):
             checkpoint.model,
             checkpoint.optimizer,
             batch_size,
+            sigmoid_scale,
         )
         checkpoint.cycle = cycle
 
         rmse = None
         if cycle % val_every == 0:
-            rmse = sqrt(validate(checkpoint.model, val_path_str))
+            rmse = sqrt(validate(checkpoint.model, val_path_str, sigmoid_scale))
 
         rotate_and_save(config, checkpoint)
         if rmse is not None:

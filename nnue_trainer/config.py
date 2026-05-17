@@ -28,6 +28,7 @@ class Config(TypedDict):
     val_every: int
     validation_path: str
     checkpoint_backup_count: int
+    sigmoid_scale: float
 
 
 def load_config() -> Config:

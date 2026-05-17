@@ -33,6 +33,7 @@ def train(
     model: NNUE,
     optimizer: Adam,
     batch_size: int = 1024, # TODO IMMEDIATE Review batch sizes
+    sigmoid_scale: float = 600.0,
     ):
 
     # TODO (Minor)
@@ -40,7 +41,7 @@ def train(
     #    torch.manual_seed(seed)
 
     # TODO (Minor) Do we actually need workers to load?
-    dataloader = create_dataloader(positions_path, batch_size=batch_size, num_workers=0) # num_workers = Parallel data load
+    dataloader = create_dataloader(positions_path, sigmoid_scale, batch_size=batch_size, num_workers=0) # num_workers = Parallel data load
 
     for epoch in range(epochs):
         total_loss = 0
@@ -54,7 +55,8 @@ def train(
 
             optimizer.zero_grad()
             pred = model(indices_stm, offsets_stm, indices_opp, offsets_opp)
-            loss = torch.nn.functional.mse_loss(pred, scores)
+            pred_sig = torch.sigmoid(pred / sigmoid_scale)
+            loss = torch.nn.functional.mse_loss(pred_sig, scores)
             loss.backward()
             optimizer.step()
 

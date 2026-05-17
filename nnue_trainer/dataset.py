@@ -4,6 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pathlib import Path
 from typing import BinaryIO, NamedTuple
+from math import exp
 
 COMPRESSED_SIZE = 34
 RECORD_SIZE = 38
@@ -108,9 +109,17 @@ def compute_nnue_indices(data: bytes) -> tuple[list[int], list[int]]:
     return compute_half_indices(stm, board), compute_half_indices(1 - stm, board)
 
 
+def sigmoid_cp(score: float, scale: float) -> float:
+    x = score / scale
+    if x >= 0:
+        return 1.0 / (1.0 + exp(-x))
+    return exp(x) / (1.0 + exp(x))
+
+
 class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
-    def __init__(self, positions_path: str, max_positions: int | None = None):
+    def __init__(self, positions_path: str, sigmoid_scale: float, max_positions: int | None = None):
         self.positions_path: Path = Path(positions_path)
+        self.sigmoid_scale = sigmoid_scale
         if not self.positions_path.exists():
             raise FileNotFoundError(f"Binary file not found: {positions_path}")
         self.file_size: int = self.positions_path.stat().st_size
@@ -138,6 +147,7 @@ class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
         score_bytes = self._mmap[offset + COMPRESSED_SIZE:offset + RECORD_SIZE]
         score = np.frombuffer(score_bytes, dtype='<i4')[0].item() # < means little endian
         score = max(-32000, min(32000, score))
+        score = sigmoid_cp(score, self.sigmoid_scale)
 
         indices_stm, indices_opp = compute_nnue_indices(board_data)
 
@@ -183,8 +193,8 @@ def collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor, float]]) -> tuple[t
 # TODO ...ljenks-chess/nnue_trainer/.venv/lib/python3.10/site-packages/torch/utils/data/dataloader.py:775:
 # UserWarning: 'pin_memory' argument is set
 # as true but not supported on MPS now, device pinned memory won't be used.
-def create_dataloader(positions_path: str, batch_size: int = 1024, max_positions: int | None = None, num_workers: int = 0, shuffle: bool = True) -> DataLoader[tuple[torch.Tensor, torch.Tensor, float]]:
-    dataset = ChessDataset(positions_path, max_positions)
+def create_dataloader(positions_path: str, sigmoid_scale: float, batch_size: int = 1024, max_positions: int | None = None, num_workers: int = 0, shuffle: bool = True) -> DataLoader[tuple[torch.Tensor, torch.Tensor, float]]:
+    dataset = ChessDataset(positions_path, sigmoid_scale, max_positions)
     # "Pinned memory in PyTorch acts like disabling virtual memory
     #  for that specific tensor by creating "page-locked" CPU memory that the OS cannot swap to disk.
     #  This ensures faster GPU transfers (Direct Memory Access) but doesn't disable virtual memory system-wide,

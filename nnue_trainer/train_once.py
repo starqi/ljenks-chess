@@ -12,6 +12,7 @@ if __name__ == '__main__':
         checkpoint.model,
         checkpoint.optimizer,
         config['batch_size'],
+        config['sigmoid_scale'],
     )
 
     rotate_and_save(config, checkpoint)

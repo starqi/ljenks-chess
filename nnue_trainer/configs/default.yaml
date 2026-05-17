@@ -8,14 +8,14 @@ checkpoint_path: main.checkpoint
 
 # train_once.py
 positions_path: xyz.bin
-simple_epochs: 10
+simple_epochs: 150
 
 
 # repeat_train.py
-cycles: 10
+cycles: 30
 epochs_per_cycle: 1
 #games_per_worker: 500
-games_per_worker: 50
+games_per_worker: 10
 games_per_worker_validation_set: 1
 workers: 5 # TODO (Minor) "half" or "full" meaning half of CPU count or all
 # INTUITION: Need shallow depth, never train with mega high depth.
@@ -23,8 +23,9 @@ workers: 5 # TODO (Minor) "half" or "full" meaning half of CPU count or all
 # risk like bishops and queens lined up against the king.
 # TODO IMMEDIATE Or maybe this isn't exactly true, try persistent Adam with no epochs first
 max_nodes: 30000
-random_half_moves: 20
+random_half_moves: 15
 max_half_moves: 300
 val_every: 1
 validation_path: validation.bin
 checkpoint_backup_count: 2
+sigmoid_scale: 600

@@ -13,7 +13,6 @@
   "reportReturnType": false,
   "reportArgumentType": false,
   "reportCallIssue": false,
-  "reportAssignment": false,
   "reportOperatorIssue": false,
   "reportAttributeAccessIssue": false,
   "reportIndexIssue": false
