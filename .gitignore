@@ -10,3 +10,6 @@ __pycache__
 *.bin
 *.pt
 *.pt.bak.*
+*.track.json
+*.checkpoint
+*.checkpoint.bak.*

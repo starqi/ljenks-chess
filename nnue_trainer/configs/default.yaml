@@ -3,7 +3,7 @@
 # Common
 batch_size: 1024
 lr: 0.001
-checkpoint_path: nnue_model.pt
+checkpoint_path: main.checkpoint
 
 
 # train_once.py
@@ -18,6 +18,10 @@ epochs_per_cycle: 1
 games_per_worker: 50
 games_per_worker_validation_set: 1
 workers: 5 # TODO (Minor) "half" or "full" meaning half of CPU count or all
+# INTUITION: Need shallow depth, never train with mega high depth.
+# NN cannot capture e.g. depth 20 "superintelligence" but it can capture
+# risk like bishops and queens lined up against the king.
+# TODO IMMEDIATE Or maybe this isn't exactly true, try persistent Adam with no epochs first
 max_nodes: 30000
 random_half_moves: 20
 max_half_moves: 300

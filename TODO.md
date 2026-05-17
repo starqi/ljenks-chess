@@ -29,7 +29,7 @@
 
 - Where to put safetensors for webpack
     - NNUE related ones
-- Fix as many basedpyright warnings as possible
+- Fix as many basedpyright warnings as possible, is it not reading basedpyright config?
 
 - // TODO temp_moves unnecessary? Try it
 - / Review new main.rs AI code

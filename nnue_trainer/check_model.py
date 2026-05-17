@@ -1,8 +1,10 @@
 import argparse
+import sys
+from pathlib import Path
 
 import torch
+from checkpoint import load_model_only
 from config import load_config
-from model import NNUE
 from dataset import ChessDataset
 
 def parse_ranges(range_str):
@@ -27,8 +29,10 @@ parser.add_argument('--range', type=str, default=None,
                     help='Position range, e.g. "1-10", "1-10,50-60", "5" (1-based)')
 args = parser.parse_args()
 
-model = NNUE()
-model.load_state_dict(torch.load(config['checkpoint_path'], weights_only=True))
+model = load_model_only(Path(config['checkpoint_path']))
+if model is None:
+    print(f"Error: no checkpoint found at {config['checkpoint_path']}")
+    sys.exit(1)
 model.eval()
 
 dataset = ChessDataset(config['positions_path'])

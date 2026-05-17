@@ -1,25 +1,17 @@
-import os
-import torch
+from checkpoint import load_checkpoint, rotate_and_save
 from config import load_config
-from model import NNUE
-from trainer import get_device, train
+from trainer import train
 
 if __name__ == '__main__':
     config = load_config()
-    checkpoint_path = config['checkpoint_path']
-    device = get_device()
-    model = NNUE().to(device)
-    if os.path.exists(checkpoint_path):
-        model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
-        print(f"Loaded checkpoint from {checkpoint_path}")
+    checkpoint = load_checkpoint(config)
 
-    model = train(
+    train(
         config['positions_path'],
         config['simple_epochs'],
-        model,
+        checkpoint.model,
+        checkpoint.optimizer,
         config['batch_size'],
-        config['lr'],
     )
 
-    torch.save(model.state_dict(), checkpoint_path)
-    print(f"Model saved to {checkpoint_path}")
+    rotate_and_save(config, checkpoint)

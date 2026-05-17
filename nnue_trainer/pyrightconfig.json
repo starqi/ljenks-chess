@@ -1,10 +1,10 @@
 {
-  "include": ["src"],
-  "exclude": ["__pycache__", "**/__pycache__"],
+  "exclude": ["__pycache__", "**/__pycache__", ".venv"],
   "venvPath": ".",
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
   "reportAny": false,
+  "reportUnusedCallResult": false,
   "reportMissingTypeStubs": false,
   "reportUnknownMemberType": false,
   "reportUnknownVariableType": false,

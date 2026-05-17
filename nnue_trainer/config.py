@@ -4,6 +4,7 @@ from typing import TypedDict
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# All paths are allowed to not exist at time of config parse
 class Config(TypedDict):
 
     # Common
@@ -38,4 +39,6 @@ def load_config() -> Config:
         config['checkpoint_path'] = os.path.join(_SCRIPT_DIR, config['checkpoint_path'])
     if not os.path.isabs(config['validation_path']):
         config['validation_path'] = os.path.join(_SCRIPT_DIR, config['validation_path'])
+    if config['checkpoint_backup_count'] < 0:
+        raise ValueError(f"checkpoint_backup_count cannot be negative: {config['checkpoint_backup_count']}")
     return config
