@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 import torch
-from checkpoint import Checkpoint, load_checkpoint, rotate_and_save
+from checkpoint import load_checkpoint, rotate_and_save
 from config import load_config, Config
 from dataset import create_dataloader
 from model import NNUE

@@ -1,15 +1,13 @@
 import argparse
 import sys
-from pathlib import Path
 
 import torch
-from checkpoint import load_model_only
-from config import load_config
+from checkpoint import load_existing_model_only
 from dataset import ChessDataset
 
-def parse_ranges(range_str):
+def parse_ranges(range_str: str) -> list[tuple[int, int]]:
     """Parse range string like '1-10', '1-10,50-60' into list of (0-based start, exclusive end) tuples."""
-    ranges = []
+    ranges: list[tuple[int, int]] = []
     for part in range_str.split(','):
         part = part.strip()
         if '-' in part:
@@ -18,24 +16,24 @@ def parse_ranges(range_str):
             end = int(e) # Convert from inclusive end to exclusive end
             ranges.append((start, end))
         else:
-            idx = int(part) - 1 # Crash if not a number
+            idx = int(part) - 1 # crash if not a number
             ranges.append((idx, idx + 1))
     return ranges
 
-config = load_config()
-
 parser = argparse.ArgumentParser(description='Check NNUE model predictions')
+parser.add_argument('checkpoint', type=str, help='Path to checkpoint folder')
+parser.add_argument('positions', type=str, help='Path to .bin positions file')
 parser.add_argument('--range', type=str, default=None,
                     help='Position range, e.g. "1-10", "1-10,50-60", "5" (1-based)')
 args = parser.parse_args()
 
-model = load_model_only(Path(config['checkpoint_path']))
+model = load_existing_model_only(args.checkpoint)
 if model is None:
-    print(f"Error: no checkpoint found at {config['checkpoint_path']}")
+    print(f"Error: no checkpoint found at {args.checkpoint}")
     sys.exit(1)
 model.eval()
 
-dataset = ChessDataset(config['positions_path'])
+dataset = ChessDataset(args.positions, None)
 ranges = parse_ranges(args.range) if args.range else [(0, len(dataset))]
 
 for start, end in ranges:

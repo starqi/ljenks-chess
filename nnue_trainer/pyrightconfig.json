@@ -1,19 +1,17 @@
 {
-  "exclude": ["__pycache__", "**/__pycache__", ".venv"],
+  "include": ["./*.py"],
+  "exclude": [
+    "**/.venv/**",
+    "**/__pycache__/**"
+  ],
   "venvPath": ".",
+  "venv": ".venv",
   "pythonVersion": "3.10",
-  "typeCheckingMode": "basic",
-  "reportAny": false,
-  "reportUnusedCallResult": false,
-  "reportMissingTypeStubs": false,
-  "reportUnknownMemberType": false,
-  "reportUnknownVariableType": false,
-  "reportUnknownArgumentType": false,
-  "reportMissingParameterType": false,
-  "reportReturnType": false,
-  "reportArgumentType": false,
-  "reportCallIssue": false,
-  "reportOperatorIssue": false,
-  "reportAttributeAccessIssue": false,
-  "reportIndexIssue": false
+  "reportUnusedCallResult": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownVariableType": "none",
+  "reportAny": "none",
+  "reportExplicitAny": "none",
+  "reportMissingTypeStubs": "none"
 }

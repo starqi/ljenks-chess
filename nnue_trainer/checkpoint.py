@@ -45,9 +45,9 @@ def load_checkpoint(config: Config) -> Checkpoint:
     return Checkpoint(model, optimizer, cycle)
 
 
-def load_existing_model_only(checkpoint_path: Path | str) -> NNUE | None:
+def load_existing_model_only(checkpoint_path_str: str) -> NNUE | None:
     """Loads only the model from a checkpoint directory. Returns None if no model."""
-    checkpoint_path = Path(checkpoint_path)
+    checkpoint_path = Path(checkpoint_path_str)
     if not checkpoint_path.exists():
         return None
     if not checkpoint_path.is_dir():

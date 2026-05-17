@@ -1,3 +1,4 @@
+from typing_extensions import override
 import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
@@ -117,9 +118,11 @@ def sigmoid_cp(score: float, scale: float) -> float:
 
 
 class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
-    def __init__(self, positions_path: str, sigmoid_scale: float, max_positions: int | None = None):
+
+    # Allow disabling the sigmoid to view dataset in centipawns
+    def __init__(self, positions_path: str, sigmoid_scale: float | None, max_positions: int | None = None):
         self.positions_path: Path = Path(positions_path)
-        self.sigmoid_scale = sigmoid_scale
+        self.sigmoid_scale: float | None = sigmoid_scale
         if not self.positions_path.exists():
             raise FileNotFoundError(f"Binary file not found: {positions_path}")
         self.file_size: int = self.positions_path.stat().st_size
@@ -138,6 +141,7 @@ class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
     def __len__(self):
         return self.num_positions
 
+    @override
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, float]:
         self._init_mmap()
         assert self._mmap is not None
@@ -147,7 +151,8 @@ class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
         score_bytes = self._mmap[offset + COMPRESSED_SIZE:offset + RECORD_SIZE]
         score = np.frombuffer(score_bytes, dtype='<i4')[0].item() # < means little endian
         score = max(-32000, min(32000, score))
-        score = sigmoid_cp(score, self.sigmoid_scale)
+        if self.sigmoid_scale is not None:
+            score = sigmoid_cp(score, self.sigmoid_scale)
 
         indices_stm, indices_opp = compute_nnue_indices(board_data)
 

@@ -10,8 +10,6 @@ Basic chess engine compiling to WASM, with browser frontend.
 - I prefix methods with an underscore if it has a potentially confusing contract, and there is a cleaner (but maybe slower) overload.
 - Prefer self-documenting code over pointless comments.
 - Prefer dense code with low empty lines.
-- Maintain sane typing and pyright config. 
-    - Note Neovim "too big directory" BS error might be due to lacking a proper pyrightconfig.json. 
 
 ### Architecture notes
 - When running build, test, or "cargo check", take a careful look at the commands in README.md and philosophy Cargo.toml.

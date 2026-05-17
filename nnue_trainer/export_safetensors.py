@@ -1,20 +1,22 @@
+import argparse
 from pathlib import Path
 import sys
 
 from safetensors.torch import save_file
 from checkpoint import load_existing_model_only
-from config import load_config
 
 
 def main():
-    config = load_config()
-    checkpoint_path = Path(config['checkpoint_path'])
-    model = load_existing_model_only(checkpoint_path)
+    parser = argparse.ArgumentParser(description='Export NNUE checkpoint to safetensors')
+    parser.add_argument('checkpoint', type=str, help='Path to checkpoint folder')
+    args = parser.parse_args()
+
+    model = load_existing_model_only(args.checkpoint)
     if model is None:
-        print(f"Error: no valid checkpoint found at {checkpoint_path}")
+        print(f"Error: no valid checkpoint found at {args.checkpoint}")
         sys.exit(1)
 
-    out_path = checkpoint_path.parent / f"{checkpoint_path.name}.safetensors"
+    out_path = Path(args.checkpoint).parent / f"{args.checkpoint}.safetensors"
     state_dict = model.state_dict()
 
     print(f"Tensors: {list(state_dict.keys())}")

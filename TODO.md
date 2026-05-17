@@ -7,9 +7,9 @@
       must have multiple epochs to reinforce, but given e.g. just 10 games, the rook doesn't even cover the whole board, 
       and any epochs would overfit on pointless data like rook only on 1 file.
       - Need to fix error handling on generation
-    - Even then, Adam should be preserved across cycles instead of arbitrarily resetting at cycle boundaries, losing momentum 
-        - TODO Read 
-    - Read the dam Stockfish notes and consider sigmoiding the extreme scores before MSE
+    - Read the dam Stockfish notes
+    - Q-search to remove chaotic positions
+    - Review sigmoid code
 
 - What the fuck?
 
@@ -29,7 +29,7 @@
 
 - Where to put safetensors for webpack
     - NNUE related ones
-- Fix as many basedpyright warnings as possible, is it not reading basedpyright config?
+- pyright timeout Neovim BS
 
 - // TODO temp_moves unnecessary? Try it
 - / Review new main.rs AI code

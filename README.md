@@ -61,16 +61,16 @@ nnue_trainer/concat_chunks.sh nnue_trainer/chunks nnue_trainer/positions.bin
 
 #### Python trainer 
 
-All paths configured in `nnue_trainer/configs/default.yaml`.
+
 ```bash 
 cd nnue_trainer
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-# TODO .venv
 
-# Generate training data (see CLI section)
-# Should be able to train immediately (.bin file is in correct location)
-
-# (Paths are in configs/)
+##################################################
+# Generate training data (see CLI section for Rust CLI powering this)
+# Config is in `nnue_trainer/configs/default.yaml`.
 
 # Default: self-play training loop that generates positions, trains, validates, and saves checkpoints
 python repeat_train.py
@@ -78,7 +78,11 @@ python repeat_train.py
 # Simpler single-step training on an existing .bin file
 python train_once.py
 
-python check_model.py
-python check_model.py --range "1-10,50-60"
-python export_safetensors.py
+##################################################
+# Run model on some positions to check
+# Export to safetensors for Rust engine
+
+python check_model.py main.checkpoint xyz.bin
+python check_model.py main.checkpoint xyz.bin --range "1-10,50-60"
+python export_safetensors.py main.checkpoint/model.pt
 ```
