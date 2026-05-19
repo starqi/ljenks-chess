@@ -1,7 +1,8 @@
-pub mod evaluation;
+mod evaluation;
 pub mod move_buckets;
 
 pub use move_buckets::*;
+pub use evaluation::evaluate;
 
 use super::game::board::slow_stringify_move_standard;
 use super::game::board::*;
@@ -13,6 +14,9 @@ use crate::platform::{now, random};
 use std::cmp::min;
 use std::collections::HashMap;
 
+// TODO (Refactor) Extract out search algos
+
+// TODO (Refactor) Group by configuration, state, references
 // Given performance nature, much state lives as "class vars"
 pub struct Ai {
     moves_buf: MoveList,
@@ -25,16 +29,16 @@ pub struct Ai {
     fast_found_hits: usize,
     node_counter: u64,
     start_ms: u128,
-    // TODO IMMEDIATE Add setters for ms_till_terminate and min_depth
+    // TODO Add setters for ms_till_terminate and min_depth
     ms_till_terminate: u128, // Configuration (not state)
     search_max_nodes: Option<u64>, // Configuration (not state)
-    check_every_x_nodes: u64,
+    check_every_x_nodes: u64, // Configuration (not state)
     terminated: bool,
     min_depth: i8, // Configuration (not state)
     iterative_deepening_depth: i8,
     last_completed_depth: i8,
-    real_board_positional_hashes: *const Vec<u64>, // See late-inject
-    half_moves_without_pawn_move: *const usize, //  See late-inject
+    real_board_positional_hashes: *const Vec<u64>, // Outside ref, see late_inject
+    half_moves_without_pawn_move: *const usize, // Outside ref, see late_inject
     move_buckets: MoveBuckets,
 }
 
@@ -49,6 +53,7 @@ enum SingleMoveResult { NewAlpha(i32), BetaCutOff(i32), NoEffect }
 enum MemoType { LessThan(MoveWithEval), Exact(MoveWithEval), GreaterThan(MoveWithEval) }
 
 /// (Score which can be exact or lower or upper bound depending on type, remaining depth, type, age)
+/// Score is perspective-relative to avoid multiplying in tree search, need to convert to objective/white score.
 /// Reminder: "remaining depth" = just the search depth; at this position, that depth was used and e.g. it produced new alpha.
 #[derive(Clone)]
 struct MemoData(i32, i8, MemoType, usize);
@@ -65,7 +70,7 @@ pub struct BestMoveInfo {
     pub is_pawn: bool,
     /// Currently just set to -1 for special case of random moves
     pub remaining_depth: i8,
-    pub score: i32,
+    pub objective_score: i32,
     /// Standard chess notation
     pub notation: String,
     pub m: MoveWithEval,
@@ -106,12 +111,15 @@ impl Ai {
         }
     }
 
-    /// Shared search func.
-    /// Internal vars will mutate, memo will mutate (which contains best move), but nothing directly returned here.
-    /// Interface is odd but this is performance code, and it's also private.
-    /// (If this is called many times, eventually it will be too late to get the best move from memo 
-    /// since it is outdated and removed.)
-    fn run_search(&mut self, source_board: &Board) {
+    /// Internal state vars will reset and mutate, memo will not reset but will mutate (which contains best move).
+    /// `center_white_pov` and `range` define an aspiration window from white's perspective.
+    fn run_search(&mut self, source_board: &Board, center_white_pov: i32, range: i32) {
+        // Convert white-POV center/range to perspective-relative alpha/beta for the side to move
+        let mult = source_board.get_player_with_turn().multiplier();
+        let center_pov = center_white_pov * mult;
+        let alpha = center_pov - range;
+        let beta = center_pov + range;
+
         // TODO IMMEDIATE NNUE clone strategy here?
         self.test_board.clone_from(source_board);
 
@@ -127,7 +135,7 @@ impl Ai {
             console_log!("\nBegin depth {}", d);
             self.iterative_deepening_depth = d;
             unsafe {
-                self.negamax(d, -MAX_EVAL, MAX_EVAL, 0);
+                self.negamax(d, alpha, beta, 0);
             }
 
             let leading_move = self.get_leading_move(&self.test_board);
@@ -172,12 +180,13 @@ impl Ai {
     }
 
     /// Pulls out the leading move from the memo given a board state.
+    /// Reminder this returns a perspective-relative score as per `MemoData`.
     /// The memo needs to be generated first from search. 
     /// Ugly interface, private.
     fn get_leading_move(&self, board: &Board) -> Option<(&MoveWithEval, i8, i32)> {
         match self.memo.get(&board.get_hash()) {
             Some(MemoData(score, remaining_depth, MemoType::GreaterThan(best_move) | MemoType::Exact(best_move) | MemoType::LessThan(best_move), _)) => {
-                Some((best_move, *remaining_depth, *score * board.get_player_with_turn().multiplier()))
+                Some((best_move, *remaining_depth, *score))
             },
             _ => {
                 None
@@ -195,8 +204,9 @@ impl Ai {
         } else {
             self.min_depth
         };
-        let leading_move = self.get_leading_move(&real_board).map(|(best_move, _, score)| (best_move, score));
-        if let Some((best_move, score)) = leading_move {
+        let leading_move = self.get_leading_move(&real_board).map(|(best_move, _, score)| 
+            (best_move, score * real_board.get_player_with_turn().multiplier()));
+        if let Some((best_move, objective_score)) = leading_move {
             let before_info = BeforeMoveInfoForStringify::slow_new(real_board, &best_move);
             let original_player = real_board.get_player_with_turn();
             let is_pawn = matches!(real_board.get_moved_piece(&best_move), Some(Piece::Pawn));
@@ -210,7 +220,7 @@ impl Ai {
             Some(BestMoveInfo {
                 is_pawn,
                 remaining_depth,
-                score,
+                objective_score,
                 notation: slow_stringify_move_standard(&best_move, &before_info, &after_info),
                 m: best_move.clone()
             })
@@ -219,14 +229,20 @@ impl Ai {
         }
     }
 
+    // TODO (Minor) (Refactor) Group pub fns together 
+
     pub fn make_move(&mut self, real_board: &mut Board) -> Option<BestMoveInfo> {
-        self.run_search(real_board);
+        //TODO IMMEDIATE
+        //real_board.nnue_refresh_both();
+        //console_log!("NNUE TEMP {:?}", real_board.nnue_forward());
+        self.make_move_with_window(real_board, 0, MAX_EVAL)
+    }
+
+    pub fn make_move_with_window(&mut self, real_board: &mut Board, center_white_pov: i32, range: i32) -> Option<BestMoveInfo> {
+        self.run_search(real_board, center_white_pov, range);
         let leading_move_ext = self.apply_leading_move(real_board);
         if let Some(ref x) = leading_move_ext {
-            console_log!("Making move: {} (depth = {}, score = {})", self.test_board.stringify_move_for_js_logs(&x.m), x.remaining_depth, x.score);
-            //TODO IMMEDIATE
-            //real_board.nnue_refresh_both();
-            //console_log!("NNUE TEMP {:?}", real_board.nnue_forward());
+            console_log!("Making move with window: {} (depth = {}, score = {})", self.test_board.stringify_move_for_js_logs(&x.m), x.remaining_depth, x.objective_score);
         } else {
             console_log!("No move");
         }
@@ -236,7 +252,11 @@ impl Ai {
     }
 
     pub fn evaluate(&mut self, board: &Board) -> Option<BestMoveInfo> {
-        self.run_search(board);
+        self.evaluate_with_window(board, 0, MAX_EVAL)
+    }
+
+    pub fn evaluate_with_window(&mut self, board: &Board, center_white_pov: i32, range: i32) -> Option<BestMoveInfo> {
+        self.run_search(board, center_white_pov, range);
         self.log_search_stats();
         let mut board2 = board.clone();
         self.apply_leading_move(&mut board2)
@@ -271,7 +291,7 @@ impl Ai {
         Some(BestMoveInfo {
             is_pawn,
             remaining_depth: -1,
-            score: 0,
+            objective_score: 0,
             notation: slow_stringify_move_standard(&move_with_eval, &before_info, &after_info),
             m: move_with_eval
         })

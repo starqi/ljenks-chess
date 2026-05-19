@@ -40,11 +40,14 @@ enum Commands {
         /// Number of games to play
         #[arg(long, default_value = "1")]
         num_games: usize,
-        #[arg(long, default_value = "300")]
+        #[arg(long, default_value = "200")]
         max_half_moves_per_game: Option<usize>,
         /// Suppress board output (only print game summaries)
         #[arg(long)]
         quiet: bool,
+        /// Aspiration window size for tactical position filtering in centipawns.
+        #[arg(long, default_value = "300")]
+        filter_window: i32,
     },
     /// View positions from a .bin file
     View {
@@ -143,6 +146,7 @@ fn cmd_generate(
     num_games: usize,
     max_half_moves_per_game: Option<usize>,
     quiet: bool,
+    filter_window: i32,
 ) {
     let file: File = match File::create_new(&output_file) {
         Ok(f) => f,
@@ -164,6 +168,7 @@ fn cmd_generate(
     let mut writer = BufWriter::new(file);
     let mut completed_games = 0;
     let mut total_positions = 0u64;
+    let mut positions_filtered = 0u64;
     let mut min_depth_seen: i8 = i8::MAX;
     let mut max_depth_seen: i8 = -1;
     let start_time = Instant::now();
@@ -192,15 +197,18 @@ fn cmd_generate(
             main.get_board().export_compressed(&mut board_bytes);
 
             main.set_logging(false);
+
+            let static_score_objective = main.static_evaluate_objective();
             let move_result: Option<BestMoveInfoJs> = if random_early_moves {
-                let score = main.evaluate().map(|info| info.score).expect("Unexpected game ended while evaluating");
+                let eval_info = main.evaluate_with_window(static_score_objective, filter_window);
+                let score = eval_info.map(|info| info.score).expect("Unexpected game ended while evaluating");
                 let mut r = main.make_random_move();
                 if let Some(rr) = &mut r {
-                    (*rr).score = score;
+                    rr.score = score;
                 }
                 r
             } else {
-                main.make_ai_move()
+                main.make_ai_move_with_window(static_score_objective, filter_window)
             };
             main.set_logging(true);
 
@@ -215,13 +223,21 @@ fn cmd_generate(
                 max_depth_seen = max_depth_seen.max(d);
             }
 
-            if let Err(e) = writer.write_all(&board_bytes) {
-                eprintln!("Error writing board bytes: {}", e);
-                std::process::exit(1);
-            }
-            if let Err(e) = writer.write_all(&move_result_unwrapped.score.to_le_bytes()) {
-                eprintln!("Error writing score: {}", e);
-                std::process::exit(1);
+            // Both move result score and static_score_objective are white-perspective (tournament) scores.
+            // If the score is outside the aspiration window, the position is too tactical.
+            let score_diff = (move_result_unwrapped.score - static_score_objective).abs();
+            if score_diff >= filter_window {
+                positions_filtered += 1;
+                if !quiet { println!("Filtered (|{}-{}|={} >= {})", move_result_unwrapped.score, static_score_objective, score_diff, filter_window); }
+            } else {
+                if let Err(e) = writer.write_all(&board_bytes) {
+                    eprintln!("Error writing board bytes: {}", e);
+                    std::process::exit(1);
+                }
+                if let Err(e) = writer.write_all(&move_result_unwrapped.score.to_le_bytes()) {
+                    eprintln!("Error writing score: {}", e);
+                    std::process::exit(1);
+                }
             }
 
             if !quiet {
@@ -248,13 +264,16 @@ fn cmd_generate(
     println!();
     println!("Done!");
     println!("Games completed: {}", completed_games);
-    println!("Positions: {}", total_positions);
-    // TODO Need distribution... 
+    println!("Saved positions: {}", total_positions - positions_filtered);
+    if positions_filtered > 0 {
+        println!("Filtered (tactical): {} ({:.1}%)", positions_filtered, 100.0 * positions_filtered as f64 / total_positions as f64);
+    }
+    // TODO Need distribution of depths... 
     println!("Full search depth / Max: {} Min: {}", max_depth_seen, min_depth_seen);
     let secs = elapsed.as_secs_f64();
     println!("Time elapsed: {:.2}s", secs);
     if secs > 0.0 {
-        println!("Positions/sec: {:.0}", total_positions as f64 / secs);
+        println!("Positions/sec: {:.0}", (total_positions - positions_filtered) as f64 / secs);
     }
 }
 
@@ -263,8 +282,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Generate { output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet } => {
-            cmd_generate(output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet);
+        Commands::Generate { output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window } => {
+            cmd_generate(output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window);
         }
         Commands::View { file, range } => {
             if let Err(e) = view_positions(&file, &range) {

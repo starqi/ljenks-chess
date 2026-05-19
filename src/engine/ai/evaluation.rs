@@ -240,6 +240,7 @@ fn calculate_mop_up(board: &Board, white_pm: i32, black_pm: i32) -> i32 {
     }
 }
 
+/// Returns white-perspective (objective) score.
 /// See [Non-material board eval].
 pub fn evaluate(board: &Board) -> i32 {
 

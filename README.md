@@ -6,9 +6,9 @@ Rust, WASM, messing around.
 NNUE INCOMPLETE.
 
 Rough goal:
-- Simple obvious hand evaluations -> emergent ability through search and self-bootstrapped NNUE.
+- Simple obvious hand evaluations -> emergent ability through search and self-bootstrapped NNUE, NO distillation.
 - Add some entertainment features. 
-- Don't care about formal UCI compliance for now.
+- Don't care about formal UCI compliance for now, might need to gauge ability...
 
 #### Tests, compile check
 

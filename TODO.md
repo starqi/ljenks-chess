@@ -27,6 +27,7 @@
     12. Bg6+ Kg8
     13. Qh7#
 
+- Quick aspiration window experiment and implementation?
 - Where to put safetensors for webpack
     - NNUE related ones
 - pyright timeout Neovim BS

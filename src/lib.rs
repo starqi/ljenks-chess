@@ -53,7 +53,7 @@ impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
         Self {
             is_pawn: info.is_pawn,
             remaining_depth: info.remaining_depth,
-            score: info.score,
+            score: info.objective_score,
             notation: info.notation,
         }
     }
@@ -207,13 +207,25 @@ impl Main {
 
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn make_ai_move(&mut self) -> Option<BestMoveInfoJs> {
+        self._make_ai_move_with_window(0, 1, false)
+    }
+
+    pub fn make_ai_move_with_window(&mut self, center_white_pov: i32, range: i32) -> Option<BestMoveInfoJs> {
+        self._make_ai_move_with_window(center_white_pov, range, true)
+    }
+
+    pub fn _make_ai_move_with_window(&mut self, center_white_pov: i32, range: i32, use_window: bool) -> Option<BestMoveInfoJs> {
         if self.game_end_state.is_some() {
             console_log!("Game has ended, cannot make AI move");
             return None;
         }
 
         self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
-        let best_move_info = self.ai.make_move(&mut self.board);
+        let best_move_info = if use_window {
+            self.ai.make_move_with_window(&mut self.board, center_white_pov, range)
+        } else {
+            self.ai.make_move(&mut self.board)
+        };
         self.process_best_move_info_to_js(best_move_info)
     }
 
@@ -272,11 +284,23 @@ impl Main {
 
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
     pub fn evaluate(&mut self) -> Option<BestMoveInfoJs> {
+        self._evaluate_with_window(0, 1, false)
+    }
+
+    pub fn evaluate_with_window(&mut self, center_white_pov: i32, range: i32) -> Option<BestMoveInfoJs> {
+        self._evaluate_with_window(center_white_pov, range, true)
+    }
+
+    fn _evaluate_with_window(&mut self, center_white_pov: i32, range: i32, use_window: bool) -> Option<BestMoveInfoJs> {
         if self.game_end_state.is_some() {
             return None;
         }
         self.ai.late_inject(&self.position_hashes, &self.half_moves_without_pawn_move);
-        self.ai.evaluate(&self.board).map(BestMoveInfoJs::from)
+        if use_window {
+            self.ai.evaluate_with_window(&self.board, center_white_pov, range).map(BestMoveInfoJs::from)
+        } else {
+            self.ai.evaluate(&self.board).map(BestMoveInfoJs::from)
+        }
     }
 
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
@@ -328,6 +352,12 @@ impl Main {
     #[cfg(not(feature = "wasm"))]
     pub fn set_logging(&self, enabled: bool) {
         platform::set_logging(enabled);
+    }
+
+    /// Returns white-perspective (objective) score.
+    #[cfg(not(feature = "wasm"))]
+    pub fn static_evaluate_objective(&self) -> i32 {
+        ai::evaluate(&self.board)
     }
 
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
