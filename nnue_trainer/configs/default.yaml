@@ -12,11 +12,11 @@ simple_epochs: 150
 
 
 # repeat_train.py
-cycles: 30
-epochs_per_cycle: 1
+cycles: 100
+epochs_per_cycle: 3
 #games_per_worker: 500
-games_per_worker: 10
-games_per_worker_validation_set: 1
+games_per_worker: 50
+games_per_worker_validation_set: 25
 workers: 5 # TODO (Minor) "half" or "full" meaning half of CPU count or all
 # INTUITION: Need shallow depth, never train with mega high depth.
 # NN cannot capture e.g. depth 20 "superintelligence" but it can capture

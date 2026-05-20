@@ -11,7 +11,7 @@ def main():
 
     plt.plot(history)
     plt.xlabel("Validation point")
-    plt.ylabel("RMSE (centipawns)")
+    plt.ylabel("RMSE")
     plt.title("Training Error Over Time")
     plt.show()
 

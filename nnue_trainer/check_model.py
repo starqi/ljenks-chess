@@ -25,6 +25,7 @@ parser.add_argument('checkpoint', type=str, help='Path to checkpoint folder')
 parser.add_argument('positions', type=str, help='Path to .bin positions file')
 parser.add_argument('--range', type=str, default=None,
                     help='Position range, e.g. "1-10", "1-10,50-60", "5" (1-based)')
+parser.add_argument('--sigmoid', type=int, default=None)
 args = parser.parse_args()
 
 model = load_existing_model_only(args.checkpoint)
@@ -42,5 +43,11 @@ for start, end in ranges:
             print(f"Position {idx + 1} is out of range (file has {len(dataset)} positions)")
             continue
         idx_stm, idx_opp, score = dataset[idx]
-        pred = model(idx_stm, torch.tensor([0], dtype=torch.long), idx_opp, torch.tensor([0], dtype=torch.long))
-        print(f"Position {idx + 1} - Pred: {pred.item():.1f} - Target: {score:.1f}")
+        pred: torch.Tensor = model(idx_stm, torch.tensor([0], dtype=torch.long), idx_opp, torch.tensor([0], dtype=torch.long))
+        pred_val = pred.item()
+        if args.sigmoid is not None:
+            pred_sig = torch.sigmoid(torch.tensor(pred_val / args.sigmoid)).item()
+            target_sig = torch.sigmoid(torch.tensor(score / args.sigmoid)).item()
+            print(f"Position {idx + 1} - Pred: {pred_sig:.4f} - Target: {target_sig:.4f} - Diff: {abs(pred_sig - target_sig):.4f}")
+        else:
+            print(f"Position {idx + 1} - Pred: {pred_val:.1f} - Target: {score:.1f} - Diff: {abs(pred_val - score):.1f}")

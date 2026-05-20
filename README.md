@@ -78,11 +78,14 @@ python repeat_train.py
 # Simpler single-step training on an existing .bin file
 python train_once.py
 
+python plot_training.py
+
 ##################################################
 # Run model on some positions to check
 # Export to safetensors for Rust engine
 
 python check_model.py main.checkpoint xyz.bin
 python check_model.py main.checkpoint xyz.bin --range "1-10,50-60"
+python check_model.py main.checkpoint xyz.bin --range "1-10" --sigmoid
 python export_safetensors.py main.checkpoint/model.pt
 ```
