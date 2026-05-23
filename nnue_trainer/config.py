@@ -1,8 +1,18 @@
 import yaml
 import os
-from typing import TypedDict
+from typing import Any, TypedDict
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _resolve_worker_count(value: Any) -> int:
+    if isinstance(value, int):
+        return value
+    elif value == "full":
+        return os.cpu_count() or 1
+    elif value == "half":
+        return (os.cpu_count() or 2) // 2
+    else:
+        return 1
 
 # All paths are allowed to not exist at time of config parse
 class Config(TypedDict):
@@ -11,6 +21,7 @@ class Config(TypedDict):
     batch_size: int
     lr: float
     checkpoint_path: str
+    loader_num_workers: int
 
     # train_once.py
     positions_path: str
@@ -42,4 +53,7 @@ def load_config() -> Config:
         config['validation_path'] = os.path.join(_SCRIPT_DIR, config['validation_path'])
     if config['checkpoint_backup_count'] < 0:
         raise ValueError(f"checkpoint_backup_count cannot be negative: {config['checkpoint_backup_count']}")
+    config['loader_num_workers'] = _resolve_worker_count(config['loader_num_workers'])
+    config['workers'] = _resolve_worker_count(config['workers'])
+    print(f"Loaded config: {config!r}")
     return config

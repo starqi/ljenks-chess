@@ -198,8 +198,14 @@ def collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor, float]]) -> tuple[t
 # TODO ...ljenks-chess/nnue_trainer/.venv/lib/python3.10/site-packages/torch/utils/data/dataloader.py:775:
 # UserWarning: 'pin_memory' argument is set
 # as true but not supported on MPS now, device pinned memory won't be used.
-def create_dataloader(positions_path: str, sigmoid_scale: float, batch_size: int = 1024, max_positions: int | None = None, num_workers: int = 0, shuffle: bool = True) -> DataLoader[tuple[torch.Tensor, torch.Tensor, float]]:
-    dataset = ChessDataset(positions_path, sigmoid_scale, max_positions)
+def create_dataloader(
+    positions_path: str,
+    sigmoid_scale: float,
+    batch_size: int,
+    num_workers: int,
+    shuffle: bool) -> DataLoader[tuple[torch.Tensor, torch.Tensor, float]]:
+
+    dataset = ChessDataset(positions_path, sigmoid_scale, None)
     # "Pinned memory in PyTorch acts like disabling virtual memory
     #  for that specific tensor by creating "page-locked" CPU memory that the OS cannot swap to disk.
     #  This ensures faster GPU transfers (Direct Memory Access) but doesn't disable virtual memory system-wide,

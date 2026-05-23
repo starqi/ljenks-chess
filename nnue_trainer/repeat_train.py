@@ -4,12 +4,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import torch
 from checkpoint import load_checkpoint, rotate_and_save
 from config import load_config, Config
-from dataset import create_dataloader
-from model import NNUE
-from trainer import DEVICE, train
+from trainer import validate, train
 
 # Logging strategy: log before each operation, like file creation/deletion/epoch
 
@@ -22,28 +19,6 @@ GENERATE_PARALLEL_PATH = SCRIPT_DIR / "generate_parallel.sh"
 CONCAT_CHUNKS_PATH = SCRIPT_DIR / "concat_chunks.sh"
 TRAINING_BIN_PATH = SCRIPT_DIR / "training.bin"
 
-def validate(model: NNUE, val_path: str, sigmoid_scale: float, batch_size: int = 1024) -> float:
-    print("Validating")
-    model.eval()
-    dataloader = create_dataloader(val_path, sigmoid_scale, batch_size=batch_size, shuffle=False, num_workers=0)
-    total_loss = 0.0
-    count = 0
-    with torch.no_grad():
-        for indices_stm, offsets_stm, indices_opp, offsets_opp, scores in dataloader:
-            indices_stm = indices_stm.to(DEVICE)
-            offsets_stm = offsets_stm.to(DEVICE)
-            indices_opp = indices_opp.to(DEVICE)
-            offsets_opp = offsets_opp.to(DEVICE)
-            scores = scores.to(DEVICE)
-            pred = model(indices_stm, offsets_stm, indices_opp, offsets_opp)
-            pred_sig = torch.sigmoid(pred / sigmoid_scale)
-            loss = torch.nn.functional.mse_loss(pred_sig, scores)
-            total_loss += loss.item()
-            count += 1
-    avg = total_loss / count if count > 0 else float("inf")
-    model.train()
-    print(f"Validation loss: {avg:.4f}, square root: {sqrt(avg):.4f}")
-    return avg
 
 def bin_output_path_to_chunk_folder(bin_output_path: Path) -> Path:
     return bin_output_path.with_suffix(".chunks")
@@ -74,6 +49,7 @@ def repeat_train(config: Config):
     val_every: int = config["val_every"]
     val_path_str: str = config["validation_path"]
     sigmoid_scale: float = config["sigmoid_scale"]
+    loader_num_workers: int = config["loader_num_workers"]
 
     checkpoint = load_checkpoint(config)
     if checkpoint.cycle > 0:
@@ -98,12 +74,19 @@ def repeat_train(config: Config):
             checkpoint.optimizer,
             batch_size,
             sigmoid_scale,
+            loader_num_workers,
         )
         checkpoint.cycle = cycle
 
         rmse = None
         if cycle % val_every == 0:
-            rmse = sqrt(validate(checkpoint.model, val_path_str, sigmoid_scale))
+            rmse = sqrt(validate(
+                checkpoint.model,
+                val_path_str,
+                sigmoid_scale,
+                batch_size,
+                loader_num_workers
+            ))
 
         rotate_and_save(config, checkpoint)
         if rmse is not None:

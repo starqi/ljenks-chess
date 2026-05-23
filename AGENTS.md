@@ -20,7 +20,7 @@ Basic chess engine compiling to WASM, with browser frontend.
 
 ### Navigation map
 
-NNUE is INCOMPLETE (TODO).
+Note NNUE is unfinished.
 
 ```
 src/

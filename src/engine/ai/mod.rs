@@ -120,7 +120,7 @@ impl Ai {
         let alpha = center_pov - range;
         let beta = center_pov + range;
 
-        // TODO IMMEDIATE NNUE clone strategy here?
+        // TODO IMMEDIATE When this actually matters: should we clone NNUE?
         self.test_board.clone_from(source_board);
 
         self.start_ms = now();

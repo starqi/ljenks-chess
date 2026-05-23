@@ -1,31 +1,34 @@
-
+# Values are chosen for local testing, with commented recommended values for cloud VM 
+# Worker values: "half", "full", or int
 
 # Common
-batch_size: 1024
+batch_size: 1000 # 200,000 = like extra few GB?
 lr: 0.001
 checkpoint_path: main.checkpoint
+loader_num_workers: "full" 
 
 
 # train_once.py
 positions_path: xyz.bin
-simple_epochs: 150
+simple_epochs: 100
 
 
 # repeat_train.py
 cycles: 100
 epochs_per_cycle: 3
-#games_per_worker: 500
-games_per_worker: 50
+games_per_worker: 50 # 11,000
 games_per_worker_validation_set: 25
-workers: 5 # TODO (Minor) "half" or "full" meaning half of CPU count or all
+workers: "full"
+
+# TODO IMMEDIATE Update this when it becomes more clear what is going on
 # INTUITION: Need shallow depth, never train with mega high depth.
 # NN cannot capture e.g. depth 20 "superintelligence" but it can capture
 # risk like bishops and queens lined up against the king.
-# TODO IMMEDIATE Or maybe this isn't exactly true, try persistent Adam with no epochs first
+
 max_nodes: 30000
 random_half_moves: 15
-max_half_moves: 300
+max_half_moves: 200
 val_every: 1
 validation_path: validation.bin
 checkpoint_backup_count: 2
-sigmoid_scale: 600
+sigmoid_scale: 400
