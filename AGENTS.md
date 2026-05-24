@@ -1,7 +1,6 @@
 Basic chess engine compiling to WASM, with browser frontend.
 
 ### Basics
-- STOP DELETING MY COMMENTS
 - See README.md for common commands.
 - "Eyeball" tests don't have assertions, you can un-ignore them, run and check the output, but it won't fail.
 - ENCAPSULATION reminder, hide implementations and create intuitive interfaces
@@ -76,3 +75,10 @@ nnue_trainer/                    - Python NNUE trainer (in progress)
   *.bin -> *.chunks               - Temporary generated positions
   *.bin -> *.track.json           - RMSE history per validation point
 ```
+
+STOP DELETING OR REWRITING MY COMMENTS
+STOP DELETING OR REWRITING MY COMMENTS
+STOP DELETING OR REWRITING MY COMMENTS
+STOP DELETING OR REWRITING MY COMMENTS
+STOP DELETING OR REWRITING MY COMMENTS
+STOP DELETING OR REWRITING MY COMMENTS

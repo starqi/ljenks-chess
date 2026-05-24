@@ -70,6 +70,7 @@ impl TargetSquare {
 
 pub const NNUE_L1_OUTPUT_SIZE: usize = 256;
 pub const NNUE_FC1_OUTPUT_SIZE: usize = 32;
+pub const NNUE_FC2_OUTPUT_SIZE: usize = 32;
 
 #[derive(Clone)]
 pub struct Board {

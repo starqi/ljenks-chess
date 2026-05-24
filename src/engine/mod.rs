@@ -23,6 +23,8 @@ pub struct NnueWeights {
     pub input_weight: Box<[f32]>,
     pub fc1_weight: Box<[f32]>,
     pub fc1_bias: Box<[f32]>,
+    pub fc2_weight: Box<[f32]>,
+    pub fc2_bias: Box<[f32]>,
     pub output_weight: Box<[f32]>,
     pub output_bias: Box<[f32]>,
 }
@@ -57,6 +59,14 @@ pub fn nnue_fc1_weights() -> Option<&'static [f32]> {
 
 pub fn nnue_fc1_biases() -> Option<&'static [f32]> {
     NNUE_WEIGHTS.get().map(|w| &(*w.fc1_bias))
+}
+
+pub fn nnue_fc2_weights() -> Option<&'static [f32]> {
+    NNUE_WEIGHTS.get().map(|w| &(*w.fc2_weight))
+}
+
+pub fn nnue_fc2_biases() -> Option<&'static [f32]> {
+    NNUE_WEIGHTS.get().map(|w| &(*w.fc2_bias))
 }
 
 pub fn nnue_output_weights() -> Option<&'static [f32]> {

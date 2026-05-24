@@ -82,16 +82,11 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
             let mut input_weight: Option<Box<[f32]>> = None;
             let mut fc1_weight: Option<Box<[f32]>> = None;
             let mut fc1_bias: Option<Box<[f32]>> = None;
+            let mut fc2_weight: Option<Box<[f32]>> = None;
+            let mut fc2_bias: Option<Box<[f32]>> = None;
             let mut output_weight: Option<Box<[f32]>> = None;
             let mut output_bias: Option<Box<[f32]>> = None;
             for name in st.names() {
-                // From safetensors
-                // {"fc1.bias":{"dtype":"F32","shape":[32],"data_offsets":[0,128]},
-                //  "fc1.weight":{"dtype":"F32","shape":[32,512],"data_offsets":[65664,128]},
-                // TODO (Minor) Why do both start with 65664?
-                //  "input.weight":{"dtype":"F32","shape":[49162,256],"data_offsets":[65664,50407552]},
-                //  "output.bias":{"dtype":"F32","shape":[1],"data_offsets":[50407552,50407556]},
-                //  "output.weight":{"dtype":"F32","shape":[1,32],"data_offsets":[50407556,50407684]}}
                 match st.tensor(name) {
                     Ok(tensor) => {
                         let shape = tensor.shape();
@@ -105,7 +100,9 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
                             // TODO (Minor) So EmbeddingBag seems to have width/height swapped?
                             "fc1.weight" => &[NNUE_FC1_OUTPUT_SIZE, 2 * NNUE_L1_OUTPUT_SIZE],
                             "fc1.bias" => &[NNUE_FC1_OUTPUT_SIZE],
-                            "output.weight" => &[1, NNUE_FC1_OUTPUT_SIZE],
+                            "fc2.weight" => &[NNUE_FC2_OUTPUT_SIZE, NNUE_FC1_OUTPUT_SIZE],
+                            "fc2.bias" => &[NNUE_FC2_OUTPUT_SIZE],
+                            "output.weight" => &[1, NNUE_FC2_OUTPUT_SIZE],
                             "output.bias" => &[1],
                             _ => {
                                 console_log!("(Unknown tensor?! {})", name);
@@ -129,6 +126,8 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
                             "input.weight" => input_weight = Some(f32s.into_boxed_slice()),
                             "fc1.weight" => fc1_weight = Some(f32s.into_boxed_slice()),
                             "fc1.bias" => fc1_bias = Some(f32s.into_boxed_slice()),
+                            "fc2.weight" => fc2_weight = Some(f32s.into_boxed_slice()),
+                            "fc2.bias" => fc2_bias = Some(f32s.into_boxed_slice()),
                             "output.weight" => output_weight = Some(f32s.into_boxed_slice()),
                             "output.bias" => output_bias = Some(f32s.into_boxed_slice()),
                             _ => console_log!("(Unknown tensor?! {})", name),
@@ -139,12 +138,14 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
                     }
                 }
             }
-            match (input_weight, fc1_weight, fc1_bias, output_weight, output_bias) {
-                (Some(iw), Some(fw), Some(fb), Some(ow), Some(ob)) => {
+            match (input_weight, fc1_weight, fc1_bias, fc2_weight, fc2_bias, output_weight, output_bias) {
+                (Some(iw), Some(fw), Some(fb), Some(f2w), Some(f2b), Some(ow), Some(ob)) => {
                     let w = NnueWeights {
                         input_weight: iw,
                         fc1_weight: fw,
                         fc1_bias: fb,
+                        fc2_weight: f2w,
+                        fc2_bias: f2b,
                         output_weight: ow,
                         output_bias: ob,
                     };

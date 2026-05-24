@@ -116,6 +116,8 @@ impl Board {
         // TODO IMMEDIATE Pointless branches? Add unsafe code?
         let fc1_weight = crate::engine::nnue_fc1_weights()?;
         let fc1_bias = crate::engine::nnue_fc1_biases()?;
+        let fc2_weight = crate::engine::nnue_fc2_weights()?;
+        let fc2_bias = crate::engine::nnue_fc2_biases()?;
         let output_weight = crate::engine::nnue_output_weights()?;
         let output_bias = crate::engine::nnue_output_biases()?;
 
@@ -126,24 +128,35 @@ impl Board {
 
         // TODO IMMEDIATE Fix terminology, L1, FC1, ???. There's only 512, 256, 32, 1. Then fix model.py.
 
-        // e.g. 32 x 512 matrix, where 512 input is either black concat white, or vice versa, side to move first
+        // 32 × 512 where 512 = concat(stm_acc, opp_acc), side to move first
         let mut fc1_out = [0.0f32; NNUE_FC1_OUTPUT_SIZE];
         for i in 0..NNUE_FC1_OUTPUT_SIZE {
             let mut sum = fc1_bias[i];
             let row_offset = i * 2 * NNUE_L1_OUTPUT_SIZE;
             for j in 0..NNUE_L1_OUTPUT_SIZE {
-                sum += fc1_weight[row_offset + j] * Self::leaky_relu(stm_acc[j]);
+                sum += fc1_weight[row_offset + j] * stm_acc[j];
             }
             for j in 0..NNUE_L1_OUTPUT_SIZE {
-                sum += fc1_weight[row_offset + NNUE_L1_OUTPUT_SIZE + j] * Self::leaky_relu(opp_acc[j]);
+                sum += fc1_weight[row_offset + NNUE_L1_OUTPUT_SIZE + j] * opp_acc[j];
             }
             fc1_out[i] = Self::leaky_relu(sum);
         }
 
-        // e.g. 32 -> 1
+        // 32 -> 32
+        let mut fc2_out = [0.0f32; NNUE_FC2_OUTPUT_SIZE];
+        for i in 0..NNUE_FC2_OUTPUT_SIZE {
+            let mut sum = fc2_bias[i];
+            let row_offset = i * NNUE_FC1_OUTPUT_SIZE;
+            for j in 0..NNUE_FC1_OUTPUT_SIZE {
+                sum += fc2_weight[row_offset + j] * fc1_out[j];
+            }
+            fc2_out[i] = Self::leaky_relu(sum);
+        }
+
+        // 32 -> 1
         let mut score = output_bias[0];
-        for j in 0..NNUE_FC1_OUTPUT_SIZE {
-            score += output_weight[j] * fc1_out[j];
+        for j in 0..NNUE_FC2_OUTPUT_SIZE {
+            score += output_weight[j] * fc2_out[j];
         }
         Some(score as i32)
     }

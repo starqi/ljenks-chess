@@ -1,7 +1,13 @@
 from typing_extensions import override
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from dataset import NNUE_HALF_SIZE
+
+
+# TODO Leaky relu for now, not sure if crelu actually wasn't working for floating point 
+def activation(x: torch.Tensor) -> torch.Tensor:
+    return F.leaky_relu(x, negative_slope=0.01)
 
 
 class NNUE(nn.Module):
@@ -20,12 +26,8 @@ class NNUE(nn.Module):
         )
         # 2 accumulators concat together and then output l2_size
         self.fc1: nn.Linear = nn.Linear(2 * l1_size, l2_size)
+        self.fc2: nn.Linear = nn.Linear(l2_size, l2_size)
         self.output: nn.Linear = nn.Linear(l2_size, 1)
-
-        self._reset_weights()
-
-    def _reset_weights(self):
-        self.input.weight.data *= 512.0
 
     @override
     def forward(self,
@@ -38,8 +40,7 @@ class NNUE(nn.Module):
         # print('TODO', x_stm.shape) # -> TODO torch.Size([1, 256])
         x = torch.cat([x_stm, x_opp], dim=1)
         # Ran into dead ReLU immediately and fixed with leaky ReLU
-        x = torch.nn.functional.leaky_relu(x, negative_slope=0.01)
-        x = self.fc1(x)
-        x = torch.nn.functional.leaky_relu(x, negative_slope=0.01)
+        x = activation(self.fc1(x))
+        x = activation(self.fc2(x))
         x = self.output(x)
         return x.squeeze(-1)

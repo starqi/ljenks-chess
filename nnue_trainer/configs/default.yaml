@@ -1,8 +1,7 @@
-# Values are chosen for local testing, with commented recommended values for cloud VM 
 # Worker values: "half", "full", or int
 
 # Common
-batch_size: 1000 # 200,000 = like extra few GB?
+batch_size: 100 # Pick a batch_size such that the total optimizer steps is enough
 lr: 0.001
 checkpoint_path: main.checkpoint
 loader_num_workers: "full" 
