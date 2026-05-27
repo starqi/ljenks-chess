@@ -83,8 +83,8 @@ python plot_training.py
 # Run model on some positions to check
 # Export to safetensors for Rust engine
 
-python check_model.py main.checkpoint xyz.bin
-python check_model.py main.checkpoint xyz.bin --range "1-10,50-60"
+python check_model.py main.checkpoint xyz.bin --sigmoid 400 # Run as validation set
+python check_model.py main.checkpoint xyz.bin --range "1-10,50-60" # View positions, not validation
 python check_model.py main.checkpoint xyz.bin --range "1-10" --sigmoid
 python export_safetensors.py main.checkpoint/model.pt
 ```
