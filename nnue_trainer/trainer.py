@@ -71,9 +71,12 @@ def train(
 
             total_loss += loss.item()
             count += 1
-            if count % 1000 == 0:
+            if count % 100 == 0:
                 avg_loss = total_loss / count if count > 0 else 0
-                print(f"Optimizer steps: {count}, avg loss: {avg_loss:.4f}, square root: {sqrt(avg_loss):.4f}")
+                print(f"Optimizer steps within epoch: {count}, avg loss: {avg_loss:.4f}, square root: {sqrt(avg_loss):.4f}")
+
+        avg_loss = total_loss / count if count > 0 else 0
+        print(f"Epoch {epoch + 1} complete, avg loss: {avg_loss:.4f}, square root: {sqrt(avg_loss):.4f}")
 
 
 def validate(model: NNUE, val_path: str, sigmoid_scale: float, batch_size: int, loader_num_workers: int) -> float:

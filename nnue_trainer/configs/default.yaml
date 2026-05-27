@@ -1,15 +1,15 @@
 # Worker values: "half", "full", or int
 
 # Common
-batch_size: 100 # Pick a batch_size such that the total optimizer steps is enough
-lr: 0.001
+batch_size: 16384 # TODO IMMEDIATE Understand the SparseAdam problem more
+lr: 0.002
 checkpoint_path: main.checkpoint
-loader_num_workers: "full" 
+loader_num_workers: "full" # 5
 
 
 # train_once.py
-positions_path: xyz.bin
-simple_epochs: 100
+positions_path: xyz.bin # 8mill.bin
+simple_epochs: 100 # 3
 
 
 # repeat_train.py

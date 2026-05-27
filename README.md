@@ -61,7 +61,6 @@ nnue_trainer/concat_chunks.sh nnue_trainer/chunks nnue_trainer/positions.bin
 
 #### Python trainer 
 
-
 ```bash 
 cd nnue_trainer
 python -m venv .venv

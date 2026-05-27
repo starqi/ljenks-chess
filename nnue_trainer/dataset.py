@@ -103,8 +103,7 @@ def compute_half_indices(perspective: int, board: DecodedBoard) -> list[int]:
     return indices
 
 
-def compute_nnue_indices(data: bytes) -> tuple[list[int], list[int]]:
-    board = decode_compressed(data)
+def compute_nnue_indices(board: DecodedBoard) -> tuple[list[int], list[int]]:
     stm = board.side_to_move
     assert stm == 0 or stm == 1
     return compute_half_indices(stm, board), compute_half_indices(1 - stm, board)
@@ -148,13 +147,17 @@ class ChessDataset(Dataset[tuple[torch.Tensor, torch.Tensor, float]]):
 
         offset = idx * RECORD_SIZE
         board_data = bytes(self._mmap[offset:offset + COMPRESSED_SIZE])
-        score_bytes = self._mmap[offset + COMPRESSED_SIZE:offset + RECORD_SIZE]
-        score = np.frombuffer(score_bytes, dtype='<i4')[0].item() # < means little endian
-        score = max(-32000, min(32000, score))
+        board = decode_compressed(board_data)
+
+        white_score_bytes = self._mmap[offset + COMPRESSED_SIZE:offset + RECORD_SIZE]
+        white_score = np.frombuffer(white_score_bytes, dtype='<i4')[0].item() # < means little endian
+        score = max(-32000, min(32000, white_score))
+        if board.side_to_move == 1:
+            score *= -1
         if self.sigmoid_scale is not None:
             score = sigmoid_cp(score, self.sigmoid_scale)
 
-        indices_stm, indices_opp = compute_nnue_indices(board_data)
+        indices_stm, indices_opp = compute_nnue_indices(board)
 
         return torch.tensor(indices_stm, dtype=torch.long), torch.tensor(indices_opp, dtype=torch.long), float(score)
 
