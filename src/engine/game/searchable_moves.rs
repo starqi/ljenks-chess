@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use super::coords::*;
 use super::move_list::*;
 use super::entities::*;
-use super::super::{castle_utils};
+use super::super::static_data::*;
 use crate::{console_log};
 
 /// (src, dest)

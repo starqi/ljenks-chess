@@ -1,7 +1,7 @@
 # Worker values: "half", "full", or int
 
 # Common
-batch_size: 16384 # TODO IMMEDIATE Understand the SparseAdam problem more
+batch_size: 16000 # TODO IMMEDIATE Understand the SparseAdam problem more
 lr: 0.002
 checkpoint_path: main.checkpoint
 loader_num_workers: "full" # 5

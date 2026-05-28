@@ -1,5 +1,7 @@
 from math import sqrt
 from pathlib import Path
+import time
+from typing import Callable
 import torch
 from torch.optim import Adam
 from model import NNUE
@@ -7,6 +9,8 @@ from dataset import create_dataloader
 
 # Chess engines total tensor size not big enough for GPU
 DEVICE = torch.device("cpu")
+PRINT_EVERY_N_OPTIMIZER_STEPS = 100
+SAVE_EVERY_N_OPTIMIZER_STEPS = 1000
 
 
 def create_model(existing_model_path: Path | None) -> NNUE :
@@ -40,7 +44,8 @@ def train(
     optimizer: Adam,
     batch_size: int,
     sigmoid_scale: float,
-    loader_num_workers: int):
+    loader_num_workers: int,
+    save_callback: Callable[[], None] | None = None):
 
     # TODO (Minor)
     #if seed is not None:
@@ -54,7 +59,9 @@ def train(
         True
     )
 
+    total_start = time.time()
     for epoch in range(epochs):
+        epoch_start = time.time()
         total_loss = 0
         count = 0
         for indices_stm, offsets_stm, indices_opp, offsets_opp, scores in dataloader:
@@ -71,12 +78,22 @@ def train(
 
             total_loss += loss.item()
             count += 1
-            if count % 100 == 0:
+            if count % PRINT_EVERY_N_OPTIMIZER_STEPS == 0:
                 avg_loss = total_loss / count if count > 0 else 0
                 print(f"Optimizer steps within epoch: {count}, avg loss: {avg_loss:.4f}, square root: {sqrt(avg_loss):.4f}")
+            if save_callback and count % SAVE_EVERY_N_OPTIMIZER_STEPS == 0:
+                save_callback()
 
         avg_loss = total_loss / count if count > 0 else 0
-        print(f"Epoch {epoch + 1} complete, avg loss: {avg_loss:.4f}, square root: {sqrt(avg_loss):.4f}")
+        epoch_elapsed = time.time() - epoch_start
+        print(f"Epoch {epoch + 1} complete, avg loss: {avg_loss:.4f}, square root: {sqrt(avg_loss):.4f}, time: {epoch_elapsed:.1f}s")
+
+    if save_callback:
+        save_callback()
+    total_elapsed = time.time() - total_start
+    h, rem = divmod(total_elapsed, 3600)
+    m, s = divmod(rem, 60)
+    print(f"Training complete, {epochs} epochs in {int(h)}h {int(m)}m {int(s)}s")
 
 
 def validate(model: NNUE, val_path: str, sigmoid_scale: float, batch_size: int, loader_num_workers: int) -> float:

@@ -1,12 +1,12 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::*;
-
 use super::bitboard::*;
 use super::coords::*;
 use super::entities::*;
 use super::memo::*;
 use super::move_gen::*;
+use super::move_list::*;
+use super::super::static_data::*;
 
 // Child modules
 mod compressed;

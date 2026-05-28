@@ -1,18 +1,18 @@
 #[cfg(feature = "wasm")]
 extern crate console_error_panic_hook;
 
-mod engine;
-mod platform;
+pub mod engine;
+pub mod platform;
+
 #[macro_use]
 mod macros;
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
-
 use safetensors::SafeTensors;
-
-pub use engine::game::board::slow_stringify_move_standard;
-pub use engine::*;
+use engine::game::*;
+use engine::ai;
+use engine::static_data;
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone, Debug)]
@@ -48,8 +48,8 @@ impl BestMoveInfoJs {
     pub fn notation(&self) -> String { self.notation.clone() }
 }
 
-impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
-    fn from(info: engine::ai::BestMoveInfo) -> Self {
+impl From<ai::BestMoveInfo> for BestMoveInfoJs {
+    fn from(info: ai::BestMoveInfo) -> Self {
         Self {
             is_pawn: info.is_pawn,
             remaining_depth: info.remaining_depth,
@@ -62,7 +62,7 @@ impl From<engine::ai::BestMoveInfo> for BestMoveInfoJs {
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Main {
     board: Board,
-    ai: Ai,
+    ai: ai::Ai,
 
     temp: MoveList,
     move_list: MoveList,
@@ -140,7 +140,7 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
             }
             match (input_weight, fc1_weight, fc1_bias, fc2_weight, fc2_bias, output_weight, output_bias) {
                 (Some(iw), Some(fw), Some(fb), Some(f2w), Some(f2b), Some(ow), Some(ob)) => {
-                    let w = NnueWeights {
+                    let w = static_data::NnueWeights {
                         input_weight: iw,
                         fc1_weight: fw,
                         fc1_bias: fb,
@@ -149,7 +149,7 @@ pub fn load_weights_safetensors(bytes: &[u8]) -> bool {
                         output_weight: ow,
                         output_bias: ob,
                     };
-                    match crate::engine::set_nnue_weights(w) {
+                    match static_data::set_nnue_weights(w) {
                         Ok(()) => true,
                         Err(_) => {
                             console_log!("NNUE weights already set, ignoring");
@@ -183,15 +183,14 @@ impl Main {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
         // Initialize globals explicitly
-        init_globals();
+        static_data::init_globals();
 
         let board = Board::new();
         let initial_hash = board.get_hash();
         let position_hashes = vec![initial_hash];
         Main {
             board,
-            ai: Ai::new(),
-
+            ai: ai::Ai::new(),
             temp: MoveList::new(50),
             move_list: MoveList::new(50),
             searchable: SearchableMoves::new(),
@@ -376,7 +375,7 @@ impl Main {
         }
     }
 
-    fn process_best_move_info_to_js(&mut self, best_move_info: Option<BestMoveInfo>) -> Option<BestMoveInfoJs> {
+    fn process_best_move_info_to_js(&mut self, best_move_info: Option<ai::BestMoveInfo>) -> Option<BestMoveInfoJs> {
         let is_pawn_holder = best_move_info.as_ref().map(|x| x.is_pawn); // Just need is_pawn here
         if let Some(is_pawn) = is_pawn_holder {
             self.handle_special_end_conditions(
@@ -432,6 +431,7 @@ impl Main {
                 console_log!("Repetition called {}", repetition_count);
                 Some(GameEndState::Repetition)
             } else {
+                pub const NO_PAWN_HALF_MOVES_DRAW_THRESHOLD: usize = 100;
                 if self.half_moves_without_pawn_move >= NO_PAWN_HALF_MOVES_DRAW_THRESHOLD {
                     console_log!("Repetition called no pawn moves {}", self.half_moves_without_pawn_move);
                     Some(GameEndState::Repetition)

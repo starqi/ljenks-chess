@@ -7,10 +7,11 @@ use std::path::PathBuf;
 use std::time::Instant;
 use clap::{Parser, Subcommand};
 
-use ljenks_chess::{BestMoveInfoJs, Main};
-use ljenks_chess::init_globals;
-use ljenks_chess::Board;
-use ljenks_chess::load_weights_safetensors;
+// Load everything through the lib
+use ljenks_chess::engine::game::*;
+use ljenks_chess::platform;
+use ljenks_chess::engine::static_data;
+use ljenks_chess::{load_weights_safetensors, Main, BestMoveInfoJs};
 
 #[derive(Parser, Debug)]
 #[command(name = "chess-cli")]
@@ -48,6 +49,9 @@ enum Commands {
         /// Aspiration window size for tactical position filtering in centipawns.
         #[arg(long, default_value = "300")]
         filter_window: i32,
+        /// Probability (0.0 to 1.0) of a random move at any point after the opening.
+        #[arg(long, default_value = "0.15")]
+        rand_p: f64,
     },
     /// View positions from a .bin file
     View {
@@ -147,6 +151,7 @@ fn cmd_generate(
     max_half_moves_per_game: Option<usize>,
     quiet: bool,
     filter_window: i32,
+    rand_p: f64,
 ) {
     let file: File = match File::create_new(&output_file) {
         Ok(f) => f,
@@ -181,13 +186,19 @@ fn cmd_generate(
         main.new_board();
 
         let mut half_moves = 0;
+        let mut opening_randoms = 0u32;
+        let mut prob_randoms = 0u32;
         loop {
             if let Some(num) = main.get_game_end_state() { 
                 if !quiet { println!("Game end state: {:?}", num); }
                 break; 
             }
 
-            let random_early_moves = half_moves < random_half_moves;
+            let is_opening_random = half_moves < random_half_moves;
+            let is_prob_random = !is_opening_random && rand_p > 0.0 && platform::random() < rand_p;
+            let make_random_move = is_opening_random || is_prob_random;
+            if is_opening_random { opening_randoms += 1; }
+            if is_prob_random { prob_randoms += 1; }
             if let Some(m) = max_half_moves_per_game {
                 if half_moves >= m {
                     if !quiet { println!("Exceeded {} max half moves, ending game", m); }
@@ -196,15 +207,21 @@ fn cmd_generate(
             }
             main.get_board().export_compressed(&mut board_bytes);
 
-            main.set_logging(false);
+            main.set_logging(false); // Nothing to do with quiet option, turn off all the usual browser logging 
+            println!();
+            println!();
 
             let static_score_objective = main.static_evaluate_objective();
-            let move_result: Option<BestMoveInfoJs> = if random_early_moves {
+            let move_result: Option<BestMoveInfoJs> = if make_random_move {
                 let eval_info = main.evaluate_with_window(static_score_objective, filter_window);
                 let score = eval_info.map(|info| info.score).expect("Unexpected game ended while evaluating");
                 let mut r = main.make_random_move();
                 if let Some(rr) = &mut r {
                     rr.score = score;
+                }
+                if !quiet {
+                    let kind = if is_opening_random { "opening" } else { "probability" };
+                    println!("Random: {}", kind);
                 }
                 r
             } else {
@@ -228,7 +245,7 @@ fn cmd_generate(
             let score_diff = (move_result_unwrapped.score - static_score_objective).abs();
             if score_diff >= filter_window {
                 positions_filtered += 1;
-                if !quiet { println!("Filtered (|{}-{}|={} >= {})", move_result_unwrapped.score, static_score_objective, score_diff, filter_window); }
+                if !quiet { println!("Filtered (|({}) - ({})| = {} >= {})", move_result_unwrapped.score, static_score_objective, score_diff, filter_window); }
             } else {
                 if let Err(e) = writer.write_all(&board_bytes) {
                     eprintln!("Error writing board bytes: {}", e);
@@ -248,11 +265,7 @@ fn cmd_generate(
 
         completed_games += 1;
         total_positions += half_moves as u64;
-        if quiet { // TODO IMMEDIATE eprintln???
-            eprintln!("Game {} done, {} half moves", completed_games, half_moves);
-        } else {
-            println!("Half moves: {}, now completed {} games", half_moves, completed_games);
-        }
+        println!("Game {} done, {} half moves ({} opening random, {} prob random)", completed_games, half_moves, opening_randoms, prob_randoms);
         
         if let Err(e) = writer.flush() {
             eprintln!("Error flushing output: {}", e);
@@ -278,12 +291,12 @@ fn cmd_generate(
 }
 
 fn main() {
-    init_globals();
+    static_data::init_globals();
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Generate { output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window } => {
-            cmd_generate(output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window);
+        Commands::Generate { output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window, rand_p } => {
+            cmd_generate(output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window, rand_p);
         }
         Commands::View { file, range } => {
             if let Err(e) = view_positions(&file, &range) {

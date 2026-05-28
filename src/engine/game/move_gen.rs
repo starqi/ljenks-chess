@@ -2,7 +2,8 @@ use super::entities::*;
 use super::coords::*;
 use super::bitboard::*;
 use super::move_list::*;
-use super::super::*;
+use super::bitboard_presets::*;
+use super::super::static_data::bitboard_presets;
 
 /// For each square, expand into a bitboard, which contains piece locations attacking that square.
 /// One player's pieces, or both players, depends on who's using the class.

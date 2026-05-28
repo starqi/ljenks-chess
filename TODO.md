@@ -1,6 +1,12 @@
 
 ### TODO
 
+- Low NPS Firefox bullshit is back
+- Review and write down Rust module philosophy
+- Try probability
+- Fix decimal places in timing
+- Add commit msg
+
 - NNUE 
     - TODO IMMEDIATE
     - Write down intuition: impossible to have tiny training file size per cycle,

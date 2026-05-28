@@ -14,6 +14,5 @@ if __name__ == '__main__':
         config['batch_size'],
         config['sigmoid_scale'],
         config['loader_num_workers'],
+        save_callback=lambda: rotate_and_save(config, checkpoint),
     )
-
-    rotate_and_save(config, checkpoint)

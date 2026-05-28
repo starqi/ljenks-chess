@@ -39,6 +39,7 @@ cargo build --release --bin chess-cli --no-default-features -F cli
 
 # Generate and APPEND positions into output file (see --help for options)
 ./target/release/chess-cli generate nnue_trainer/xyz.bin
+./target/release/chess-cli generate nnue_trainer/xyz.bin --num-games 50 --max-nodes 30000 --rand_p 0.15 --quiet
 
 # Parallel: spawn N processes, each writes its own NEW numbered .bin into an output directory
 nnue_trainer/generate_parallel.sh nnue_trainer/chunks 10 --num-games 1 --max-nodes 30000

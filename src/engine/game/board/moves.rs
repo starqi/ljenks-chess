@@ -1,3 +1,5 @@
+use crate::console_error;
+
 use super::*;
 
 pub enum RevertableMove {

@@ -1,4 +1,7 @@
+use crate::branchless_mask;
+
 use super::*;
+use super::super::super::static_data::*;
 
 impl Board {
 
@@ -72,7 +75,7 @@ impl Board {
 
     // TODO (Minor) At some point we need to track excessive full refresh
     pub fn nnue_refresh(&mut self, perspective: Player) {
-        let weights = match crate::engine::nnue_input_weights() {
+        let weights = match nnue_input_weights() {
             Some(w) => w,
             None => {
                 self.nnue_acc[perspective as usize].fill(0.0);
@@ -114,12 +117,12 @@ impl Board {
         // NNUE basics: Reportedly weight count small, matmul neither needs parallelism nor sub N(O^3) algorithms  
 
         // TODO IMMEDIATE Pointless branches? Add unsafe code?
-        let fc1_weight = crate::engine::nnue_fc1_weights()?;
-        let fc1_bias = crate::engine::nnue_fc1_biases()?;
-        let fc2_weight = crate::engine::nnue_fc2_weights()?;
-        let fc2_bias = crate::engine::nnue_fc2_biases()?;
-        let output_weight = crate::engine::nnue_output_weights()?;
-        let output_bias = crate::engine::nnue_output_biases()?;
+        let fc1_weight = nnue_fc1_weights()?;
+        let fc1_bias = nnue_fc1_biases()?;
+        let fc2_weight = nnue_fc2_weights()?;
+        let fc2_bias = nnue_fc2_biases()?;
+        let output_weight = nnue_output_weights()?;
+        let output_bias = nnue_output_biases()?;
 
         let stm_idx = self.player_with_turn as usize;
         let opp_idx = 1 - stm_idx;
