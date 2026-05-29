@@ -208,8 +208,10 @@ fn cmd_generate(
             main.get_board().export_compressed(&mut board_bytes);
 
             main.set_logging(false); // Nothing to do with quiet option, turn off all the usual browser logging 
-            println!();
-            println!();
+            if !quiet {
+                println!();
+                println!();
+            }
 
             let static_score_objective = main.static_evaluate_objective();
             let move_result: Option<BestMoveInfoJs> = if make_random_move {
@@ -291,20 +293,22 @@ fn cmd_generate(
 }
 
 fn main() {
-    static_data::init_globals();
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Generate { output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window, rand_p } => {
+            static_data::init_globals();
             cmd_generate(output_file, random_half_moves, max_nodes, num_games, max_half_moves_per_game, quiet, filter_window, rand_p);
         }
         Commands::View { file, range } => {
+            static_data::init_globals();
             if let Err(e) = view_positions(&file, &range) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
         }
         Commands::Nnue { model, data, range } => {
+            static_data::init_globals();
             if let Err(e) = nnue_positions(&model, &data, &range) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
